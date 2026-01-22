@@ -135,7 +135,7 @@ export default function App() {
     localStorage.setItem('campoId', campoId); 
     setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterAtributos([]); setSelectedIds([]);
     if (activeSection === 'inicio') { fetchAnimales(); fetchActividadGlobal(); } 
-    if (activeSection.includes('hacienda') || activeSection === 'bajas') fetchAnimales();
+    if (activeSection.includes('hacienda') || activeSection === 'bajas' || activeSection === 'masivos') fetchAnimales();
     if (activeSection === 'actividad') fetchActividadGlobal();
     if (activeSection === 'agricultura') fetchLotes();
   }, [activeSection, campoId]); 
@@ -566,16 +566,23 @@ export default function App() {
                                 <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
                             ) : (
                                 <Group gap="xs">
+                                    {/* 1. SEXO (Solo Terneros) */}
                                     {vaca.categoria === 'Ternero' && (
                                         <Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">
                                             {vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
                                         </Badge>
                                     )}
-                                    {vaca.categoria === 'Ternero' && vaca.castrado ? (
-                                        <Badge color="cyan">CAPADO</Badge>
+
+                                    {/* 2. ESTADO (Logica corregida) */}
+                                    {vaca.categoria === 'Ternero' ? (
+                                        // Si es Ternero: Solo mostramos si está CAPADO. Si está ACTIVO, no mostramos nada (ya mostramos el sexo).
+                                        vaca.castrado && <Badge color="cyan">CAPADO</Badge>
                                     ) : (
+                                        // Si NO es Ternero (Vaca, Toro): Mostramos el estado siempre
                                         <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
                                     )}
+
+                                    {/* 3. CONDICION (Enferma, etc) */}
                                     {renderCondicionBadges(vaca.condicion)}
                                 </Group>
                             )}
