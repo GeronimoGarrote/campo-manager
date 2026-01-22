@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { 
   MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, 
   Paper, TextInput, Select, Button, Table, Badge, Tabs, 
-  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon
+  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { 
   IconList, IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, 
   IconCalendar, IconScale, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
-  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus
+  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
@@ -25,7 +25,7 @@ interface Evento { id: string; fecha_evento: string; tipo: string; resultado: st
 interface Lote { id: string; nombre: string; hectareas: number; cultivo_actual: string; estado: string; }
 interface Labor { id: string; fecha: string; actividad: string; cultivo: string; detalle: string; lote_id: string; }
 
-// Componente para ordenar tabla
+// Componente Header Tabla (Solo Ordenamiento)
 interface ThProps { children: React.ReactNode; reversed: boolean; sorted: boolean; onSort(): void; }
 function Th({ children, reversed, sorted, onSort }: ThProps) {
   const Icon = sorted ? (reversed ? IconChevronUp : IconChevronDown) : IconSelector;
@@ -46,26 +46,33 @@ export default function App() {
   // --- ESTADO MULTI-CAMPO ---
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
   const [campoId, setCampoId] = useState<string | null>(null);
-  const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false); // Modal Gestion Campos
+  const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false); 
   const [nuevoCampoNombre, setNuevoCampoNombre] = useState('');
 
   // --- DATOS ---
+  // Filtros Avanzados
   const [busqueda, setBusqueda] = useState('');
+  const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
+  const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
+  
   const [filtroTipoEvento, setFiltroTipoEvento] = useState<string | null>(''); 
   const [sortBy, setSortBy] = useState<keyof Animal | null>(null);
   const [reverseSortDirection, setReverseSortDirection] = useState(false);
+  
   const [animales, setAnimales] = useState<Animal[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [eventosGlobales, setEventosGlobales] = useState<Evento[]>([]);
   
-  // Estado Dashboard
+  // Dashboard
   const [chartHover, setChartHover] = useState<{ label: string, value: number | string } | null>(null);
 
-  // Forms
+  // Forms Individuales
+  const [modalAltaOpen, { open: openModalAlta, close: closeModalAlta }] = useDisclosure(false);
   const [caravana, setCaravana] = useState('');
   const [categoria, setCategoria] = useState<string | null>('Vaca');
   const [sexo, setSexo] = useState<string | null>('H');
   const [sexoBloqueado, setSexoBloqueado] = useState(true);
+  
   const [nombreLote, setNombreLote] = useState('');
   const [hasLote, setHasLote] = useState<string | number>(0);
   const [modalVacaOpen, { open: openModalVaca, close: closeModalVaca }] = useDisclosure(false);
@@ -78,7 +85,7 @@ export default function App() {
   const [loteSel, setLoteSel] = useState<Lote | null>(null);
   const [laboresFicha, setLaboresFicha] = useState<Labor[]>([]);
 
-  // Inputs
+  // Inputs Eventos
   const [fechaEvento, setFechaEvento] = useState<Date | null>(new Date());
   const [tipoEventoInput, setTipoEventoInput] = useState<string | null>('PESAJE');
   const [resultadoInput, setResultadoInput] = useState('');
@@ -88,6 +95,8 @@ export default function App() {
   const [toroCaravana, setToroCaravana] = useState('');
   const [nuevoTerneroCaravana, setNuevoTerneroCaravana] = useState('');
   const [nuevoTerneroSexo, setNuevoTerneroSexo] = useState<string | null>('M');
+  
+  // Edicion
   const [editCaravana, setEditCaravana] = useState('');
   const [editCategoria, setEditCategoria] = useState<string | null>('');
   const [editSexo, setEditSexo] = useState<string | null>('');
@@ -103,25 +112,28 @@ export default function App() {
   const [cultivoInput, setCultivoInput] = useState(''); 
   const [detalleLabor, setDetalleLabor] = useState('');
 
-  // --- INIT ---
-  useEffect(() => {
-    loadCampos();
-  }, []);
+  // --- LOGICA MASIVA ---
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [massActividad, setMassActividad] = useState<string | null>('VACUNACION');
+  const [massFecha, setMassFecha] = useState<Date | null>(new Date());
+  const [massDetalle, setMassDetalle] = useState('');
 
+  // --- INIT ---
+  useEffect(() => { loadCampos(); }, []);
   async function loadCampos() {
     const { data } = await supabase.from('establecimientos').select('*').order('created_at');
     if (data && data.length > 0) {
       setEstablecimientos(data);
       const guardado = localStorage.getItem('campoId');
       if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado);
-      else if (!campoId) setCampoId(data[0].id); // Solo poner el primero si no hay uno seleccionado
+      else if (!campoId) setCampoId(data[0].id);
     }
   }
 
   useEffect(() => {
     if (!campoId) return;
     localStorage.setItem('campoId', campoId); 
-    setBusqueda(''); setFiltroTipoEvento('');
+    setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterAtributos([]); setSelectedIds([]);
     if (activeSection === 'inicio') { fetchAnimales(); fetchActividadGlobal(); } 
     if (activeSection.includes('hacienda') || activeSection === 'bajas') fetchAnimales();
     if (activeSection === 'actividad') fetchActividadGlobal();
@@ -153,11 +165,21 @@ export default function App() {
     }));
   };
 
-  const animalesFiltrados = animales.filter(animal => 
-    animal.caravana.toLowerCase().includes(busqueda.toLowerCase()) ||
-    animal.estado.toLowerCase().includes(busqueda.toLowerCase()) ||
-    animal.condicion?.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const animalesFiltrados = animales.filter(animal => {
+    const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
+    const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
+    let matchAtributos = true;
+    if (filterAtributos.length > 0) {
+        const tagsDelAnimal: string[] = [];
+        tagsDelAnimal.push(animal.estado);
+        if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
+        if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
+        if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
+        if (animal.castrado) tagsDelAnimal.push('CAPADO');
+        matchAtributos = filterAtributos.every(filtro => tagsDelAnimal.includes(filtro));
+    }
+    return matchBusqueda && matchCategoria && matchAtributos;
+  });
   
   const eventosFiltrados = eventosGlobales.filter(ev => {
     const coincideTexto = ev.animales?.caravana.toLowerCase().includes(busqueda.toLowerCase()) || ev.tipo.toLowerCase().includes(busqueda.toLowerCase());
@@ -168,11 +190,57 @@ export default function App() {
   const getEstadoColor = (estado: string) => { if (estado === 'PREÑADA') return 'teal'; if (estado === 'VACÍA') return 'yellow'; return 'blue'; };
   const renderCondicionBadges = (condStr: string) => { if (!condStr || condStr === 'SANA') return null; return condStr.split(', ').map((c, i) => ( <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> )); };
 
+  // --- FUNCIONES MASIVAS ---
+  const toggleSeleccion = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+  
+  const seleccionarGrupo = (categoriaTarget: string | null) => {
+    // Si categoriaTarget es null, selecciona TODO lo visible en el filtro actual
+    const targets = animalesFiltrados.filter(a => categoriaTarget ? a.categoria === categoriaTarget : true).map(a => a.id);
+    // Agregamos sin duplicados
+    setSelectedIds(prev => [...new Set([...prev, ...targets])]);
+  };
+
+  const limpiarSeleccion = () => setSelectedIds([]);
+
+  async function guardarEventoMasivo() {
+    if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
+    if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
+    
+    if(!confirm(`¿Confirmar ${massActividad} para ${selectedIds.length} animales?`)) return;
+
+    setLoading(true);
+    const fechaStr = massFecha.toISOString();
+    
+    const inserts = selectedIds.map(animalId => ({
+        animal_id: animalId,
+        fecha_evento: fechaStr,
+        tipo: massActividad,
+        resultado: 'Realizado (Masivo)',
+        detalle: massDetalle,
+        establecimiento_id: campoId
+    }));
+
+    const { error } = await supabase.from('eventos').insert(inserts);
+    setLoading(false);
+
+    if (error) {
+        alert("Error al guardar: " + error.message);
+    } else {
+        alert("¡Carga masiva exitosa!");
+        setMassDetalle('');
+        setSelectedIds([]);
+        setActiveSection('actividad'); // Redirigir a actividad para ver lo que paso
+    }
+  }
+
+
   // --- FETCHERS ---
   async function fetchAnimales() {
     if (!campoId) return;
     let query = supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); 
-    if (activeSection === 'hacienda') query = query.neq('estado', 'VENDIDO').neq('estado', 'MUERTO');
+    if (activeSection === 'hacienda' || activeSection === 'masivos') query = query.neq('estado', 'VENDIDO').neq('estado', 'MUERTO');
     else if (activeSection === 'bajas') query = query.in('estado', ['VENDIDO', 'MUERTO']);
     const { data } = await query;
     setAnimales(data || []);
@@ -190,16 +258,8 @@ export default function App() {
   async function borrarCampo(id: string) {
     if (!confirm("⚠️ ¿BORRAR ESTABLECIMIENTO COMPLETO?\n\nSe perderán TODOS los animales y datos de este campo. No se puede deshacer.")) return;
     const { error } = await supabase.from('establecimientos').delete().eq('id', id);
-    if (error) alert("Error: No se pudo borrar (probablemente tenga datos asociados que requieren borrado manual por seguridad).");
-    else {
-        // Si borramos el actual, cambiar al primero disponible
-        if (id === campoId) {
-            const restantes = establecimientos.filter(e => e.id !== id);
-            if (restantes.length > 0) setCampoId(restantes[0].id);
-            else window.location.reload(); // Si no quedan campos, recargar
-        }
-        loadCampos();
-    }
+    if (error) alert("Error: No se pudo borrar.");
+    else { if (id === campoId) { const restantes = establecimientos.filter(e => e.id !== id); if (restantes.length > 0) setCampoId(restantes[0].id); else window.location.reload(); } loadCampos(); }
   }
   async function renombrarCampo(id: string, nombreActual: string) {
     const nuevo = prompt("Nuevo nombre para el campo:", nombreActual);
@@ -214,7 +274,12 @@ export default function App() {
     setLoading(true);
     const hoy = new Date().toISOString().split('T')[0];
     const { error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'PROPIO', fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId }]);
-    setLoading(false); if (!error) { setCaravana(''); fetchAnimales(); }
+    setLoading(false); 
+    if (!error) { 
+        setCaravana(''); 
+        fetchAnimales(); 
+        closeModalAlta(); 
+    }
   }
 
   async function abrirFichaVaca(animal: Animal) {
@@ -308,22 +373,17 @@ export default function App() {
       <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
         <AppShell.Header><Group h="100%" px="md"><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" /><IconLeaf color="teal" size={28} /><Title order={3}>Campo Manager</Title></Group></AppShell.Header>
         <AppShell.Navbar p="md">
-          {/* SELECTOR DE ESTABLECIMIENTO SIMPLE */}
           <Paper p="xs" bg="gray.1" mb="lg" radius="md"><Text size="xs" fw={700} c="dimmed" mb={4}>ESTABLECIMIENTO</Text><Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} /></Paper>
-          
           <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md"/>
           <Text size="xs" fw={500} c="dimmed" mb="sm">GANADERÍA</Text>
-          <NavLink label="Hacienda Activa" leftSection={<IconList size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" />
+          <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" />
+          <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" />
           <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" />
           <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
           <NavLink label="Lotes y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" />
           <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
           <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" />
-          
-          {/* SECCION GESTION CAMPOS (ABAJO DE TODO) */}
-          <AppShell.Section style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
-             <Button fullWidth variant="subtle" color="gray" leftSection={<IconSettings size={18}/>} onClick={openModalConfig}>Gestionar Campos</Button>
-          </AppShell.Section>
+          <AppShell.Section style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eee' }}><Button fullWidth variant="subtle" color="gray" leftSection={<IconSettings size={18}/>} onClick={openModalConfig}>Gestionar Campos</Button></AppShell.Section>
         </AppShell.Navbar>
 
         <AppShell.Main bg="gray.0">
@@ -361,15 +421,168 @@ export default function App() {
             </>
           )}
 
+          {activeSection === 'masivos' && (
+              <>
+                <Group justify="space-between" mb="lg">
+                    <Title order={2}>Carga de Eventos Masivos</Title>
+                    <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
+                </Group>
+                
+                {/* 1. CONFIGURACION DEL EVENTO */}
+                <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
+                    <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
+                    <Group grow align="flex-start">
+                         <Select 
+                            label="Tipo de Actividad" 
+                            data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'OTRO']} 
+                            value={massActividad} onChange={setMassActividad}
+                            allowDeselect={false}
+                         />
+                         <TextInput 
+                            label="Fecha" type="date" 
+                            value={massFecha ? massFecha.toISOString().split('T')[0] : ''} 
+                            onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}
+                         />
+                    </Group>
+                    <TextInput mt="sm" label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
+                </Paper>
+
+                {/* 2. SELECCION DE ANIMALES */}
+                <Text fw={700} size="lg" mb="sm">2. Seleccionar Animales</Text>
+                
+                {/* Botones de Seleccion Rapida */}
+                <Group mb="md">
+                    <Button variant="light" color="blue" size="xs" onClick={() => seleccionarGrupo('Vaca')}>Todas las Vacas</Button>
+                    <Button variant="light" color="teal" size="xs" onClick={() => seleccionarGrupo('Ternero')}>Todos los Terneros</Button>
+                    <Button variant="light" color="gray" size="xs" onClick={() => seleccionarGrupo(null)}>Seleccionar TODO lo visible</Button>
+                    {selectedIds.length > 0 && <Button variant="outline" color="red" size="xs" onClick={limpiarSeleccion}>Borrar Selección</Button>}
+                </Group>
+
+                {/* Filtros visuales (para ayudar a buscar) */}
+                <Group mb="md">
+                     <TextInput placeholder="Buscar por caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 1}}/>
+                     <Select placeholder="Filtrar Vista" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
+                </Group>
+
+                <Paper withBorder radius="md" h={400} style={{ display: 'flex', flexDirection: 'column' }}>
+                    <ScrollArea style={{ flex: 1 }}>
+                    <Table stickyHeader>
+                        <Table.Thead bg="gray.1">
+                            <Table.Tr>
+                                <Table.Th w={50}>Check</Table.Th>
+                                <Table.Th>Caravana</Table.Th>
+                                <Table.Th>Categoría</Table.Th>
+                                <Table.Th>Estado</Table.Th>
+                            </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                            {animalesFiltrados.map(animal => (
+                                <Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}>
+                                    <Table.Td>
+                                        <Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} />
+                                    </Table.Td>
+                                    <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
+                                    <Table.Td>{animal.categoria}</Table.Td>
+                                    <Table.Td><Badge size="sm" color="gray">{animal.estado}</Badge></Table.Td>
+                                </Table.Tr>
+                            ))}
+                        </Table.Tbody>
+                    </Table>
+                    </ScrollArea>
+                </Paper>
+
+                {/* BOTON FLOTANTE CONFIRMACION */}
+                {selectedIds.length > 0 && (
+                    <Paper 
+                        shadow="xl" p="md" radius="md" withBorder bg="gray.0" 
+                        style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}
+                    >
+                        <Group>
+                            <Stack gap={0}>
+                                <Text fw={700} size="sm">CONFIRMAR ACCIÓN</Text>
+                                <Text size="xs" c="dimmed">{massActividad} en {selectedIds.length} animales</Text>
+                            </Stack>
+                            <Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>
+                                CONFIRMAR
+                            </Button>
+                        </Group>
+                    </Paper>
+                )}
+              </>
+          )}
+
           {(activeSection === 'hacienda' || activeSection === 'bajas') && (
             <>
-              <Group justify="space-between" mb="lg"><Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title><Badge size="xl" circle>{animalesFiltrados.length}</Badge></Group>
-              <TextInput leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} mb="md" />
-              {activeSection === 'hacienda' && ( <Paper p="md" mb="lg" radius="md" withBorder><Text fw={700} mb="xs" size="sm" c="dimmed">ALTA RÁPIDA</Text><Group align="flex-end" grow><TextInput label="Caravana" value={caravana} onChange={(e) => setCaravana(e.target.value)} /><Select label="Cat" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} /><Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} w={80} disabled={sexoBloqueado} /><Button onClick={guardarAnimal} loading={loading} color="teal">Guardar</Button></Group></Paper> )}
+              {/* HEADER DE LA SECCION CON BOTON NUEVO GRANDE Y TEAL */}
+              <Group justify="space-between" mb="lg" align="center">
+                <Group>
+                    <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title>
+                    <Badge size="xl" circle>{animalesFiltrados.length}</Badge>
+                </Group>
+                {activeSection === 'hacienda' && (
+                    <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180} mr="md">Nuevo Animal</Button>
+                )}
+              </Group>
+              
+              {/* BARRA DE FILTROS AVANZADOS (UX PRO) */}
+              <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
+                  <Group grow align="flex-end">
+                    <TextInput 
+                        label="Buscar" placeholder="Caravana..." 
+                        leftSection={<IconSearch size={16}/>} 
+                        value={busqueda} onChange={(e) => setBusqueda(e.target.value)} 
+                    />
+                    <Select 
+                        label="Filtrar Categoría" placeholder="Todas" 
+                        data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} 
+                        value={filterCategoria} onChange={setFilterCategoria} clearable 
+                    />
+                    <MultiSelect 
+                        label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..."
+                        data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'ENFERMA', 'LASTIMADA']}
+                        value={filterAtributos} onChange={setFilterAtributos}
+                        leftSection={<IconFilter size={16}/>}
+                        clearable
+                    />
+                  </Group>
+              </Paper>
+
               <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                 <Table striped highlightOnHover>
-                  <Table.Thead bg="gray.1"><Table.Tr><Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th><Th sorted={sortBy === 'categoria'} reversed={reverseSortDirection} onSort={() => setSorting('categoria')}>Categoría</Th><Th sorted={sortBy === 'estado'} reversed={reverseSortDirection} onSort={() => setSorting('estado')}>Estado / Condición</Th>{activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}</Table.Tr></Table.Thead>
-                  <Table.Tbody>{animalesFiltrados.map((vaca) => (<Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }}><Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td><Table.Td>{vaca.categoria}</Table.Td><Table.Td>{activeSection === 'bajas' ? (<Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>) : (<Group gap="xs"><Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>{renderCondicionBadges(vaca.condicion)}{vaca.castrado && <Badge color="cyan" variant="outline">CAPADO</Badge>}</Group>)}</Table.Td>{activeSection === 'bajas' && ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> )}</Table.Tr>))}</Table.Tbody>
+                  <Table.Thead bg="gray.1">
+                      <Table.Tr>
+                          <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
+                          <Table.Th>Categoría</Table.Th> {/* SIN SORT */}
+                          <Table.Th>Estado / Condición</Table.Th> {/* SIN SORT */}
+                          {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
+                      </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>{animalesFiltrados.map((vaca) => (
+                    <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }}>
+                        <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
+                        <Table.Td>{vaca.categoria}</Table.Td>
+                        <Table.Td>
+                            {activeSection === 'bajas' ? (
+                                <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
+                            ) : (
+                                <Group gap="xs">
+                                    {vaca.categoria === 'Ternero' && (
+                                        <Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">
+                                            {vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
+                                        </Badge>
+                                    )}
+                                    {vaca.categoria === 'Ternero' && vaca.castrado ? (
+                                        <Badge color="cyan">CAPADO</Badge>
+                                    ) : (
+                                        <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
+                                    )}
+                                    {renderCondicionBadges(vaca.condicion)}
+                                </Group>
+                            )}
+                        </Table.Td>
+                        {activeSection === 'bajas' && ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> )}
+                    </Table.Tr>
+                  ))}</Table.Tbody>
                 </Table>
               </Paper>
             </>
@@ -379,6 +592,16 @@ export default function App() {
           {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toro_caravana && (<Text size="xs" c="dimmed">Toro: {ev.datos_extra.toro_caravana}</Text>)}</Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
         </AppShell.Main>
       </AppShell> 
+
+      {/* --- MODAL NUEVO ANIMAL (ALTA) --- */}
+      <Modal opened={modalAltaOpen} onClose={closeModalAlta} title={<Text fw={700} size="lg">Alta de Nuevo Animal</Text>} centered>
+         <Stack>
+             <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
+             <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
+             <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
+             <Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button>
+         </Stack>
+      </Modal>
 
       {/* --- MODAL GESTION CAMPOS --- */}
       <Modal opened={modalConfigOpen} onClose={closeModalConfig} title={<Text fw={700} size="lg">Mis Establecimientos</Text>} centered>
@@ -403,7 +626,6 @@ export default function App() {
          </Stack>
       </Modal>
 
-      {/* MODALES FICHA Y LOTE (Igual que antes) */}
       <Modal opened={modalVacaOpen} onClose={closeModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
          <Tabs defaultValue="historia" color="teal">
            <Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
@@ -420,7 +642,7 @@ export default function App() {
               {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
               {['Vaca'].includes(editCategoria || '') && ( <Paper withBorder p="xs" mb="sm" bg="teal.0"><Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>{hijos.length > 0 ? ( <Group gap="xs" mt={5}>{hijos.map(h => <Badge key={h} variant="white">{h}</Badge>)}</Group> ) : <Text size="xs" c="dimmed">Sin registros</Text>}</Paper> )}
               <MultiSelect label="Condición Sanitaria" data={['ENFERMA', 'LASTIMADA']} value={editCondicion} onChange={setEditCondicion} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} leftSection={<IconHeartbeat size={16}/>} mb="sm" placeholder="SANA"/>
-              {editCategoria === 'Ternero' && ( <Group justify="space-between" mb="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}><Group gap="xs"><IconScissors size={18}/> <Text size="sm" fw={500}>Condición Sexual</Text></Group><Switch size="lg" onLabel="CAPADO" offLabel="ENTERO" checked={editCastrado} onChange={(e) => setEditCastrado(e.currentTarget.checked)} disabled={!esActivo} /></Group> )}
+              {editCategoria === 'Ternero' && editSexo === 'M' && ( <Group justify="space-between" mb="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}><Group gap="xs"><IconScissors size={18}/> <Text size="sm" fw={500}>Condición Sexual</Text></Group><Switch size="lg" onLabel="CAPADO" offLabel="ENTERO" checked={editCastrado} onChange={(e) => setEditCastrado(e.currentTarget.checked)} disabled={!esActivo} /></Group> )}
               <Group grow mb="xl"><TextInput label="Fecha Nacimiento" type="date" value={editFechaNac} onChange={(e) => setEditFechaNac(e.target.value)} disabled={!esActivo} /><TextInput label="Fecha Ingreso" type="date" value={editFechaIngreso} onChange={(e) => setEditFechaIngreso(e.target.value)} disabled={!esActivo} /></Group>
               {esActivo ? ( <>{!modoBaja ? ( <><Button fullWidth variant="outline" leftSection={<IconCheck size={16}/>} onClick={actualizarAnimal} mb="xl">Guardar Cambios</Button><Text size="sm" fw={700} c="red.6" mb="xs">Zona de Baja</Text><Group grow><Button color="orange" onClick={() => setModoBaja('VENDIDO')} leftSection={<IconCurrencyDollar size={16}/>}>Vendido</Button><Button color="red" onClick={() => setModoBaja('MUERTO')} leftSection={<IconSkull size={16}/>}>Muerto</Button></Group><Button fullWidth variant="subtle" color="gray" mt="xs" leftSection={<IconTrash size={16}/>} onClick={borrarAnimalDefinitivo}>Borrar definitivamente</Button></> ) : ( <Paper withBorder p="sm" bg={modoBaja === 'VENDIDO' ? 'orange.0' : 'red.0'}><Group justify="space-between" mb="sm"><Text fw={700} c={modoBaja === 'VENDIDO' ? 'orange.9' : 'red.9'}>CONFIRMAR: {modoBaja}</Text><ActionIcon variant="subtle" color="gray" onClick={() => setModoBaja(null)}><IconArrowBackUp size={16}/></ActionIcon></Group>{modoBaja === 'VENDIDO' && ( <Group grow mb="sm"><TextInput label="Precio" placeholder="Ej: 2200" value={bajaPrecio} onChange={(e) => setBajaPrecio(e.target.value)}/><TextInput label="Destino" placeholder="Ej: Frigorifico" value={bajaMotivo} onChange={(e) => setBajaMotivo(e.target.value)}/></Group> )}{modoBaja === 'MUERTO' && ( <TextInput label="Causa" placeholder="Ej: Accidente" value={bajaMotivo} onChange={(e) => setBajaMotivo(e.target.value)} mb="sm"/> )}<Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : 'red'} onClick={confirmarBaja}>Confirmar Salida</Button></Paper> )}</> ) : ( <Paper p="md" bg="gray.1" ta="center"><Text c="dimmed" size="sm" mb="md">Este animal se encuentra dado de baja.</Text><Button fullWidth variant="outline" color="blue" leftSection={<IconArrowBackUp/>} onClick={restaurarAnimal}>Restaurar a Hacienda Activa</Button></Paper> )}
            </Tabs.Panel>
