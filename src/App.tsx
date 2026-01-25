@@ -371,7 +371,7 @@ export default function App() {
   return (
     <MantineProvider>
       <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
-        <AppShell.Header><Group h="100%" px="md"><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" /><IconLeaf color="teal" size={28} /><Title order={3}>Campo Manager</Title></Group></AppShell.Header>
+        <AppShell.Header><Group h="100%" px="md"><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" /><IconLeaf color="teal" size={28} /><Title order={3}>AgroControl</Title></Group></AppShell.Header>
         <AppShell.Navbar p="md">
           <Paper p="xs" bg="gray.1" mb="lg" radius="md"><Text size="xs" fw={700} c="dimmed" mb={4}>ESTABLECIMIENTO</Text><Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} /></Paper>
           <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md"/>
