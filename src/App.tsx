@@ -217,12 +217,18 @@ export default function App() {
         animal_id: animalId,
         fecha_evento: fechaStr,
         tipo: massActividad,
-        resultado: 'Realizado (Masivo)',
+        resultado: massActividad === 'VENTA' ? 'VENDIDO' : 'Realizado (Masivo)',
         detalle: massDetalle,
         establecimiento_id: campoId
     }));
 
     const { error } = await supabase.from('eventos').insert(inserts);
+
+    // LOGICA ESPECIAL PARA VENTA MASIVA
+    if (!error && massActividad === 'VENTA') {
+        await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: 'Venta Masiva' }).in('id', selectedIds);
+    }
+
     setLoading(false);
 
     if (error) {
@@ -231,7 +237,34 @@ export default function App() {
         alert("¡Carga masiva exitosa!");
         setMassDetalle('');
         setSelectedIds([]);
-        setActiveSection('actividad'); // Redirigir a actividad para ver lo que paso
+        if (massActividad === 'VENTA') fetchAnimales(); // Recargar si hubo venta
+        setActiveSection('actividad');
+    }
+  }
+
+  // --- FUNCIONES EDICION EVENTOS ---
+  async function borrarEvento(id: string) {
+    if(!confirm("¿Estás seguro de borrar este evento?")) return;
+    await supabase.from('eventos').delete().eq('id', id);
+    // Recargar lista
+    if(animalSel) {
+        const { data } = await supabase.from('eventos').select('*').eq('animal_id', animalSel.id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
+        if (data) setEventosFicha(data);
+    }
+    fetchActividadGlobal();
+  }
+
+  async function editarEvento(evento: Evento) {
+    const nuevoRes = prompt("Editar Resultado:", evento.resultado);
+    if (nuevoRes === null) return;
+    const nuevoDetalle = prompt("Editar Detalle:", evento.detalle);
+    if (nuevoDetalle === null) return;
+
+    await supabase.from('eventos').update({ resultado: nuevoRes, detalle: nuevoDetalle }).eq('id', evento.id);
+    // Recargar lista
+    if(animalSel) {
+        const { data } = await supabase.from('eventos').select('*').eq('animal_id', animalSel.id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
+        if (data) setEventosFicha(data);
     }
   }
 
@@ -362,6 +395,11 @@ export default function App() {
     prenadas: animales.filter(a => a.estado === 'PREÑADA').length,
     enfermos: animales.filter(a => a.condicion && a.condicion.includes('ENFERMA')).length,
     terneros: animales.filter(a => a.categoria === 'Ternero' && a.estado !== 'VENDIDO' && a.estado !== 'MUERTO').length,
+    // Nuevas Stats especificas
+    ternerosM: animales.filter(a => a.categoria === 'Ternero' && a.sexo === 'M' && a.estado !== 'VENDIDO').length,
+    ternerosH: animales.filter(a => a.categoria === 'Ternero' && a.sexo === 'H' && a.estado !== 'VENDIDO').length,
+    novillos: animales.filter(a => a.categoria === 'Novillo' && a.estado !== 'VENDIDO').length,
+    toros: animales.filter(a => a.categoria === 'Toro' && a.estado !== 'VENDIDO').length,
   };
   const prenadaPct = stats.vacas > 0 ? Math.round((stats.prenadas / stats.vacas) * 100) : 0;
   
@@ -392,7 +430,7 @@ export default function App() {
               <Title order={2} mb="lg">Resumen General</Title>
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="xl">
                 <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="blue"><IconList/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TOTAL HACIENDA</Text><Text fw={700} size="xl">{stats.total}</Text></div></Group></Card>
-                <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text></div></Group></Card>
+                <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} Machos / {stats.ternerosH} Hembras)</Text></div></Group></Card>
                 <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
                 <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VACAS)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {stats.vacas}</Text></div></Group></Card>
               </SimpleGrid>
@@ -411,11 +449,12 @@ export default function App() {
                             sections={[
                                 { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
                                 { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
-                                { value: ((stats.total - stats.vacas - stats.terneros) / stats.total) * 100, color: 'gray', tooltip: 'Toros/Engorde', onMouseEnter: () => setChartHover({label: 'TOROS / ENGORDE', value: stats.total - stats.vacas - stats.terneros}), onMouseLeave: () => setChartHover(null) }
+                                { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
+                                { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
                             ]}
                         />
                     </Group>
-                    <Group justify="center" gap="xl" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="gray"/><Text size="xs">Toros/Engorde</Text></Group></Group>
+                    <Group justify="center" gap="md" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
                  </Card>
               </SimpleGrid>
             </>
@@ -434,7 +473,7 @@ export default function App() {
                     <Group grow align="flex-start">
                          <Select 
                             label="Tipo de Actividad" 
-                            data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'OTRO']} 
+                            data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'VENTA', 'OTRO']} 
                             value={massActividad} onChange={setMassActividad}
                             allowDeselect={false}
                          />
@@ -483,7 +522,16 @@ export default function App() {
                                     </Table.Td>
                                     <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
                                     <Table.Td>{animal.categoria}</Table.Td>
-                                    <Table.Td><Badge size="sm" color="gray">{animal.estado}</Badge></Table.Td>
+                                    <Table.Td>
+                                        {/* LOGICA TERNEROS EN TABLA MASIVA */}
+                                        {animal.categoria === 'Ternero' ? (
+                                            <Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light">
+                                                {animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
+                                            </Badge>
+                                        ) : (
+                                            <Badge size="sm" color="gray">{animal.estado}</Badge>
+                                        )}
+                                    </Table.Td>
                                 </Table.Tr>
                             ))}
                         </Table.Tbody>
@@ -640,7 +688,7 @@ export default function App() {
               {esActivo ? (
                 <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={fechaEvento ? fechaEvento.toISOString().split('T')[0] : ''} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <TextInput label="Caravana del Toro" placeholder="Ej: T-101" value={toroCaravana} onChange={(e) => setToroCaravana(e.target.value)} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
               ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
-              <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
+              <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => editarEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
            <Tabs.Panel value="datos">
               <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><Badge size="lg" variant="filled" color="gray" leftSection={<IconScale size={14}/>}>{ultimoPeso}</Badge></Group></Paper>
