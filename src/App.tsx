@@ -2,16 +2,17 @@ import { useEffect, useState } from 'react';
 import { 
   MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, 
   Paper, TextInput, Select, Button, Table, Badge, Tabs, 
-  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox
+  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox, PasswordInput, Container
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { 
   IconList, IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, 
   IconCalendar, IconScale, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
-  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd
+  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
+import { type Session } from '@supabase/supabase-js';
 
 // --- TIPOS ---
 interface Establecimiento { id: string; nombre: string; }
@@ -39,6 +40,12 @@ function Th({ children, reversed, sorted, onSort }: ThProps) {
 }
 
 export default function App() {
+  // --- AUTH STATE ---
+  const [session, setSession] = useState<Session | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
   const [opened, { toggle }] = useDisclosure(); 
   const [activeSection, setActiveSection] = useState('inicio'); 
   const [loading, setLoading] = useState(false);
@@ -50,9 +57,9 @@ export default function App() {
   const [nuevoCampoNombre, setNuevoCampoNombre] = useState('');
 
   // --- DATOS ---
-  // Filtros Avanzados
   const [busqueda, setBusqueda] = useState('');
   const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
+  const [filterSexo, setFilterSexo] = useState<string | null>(null);
   const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
   
   const [filtroTipoEvento, setFiltroTipoEvento] = useState<string | null>(''); 
@@ -63,7 +70,6 @@ export default function App() {
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [eventosGlobales, setEventosGlobales] = useState<Evento[]>([]);
   
-  // Dashboard
   const [chartHover, setChartHover] = useState<{ label: string, value: number | string } | null>(null);
 
   // Forms Individuales
@@ -96,7 +102,7 @@ export default function App() {
   const [nuevoTerneroCaravana, setNuevoTerneroCaravana] = useState('');
   const [nuevoTerneroSexo, setNuevoTerneroSexo] = useState<string | null>('M');
   
-  // Edicion
+  // Edicion Animal
   const [editCaravana, setEditCaravana] = useState('');
   const [editCategoria, setEditCategoria] = useState<string | null>('');
   const [editSexo, setEditSexo] = useState<string | null>('');
@@ -118,27 +124,51 @@ export default function App() {
   const [massFecha, setMassFecha] = useState<Date | null>(new Date());
   const [massDetalle, setMassDetalle] = useState('');
 
-  // --- INIT ---
-  useEffect(() => { loadCampos(); }, []);
-  async function loadCampos() {
-    const { data } = await supabase.from('establecimientos').select('*').order('created_at');
-    if (data && data.length > 0) {
-      setEstablecimientos(data);
-      const guardado = localStorage.getItem('campoId');
-      if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado);
-      else if (!campoId) setCampoId(data[0].id);
-    }
-  }
+  // --- EDICION EVENTO (MODAL) ---
+  const [modalEditEventOpen, { open: openModalEditEvent, close: closeModalEditEvent }] = useDisclosure(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingEventDate, setEditingEventDate] = useState<Date | null>(new Date());
+  const [editingEventRes, setEditingEventRes] = useState('');
+  const [editingEventDet, setEditingEventDet] = useState('');
+
+  // --- INIT AUTH & DATA ---
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) loadCampos();
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) loadCampos();
+      else { setEstablecimientos([]); setCampoId(null); }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
-    if (!campoId) return;
+    if (!campoId || !session) return;
     localStorage.setItem('campoId', campoId); 
-    setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterAtributos([]); setSelectedIds([]);
+    setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterSexo(null); setFilterAtributos([]); setSelectedIds([]);
     if (activeSection === 'inicio') { fetchAnimales(); fetchActividadGlobal(); } 
     if (activeSection.includes('hacienda') || activeSection === 'bajas' || activeSection === 'masivos') fetchAnimales();
     if (activeSection === 'actividad') fetchActividadGlobal();
     if (activeSection === 'agricultura') fetchLotes();
-  }, [activeSection, campoId]); 
+  }, [activeSection, campoId, session]); 
+
+  // --- AUTH ACTIONS ---
+  async function handleLogin() {
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setAuthLoading(false);
+    if (error) alert("Error: " + error.message);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setSession(null);
+  }
 
   // --- LOGICA UI ---
   useEffect(() => { setResultadoInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); }, [tipoEventoInput]);
@@ -148,38 +178,49 @@ export default function App() {
     else { setSexoBloqueado(false); }
   }, [categoria]);
 
-  // --- SORT & FILTER ---
+  // --- SORT & FILTER INTELIGENTE ---
   const setSorting = (field: keyof Animal) => {
     const reversed = field === sortBy ? !reverseSortDirection : false;
     setReverseSortDirection(reversed);
     setSortBy(field);
-    setAnimales(prev => [...prev].sort((a, b) => {
-        if (field === 'caravana') {
-            const numA = parseInt(a.caravana.replace(/\D/g,'')) || 0;
-            const numB = parseInt(b.caravana.replace(/\D/g,'')) || 0;
-            if (numA !== numB) return reversed ? numB - numA : numA - numB;
-        }
-        const valA = a[field]?.toString().toLowerCase() || '';
-        const valB = b[field]?.toString().toLowerCase() || '';
-        return reversed ? valB.localeCompare(valA) : valA.localeCompare(valB);
-    }));
   };
 
-  const animalesFiltrados = animales.filter(animal => {
-    const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
-    const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
-    let matchAtributos = true;
-    if (filterAtributos.length > 0) {
-        const tagsDelAnimal: string[] = [];
-        tagsDelAnimal.push(animal.estado);
-        if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
-        if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
-        if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
-        if (animal.castrado) tagsDelAnimal.push('CAPADO');
-        matchAtributos = filterAtributos.every(filtro => tagsDelAnimal.includes(filtro));
-    }
-    return matchBusqueda && matchCategoria && matchAtributos;
-  });
+  const animalesFiltrados = animales
+    .filter(animal => {
+        const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
+        const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
+        const matchSexo = filterSexo ? animal.sexo === filterSexo : true; 
+        let matchAtributos = true;
+        if (filterAtributos.length > 0) {
+            const tagsDelAnimal: string[] = [];
+            tagsDelAnimal.push(animal.estado);
+            if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
+            if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
+            if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
+            if (animal.castrado) tagsDelAnimal.push('CAPADO');
+            matchAtributos = filterAtributos.every(filtro => tagsDelAnimal.includes(filtro));
+        }
+        return matchBusqueda && matchCategoria && matchSexo && matchAtributos;
+    })
+    .sort((a, b) => {
+        if (busqueda) {
+            const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase();
+            const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase();
+            if (exactA && !exactB) return -1; 
+            if (!exactA && exactB) return 1; 
+        }
+        if (sortBy) {
+            if (sortBy === 'caravana') {
+                const numA = parseInt(a.caravana.replace(/\D/g,'')) || 0;
+                const numB = parseInt(b.caravana.replace(/\D/g,'')) || 0;
+                if (numA !== numB) return reverseSortDirection ? numB - numA : numA - numB;
+            }
+            const valA = a[sortBy]?.toString().toLowerCase() || '';
+            const valB = b[sortBy]?.toString().toLowerCase() || '';
+            return reverseSortDirection ? valB.localeCompare(valA) : valA.localeCompare(valB);
+        }
+        return 0;
+    });
   
   const eventosFiltrados = eventosGlobales.filter(ev => {
     const coincideTexto = ev.animales?.caravana.toLowerCase().includes(busqueda.toLowerCase()) || ev.tipo.toLowerCase().includes(busqueda.toLowerCase());
@@ -196,9 +237,7 @@ export default function App() {
   };
   
   const seleccionarGrupo = (categoriaTarget: string | null) => {
-    // Si categoriaTarget es null, selecciona TODO lo visible en el filtro actual
     const targets = animalesFiltrados.filter(a => categoriaTarget ? a.categoria === categoriaTarget : true).map(a => a.id);
-    // Agregamos sin duplicados
     setSelectedIds(prev => [...new Set([...prev, ...targets])]);
   };
 
@@ -217,16 +256,18 @@ export default function App() {
         animal_id: animalId,
         fecha_evento: fechaStr,
         tipo: massActividad,
-        resultado: massActividad === 'VENTA' ? 'VENDIDO' : 'Realizado (Masivo)',
+        resultado: massActividad === 'VENTA' ? 'VENDIDO' : (massActividad === 'CAPADO' ? 'Realizado' : 'Realizado (Masivo)'),
         detalle: massDetalle,
         establecimiento_id: campoId
     }));
 
     const { error } = await supabase.from('eventos').insert(inserts);
 
-    // LOGICA ESPECIAL PARA VENTA MASIVA
     if (!error && massActividad === 'VENTA') {
         await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: 'Venta Masiva' }).in('id', selectedIds);
+    }
+    if (!error && massActividad === 'CAPADO') {
+        await supabase.from('animales').update({ castrado: true }).in('id', selectedIds);
     }
 
     setLoading(false);
@@ -237,7 +278,7 @@ export default function App() {
         alert("¡Carga masiva exitosa!");
         setMassDetalle('');
         setSelectedIds([]);
-        if (massActividad === 'VENTA') fetchAnimales(); // Recargar si hubo venta
+        if (massActividad === 'VENTA' || massActividad === 'CAPADO') fetchAnimales(); 
         setActiveSection('actividad');
     }
   }
@@ -246,30 +287,48 @@ export default function App() {
   async function borrarEvento(id: string) {
     if(!confirm("¿Estás seguro de borrar este evento?")) return;
     await supabase.from('eventos').delete().eq('id', id);
-    // Recargar lista
-    if(animalSel) {
-        const { data } = await supabase.from('eventos').select('*').eq('animal_id', animalSel.id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
-        if (data) setEventosFicha(data);
-    }
+    if(animalSel) recargarFicha(animalSel.id);
     fetchActividadGlobal();
   }
 
-  async function editarEvento(evento: Evento) {
-    const nuevoRes = prompt("Editar Resultado:", evento.resultado);
-    if (nuevoRes === null) return;
-    const nuevoDetalle = prompt("Editar Detalle:", evento.detalle);
-    if (nuevoDetalle === null) return;
+  function iniciarEdicionEvento(ev: Evento) {
+      setEditingEventId(ev.id);
+      setEditingEventDate(new Date(ev.fecha_evento));
+      setEditingEventRes(ev.resultado);
+      setEditingEventDet(ev.detalle || '');
+      openModalEditEvent();
+  }
 
-    await supabase.from('eventos').update({ resultado: nuevoRes, detalle: nuevoDetalle }).eq('id', evento.id);
-    // Recargar lista
-    if(animalSel) {
-        const { data } = await supabase.from('eventos').select('*').eq('animal_id', animalSel.id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
-        if (data) setEventosFicha(data);
-    }
+  async function guardarEdicionEvento() {
+      if(!editingEventId || !editingEventDate) return;
+      await supabase.from('eventos').update({ 
+          fecha_evento: editingEventDate.toISOString(),
+          resultado: editingEventRes, 
+          detalle: editingEventDet 
+      }).eq('id', editingEventId);
+      
+      closeModalEditEvent();
+      if(animalSel) recargarFicha(animalSel.id);
+      fetchActividadGlobal();
+  }
+
+  async function recargarFicha(id: string) {
+    const { data } = await supabase.from('eventos').select('*').eq('animal_id', id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
+    if (data) setEventosFicha(data);
   }
 
 
   // --- FETCHERS ---
+  async function loadCampos() {
+    const { data } = await supabase.from('establecimientos').select('*').order('created_at');
+    if (data && data.length > 0) {
+      setEstablecimientos(data);
+      const guardado = localStorage.getItem('campoId');
+      if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado);
+      else if (!campoId) setCampoId(data[0].id);
+    }
+  }
+
   async function fetchAnimales() {
     if (!campoId) return;
     let query = supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); 
@@ -284,7 +343,8 @@ export default function App() {
   // --- GESTIÓN DE ESTABLECIMIENTOS ---
   async function crearCampo() {
     if (!nuevoCampoNombre) return;
-    const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre }]);
+    // IMPORTANTE: Al crear campo, se asigna al usuario actual automaticamente
+    const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, user_id: session?.user.id }]);
     if (error) alert("Error: " + error.message);
     else { setNuevoCampoNombre(''); loadCampos(); }
   }
@@ -326,8 +386,7 @@ export default function App() {
     setHijos([]); const { data: dataHijos } = await supabase.from('animales').select('caravana').eq('madre_id', animal.id); if(dataHijos) setHijos(dataHijos.map(h => h.caravana));
     setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setUltimoPeso('Calculando...');
     openModalVaca(); 
-    const { data } = await supabase.from('eventos').select('*').eq('animal_id', animal.id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
-    if (data) setEventosFicha(data);
+    recargarFicha(animal.id);
     const { data: pesoData } = await supabase.from('eventos').select('resultado').eq('animal_id', animal.id).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: false }).limit(1);
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
   }
@@ -359,8 +418,8 @@ export default function App() {
     setAnimalSel(prev => prev ? { ...prev, estado: nuevoEstado || prev.estado, condicion: stringCondicion, castrado: esCastrado, categoria: (prev.categoria === 'Vaquillona' && nuevoEstado === 'VACÍA') ? 'Vaca' : prev.categoria } : null);
     setEditCondicion(nuevasCondiciones); setEditCastrado(esCastrado); if(nuevoEstado) setEditEstado(nuevoEstado); setLoading(false);
     if (!error) {
-      const { data } = await supabase.from('eventos').select('*').eq('animal_id', animalSel.id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
-      if (data) setEventosFicha(data); if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); fetchAnimales(); 
+      recargarFicha(animalSel.id);
+      if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); fetchAnimales(); 
     }
   }
 
@@ -395,7 +454,6 @@ export default function App() {
     prenadas: animales.filter(a => a.estado === 'PREÑADA').length,
     enfermos: animales.filter(a => a.condicion && a.condicion.includes('ENFERMA')).length,
     terneros: animales.filter(a => a.categoria === 'Ternero' && a.estado !== 'VENDIDO' && a.estado !== 'MUERTO').length,
-    // Nuevas Stats especificas
     ternerosM: animales.filter(a => a.categoria === 'Ternero' && a.sexo === 'M' && a.estado !== 'VENDIDO').length,
     ternerosH: animales.filter(a => a.categoria === 'Ternero' && a.sexo === 'H' && a.estado !== 'VENDIDO').length,
     novillos: animales.filter(a => a.categoria === 'Novillo' && a.estado !== 'VENDIDO').length,
@@ -408,245 +466,254 @@ export default function App() {
 
   return (
     <MantineProvider>
-      <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
-        <AppShell.Header><Group h="100%" px="md"><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" /><IconLeaf color="teal" size={28} /><Title order={3}>AgroControl</Title></Group></AppShell.Header>
-        <AppShell.Navbar p="md">
-          <Paper p="xs" bg="gray.1" mb="lg" radius="md"><Text size="xs" fw={700} c="dimmed" mb={4}>ESTABLECIMIENTO</Text><Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} /></Paper>
-          <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md"/>
-          <Text size="xs" fw={500} c="dimmed" mb="sm">GANADERÍA</Text>
-          <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" />
-          <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" />
-          <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" />
-          <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
-          <NavLink label="Lotes y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" />
-          <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
-          <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" />
-          <AppShell.Section style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eee' }}><Button fullWidth variant="subtle" color="gray" leftSection={<IconSettings size={18}/>} onClick={openModalConfig}>Gestionar Campos</Button></AppShell.Section>
-        </AppShell.Navbar>
+        {!session ? (
+          <Container size={420} my={40}>
+            <Title ta="center" order={1} mb="xl" c="teal">AgroControl</Title>
+            <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+              <Text size="sm" fw={500} ta="center" mb="lg">Iniciá sesión para administrar tu campo</Text>
+              <TextInput label="Email" placeholder="tucorreo@ejemplo.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <PasswordInput label="Contraseña" placeholder="Tu contraseña" required mt="md" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Button fullWidth mt="xl" onClick={handleLogin} loading={authLoading} color="teal">Ingresar</Button>
+            </Paper>
+          </Container>
+        ) : (
+          <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
+            <AppShell.Header><Group h="100%" px="md"><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" /><IconLeaf color="teal" size={28} /><Title order={3}>AgroControl</Title></Group></AppShell.Header>
+            <AppShell.Navbar p="md">
+              <Paper p="xs" bg="gray.1" mb="lg" radius="md"><Text size="xs" fw={700} c="dimmed" mb={4}>ESTABLECIMIENTO</Text><Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} /></Paper>
+              <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md"/>
+              <Text size="xs" fw={500} c="dimmed" mb="sm">GANADERÍA</Text>
+              <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" />
+              <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" />
+              <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" />
+              <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
+              <NavLink label="Lotes y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" />
+              <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
+              <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" />
+              <AppShell.Section style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
+                <Button fullWidth variant="subtle" color="gray" leftSection={<IconSettings size={18}/>} onClick={openModalConfig}>Gestionar Campos</Button>
+                <Button fullWidth variant="light" color="red" mt="xs" leftSection={<IconLogout size={18}/>} onClick={handleLogout}>Cerrar Sesión</Button>
+              </AppShell.Section>
+            </AppShell.Navbar>
 
-        <AppShell.Main bg="gray.0">
-          {activeSection === 'inicio' && (
-            <>
-              <Title order={2} mb="lg">Resumen General</Title>
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="xl">
-                <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="blue"><IconList/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TOTAL HACIENDA</Text><Text fw={700} size="xl">{stats.total}</Text></div></Group></Card>
-                <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} Machos / {stats.ternerosH} Hembras)</Text></div></Group></Card>
-                <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
-                <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VACAS)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {stats.vacas}</Text></div></Group></Card>
-              </SimpleGrid>
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                 <Card shadow="sm" radius="md" withBorder>
-                    <Text fw={700} mb="md">Últimos Movimientos</Text>
-                    <Stack gap="xs">{eventosGlobales.slice(0, 5).map(ev => (<Paper key={ev.id} p="xs" withBorder bg="gray.0"><Group justify="space-between"><Group gap="xs"><Badge size="sm" variant="dot" color="blue">{ev.tipo}</Badge><Text size="sm" fw={500}>Animal: {ev.animales?.caravana}</Text></Group><Text size="xs" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Group><Text size="xs" c="dimmed" mt={4}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text></Paper>))}</Stack>
-                    <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
-                 </Card>
-                 <Card shadow="sm" radius="md" withBorder>
-                    <Text fw={700} mb="md">Distribución del Rodeo</Text>
-                    <Group justify="center">
-                        <RingProgress 
-                            size={220} thickness={20} 
-                            label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
-                            sections={[
-                                { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
-                                { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
-                                { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
-                                { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
-                            ]}
-                        />
-                    </Group>
-                    <Group justify="center" gap="md" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
-                 </Card>
-              </SimpleGrid>
-            </>
-          )}
-
-          {activeSection === 'masivos' && (
-              <>
-                <Group justify="space-between" mb="lg">
-                    <Title order={2}>Carga de Eventos Masivos</Title>
-                    <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
-                </Group>
-                
-                {/* 1. CONFIGURACION DEL EVENTO */}
-                <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
-                    <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
-                    <Group grow align="flex-start">
-                         <Select 
-                            label="Tipo de Actividad" 
-                            data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'VENTA', 'OTRO']} 
-                            value={massActividad} onChange={setMassActividad}
-                            allowDeselect={false}
-                         />
-                         <TextInput 
-                            label="Fecha" type="date" 
-                            value={massFecha ? massFecha.toISOString().split('T')[0] : ''} 
-                            onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}
-                         />
-                    </Group>
-                    <TextInput mt="sm" label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
-                </Paper>
-
-                {/* 2. SELECCION DE ANIMALES */}
-                <Text fw={700} size="lg" mb="sm">2. Seleccionar Animales</Text>
-                
-                {/* Botones de Seleccion Rapida */}
-                <Group mb="md">
-                    <Button variant="light" color="blue" size="xs" onClick={() => seleccionarGrupo('Vaca')}>Todas las Vacas</Button>
-                    <Button variant="light" color="teal" size="xs" onClick={() => seleccionarGrupo('Ternero')}>Todos los Terneros</Button>
-                    <Button variant="light" color="gray" size="xs" onClick={() => seleccionarGrupo(null)}>Seleccionar TODO lo visible</Button>
-                    {selectedIds.length > 0 && <Button variant="outline" color="red" size="xs" onClick={limpiarSeleccion}>Borrar Selección</Button>}
-                </Group>
-
-                {/* Filtros visuales (para ayudar a buscar) */}
-                <Group mb="md">
-                     <TextInput placeholder="Buscar por caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 1}}/>
-                     <Select placeholder="Filtrar Vista" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
-                </Group>
-
-                <Paper withBorder radius="md" h={400} style={{ display: 'flex', flexDirection: 'column' }}>
-                    <ScrollArea style={{ flex: 1 }}>
-                    <Table stickyHeader>
-                        <Table.Thead bg="gray.1">
-                            <Table.Tr>
-                                <Table.Th w={50}>Check</Table.Th>
-                                <Table.Th>Caravana</Table.Th>
-                                <Table.Th>Categoría</Table.Th>
-                                <Table.Th>Estado</Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {animalesFiltrados.map(animal => (
-                                <Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}>
-                                    <Table.Td>
-                                        <Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} />
-                                    </Table.Td>
-                                    <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
-                                    <Table.Td>{animal.categoria}</Table.Td>
-                                    <Table.Td>
-                                        {/* LOGICA TERNEROS EN TABLA MASIVA */}
-                                        {animal.categoria === 'Ternero' ? (
-                                            <Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light">
-                                                {animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
-                                            </Badge>
-                                        ) : (
-                                            <Badge size="sm" color="gray">{animal.estado}</Badge>
-                                        )}
-                                    </Table.Td>
-                                </Table.Tr>
-                            ))}
-                        </Table.Tbody>
-                    </Table>
-                    </ScrollArea>
-                </Paper>
-
-                {/* BOTON FLOTANTE CONFIRMACION */}
-                {selectedIds.length > 0 && (
-                    <Paper 
-                        shadow="xl" p="md" radius="md" withBorder bg="gray.0" 
-                        style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}
-                    >
-                        <Group>
-                            <Stack gap={0}>
-                                <Text fw={700} size="sm">CONFIRMAR ACCIÓN</Text>
-                                <Text size="xs" c="dimmed">{massActividad} en {selectedIds.length} animales</Text>
-                            </Stack>
-                            <Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>
-                                CONFIRMAR
-                            </Button>
+            <AppShell.Main bg="gray.0">
+              {activeSection === 'inicio' && (
+                <>
+                  <Title order={2} mb="lg">Resumen General</Title>
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="xl">
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="blue"><IconList/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TOTAL HACIENDA</Text><Text fw={700} size="xl">{stats.total}</Text></div></Group></Card>
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} Machos / {stats.ternerosH} Hembras)</Text></div></Group></Card>
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VACAS)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {stats.vacas}</Text></div></Group></Card>
+                  </SimpleGrid>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <Card shadow="sm" radius="md" withBorder>
+                        <Text fw={700} mb="md">Últimos Movimientos</Text>
+                        <Stack gap="xs">{eventosGlobales.slice(0, 5).map(ev => (<Paper key={ev.id} p="xs" withBorder bg="gray.0"><Group justify="space-between"><Group gap="xs"><Badge size="sm" variant="dot" color="blue">{ev.tipo}</Badge><Text size="sm" fw={500}>Animal: {ev.animales?.caravana}</Text></Group><Text size="xs" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Group><Text size="xs" c="dimmed" mt={4}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text></Paper>))}</Stack>
+                        <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
+                    </Card>
+                    <Card shadow="sm" radius="md" withBorder>
+                        <Text fw={700} mb="md">Distribución del Rodeo</Text>
+                        <Group justify="center">
+                            <RingProgress 
+                                size={220} thickness={20} 
+                                label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
+                                sections={[
+                                    { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
+                                    { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
+                                    { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
+                                    { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
+                                ]}
+                            />
                         </Group>
+                        <Group justify="center" gap="md" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
+                    </Card>
+                  </SimpleGrid>
+                </>
+              )}
+
+              {activeSection === 'masivos' && (
+                  <>
+                    <Group justify="space-between" mb="lg">
+                        <Title order={2}>Carga de Eventos Masivos</Title>
+                        <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
+                    </Group>
+                    
+                    {/* 1. CONFIGURACION DEL EVENTO */}
+                    <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
+                        <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
+                        <Group grow align="flex-start">
+                            <Select 
+                                label="Tipo de Actividad" 
+                                data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'VENTA', 'CAPADO', 'OTRO']} 
+                                value={massActividad} onChange={setMassActividad}
+                                allowDeselect={false}
+                            />
+                            <TextInput 
+                                label="Fecha" type="date" 
+                                value={massFecha ? massFecha.toISOString().split('T')[0] : ''} 
+                                onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}
+                            />
+                        </Group>
+                        <TextInput mt="sm" label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
                     </Paper>
-                )}
-              </>
-          )}
 
-          {(activeSection === 'hacienda' || activeSection === 'bajas') && (
-            <>
-              {/* HEADER DE LA SECCION CON BOTON NUEVO GRANDE Y TEAL */}
-              <Group justify="space-between" mb="lg" align="center">
-                <Group>
-                    <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title>
-                    <Badge size="xl" circle>{animalesFiltrados.length}</Badge>
-                </Group>
-                {activeSection === 'hacienda' && (
-                    <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180} mr="md">Nuevo Animal</Button>
-                )}
-              </Group>
-              
-              {/* BARRA DE FILTROS AVANZADOS (UX PRO) */}
-              <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
-                  <Group grow align="flex-end">
-                    <TextInput 
-                        label="Buscar" placeholder="Caravana..." 
-                        leftSection={<IconSearch size={16}/>} 
-                        value={busqueda} onChange={(e) => setBusqueda(e.target.value)} 
-                    />
-                    <Select 
-                        label="Filtrar Categoría" placeholder="Todas" 
-                        data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} 
-                        value={filterCategoria} onChange={setFilterCategoria} clearable 
-                    />
-                    <MultiSelect 
-                        label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..."
-                        data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'ENFERMA', 'LASTIMADA']}
-                        value={filterAtributos} onChange={setFilterAtributos}
-                        leftSection={<IconFilter size={16}/>}
-                        clearable
-                    />
+                    {/* 2. SELECCION DE ANIMALES */}
+                    <Text fw={700} size="lg" mb="sm">2. Seleccionar Animales</Text>
+                    
+                    {/* Botones de Seleccion Rapida */}
+                    <Group mb="md">
+                        <Button variant="light" color="blue" size="xs" onClick={() => seleccionarGrupo('Vaca')}>Todas las Vacas</Button>
+                        <Button variant="light" color="teal" size="xs" onClick={() => seleccionarGrupo('Ternero')}>Todos los Terneros</Button>
+                        <Button variant="light" color="gray" size="xs" onClick={() => seleccionarGrupo(null)}>Seleccionar TODO lo visible</Button>
+                        {selectedIds.length > 0 && <Button variant="outline" color="red" size="xs" onClick={limpiarSeleccion}>Borrar Selección</Button>}
+                    </Group>
+
+                    {/* Filtros visuales (para ayudar a buscar) */}
+                    <Group mb="md">
+                        <TextInput placeholder="Buscar por caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 1}}/>
+                        <Select placeholder="Filtrar Vista" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
+                        <Select placeholder="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{flex: 0.5}}/>
+                    </Group>
+
+                    <Paper withBorder radius="md" h={400} style={{ display: 'flex', flexDirection: 'column' }}>
+                        <ScrollArea style={{ flex: 1 }}>
+                        <Table stickyHeader>
+                            <Table.Thead bg="gray.1">
+                                <Table.Tr>
+                                    <Table.Th w={50}>Check</Table.Th>
+                                    <Table.Th>Caravana</Table.Th>
+                                    <Table.Th>Categoría</Table.Th>
+                                    <Table.Th>Estado</Table.Th>
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {animalesFiltrados.map(animal => (
+                                    <Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}>
+                                        <Table.Td>
+                                            <Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} />
+                                        </Table.Td>
+                                        <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
+                                        <Table.Td>{animal.categoria}</Table.Td>
+                                        <Table.Td>
+                                            {/* LOGICA TERNEROS EN TABLA MASIVA */}
+                                            {animal.categoria === 'Ternero' ? (
+                                                <Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light">
+                                                    {animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
+                                                </Badge>
+                                            ) : (
+                                                <Badge size="sm" color="gray">{animal.estado}</Badge>
+                                            )}
+                                        </Table.Td>
+                                    </Table.Tr>
+                                ))}
+                            </Table.Tbody>
+                        </Table>
+                        </ScrollArea>
+                    </Paper>
+
+                    {/* BOTON FLOTANTE CONFIRMACION */}
+                    {selectedIds.length > 0 && (
+                        <Paper 
+                            shadow="xl" p="md" radius="md" withBorder bg="gray.0" 
+                            style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}
+                        >
+                            <Group>
+                                <Stack gap={0}>
+                                    <Text fw={700} size="sm">CONFIRMAR ACCIÓN</Text>
+                                    <Text size="xs" c="dimmed">{massActividad} en {selectedIds.length} animales</Text>
+                                </Stack>
+                                <Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>
+                                    CONFIRMAR
+                                </Button>
+                            </Group>
+                        </Paper>
+                    )}
+                  </>
+              )}
+
+              {(activeSection === 'hacienda' || activeSection === 'bajas') && (
+                <>
+                  {/* HEADER DE LA SECCION CON BOTON NUEVO GRANDE Y TEAL */}
+                  <Group justify="space-between" mb="lg" align="center">
+                    <Group>
+                        <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title>
+                        <Badge size="xl" circle>{animalesFiltrados.length}</Badge>
+                    </Group>
+                    {activeSection === 'hacienda' && (
+                        <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180} mr="md">Nuevo Animal</Button>
+                    )}
                   </Group>
-              </Paper>
+                  
+                  {/* BARRA DE FILTROS AVANZADOS (UX PRO) */}
+                  <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
+                      <Group grow align="flex-end">
+                        <TextInput 
+                            label="Buscar" placeholder="Caravana..." 
+                            leftSection={<IconSearch size={16}/>} 
+                            value={busqueda} onChange={(e) => setBusqueda(e.target.value)} 
+                        />
+                        <Select 
+                            label="Filtrar Categoría" placeholder="Todas" 
+                            data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} 
+                            value={filterCategoria} onChange={setFilterCategoria} clearable 
+                        />
+                        <MultiSelect 
+                            label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..."
+                            data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'ENFERMA', 'LASTIMADA']}
+                            value={filterAtributos} onChange={setFilterAtributos}
+                            leftSection={<IconFilter size={16}/>}
+                            clearable
+                        />
+                      </Group>
+                  </Paper>
 
-              <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
-                <Table striped highlightOnHover>
-                  <Table.Thead bg="gray.1">
-                      <Table.Tr>
-                          <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
-                          <Table.Th>Categoría</Table.Th> {/* SIN SORT */}
-                          <Table.Th>Estado / Condición</Table.Th> {/* SIN SORT */}
-                          {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
-                      </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>{animalesFiltrados.map((vaca) => (
-                    <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }}>
-                        <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
-                        <Table.Td>{vaca.categoria}</Table.Td>
-                        <Table.Td>
-                            {activeSection === 'bajas' ? (
-                                <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
-                            ) : (
-                                <Group gap="xs">
-                                    {/* 1. SEXO (Solo Terneros) */}
-                                    {vaca.categoria === 'Ternero' && (
-                                        <Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">
-                                            {vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
-                                        </Badge>
-                                    )}
+                  <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
+                    <Table striped highlightOnHover>
+                      <Table.Thead bg="gray.1">
+                          <Table.Tr>
+                              <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
+                              <Table.Th>Categoría</Table.Th> {/* SIN SORT */}
+                              <Table.Th>Estado / Condición</Table.Th> {/* SIN SORT */}
+                              {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
+                          </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>{animalesFiltrados.map((vaca) => (
+                        <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }}>
+                            <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
+                            <Table.Td>{vaca.categoria}</Table.Td>
+                            <Table.Td>
+                                {activeSection === 'bajas' ? (
+                                    <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
+                                ) : (
+                                    <Group gap="xs">
+                                        {vaca.categoria === 'Ternero' && (
+                                            <Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">
+                                                {vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
+                                            </Badge>
+                                        )}
+                                        {vaca.categoria === 'Ternero' && vaca.castrado ? (
+                                            <Badge color="cyan">CAPADO</Badge>
+                                        ) : (
+                                            <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
+                                        )}
+                                        {renderCondicionBadges(vaca.condicion)}
+                                    </Group>
+                                )}
+                            </Table.Td>
+                            {activeSection === 'bajas' && ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> )}
+                        </Table.Tr>
+                      ))}</Table.Tbody>
+                    </Table>
+                  </Paper>
+                </>
+              )}
 
-                                    {/* 2. ESTADO (Logica corregida) */}
-                                    {vaca.categoria === 'Ternero' ? (
-                                        // Si es Ternero: Solo mostramos si está CAPADO. Si está ACTIVO, no mostramos nada (ya mostramos el sexo).
-                                        vaca.castrado && <Badge color="cyan">CAPADO</Badge>
-                                    ) : (
-                                        // Si NO es Ternero (Vaca, Toro): Mostramos el estado siempre
-                                        <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
-                                    )}
-
-                                    {/* 3. CONDICION (Enferma, etc) */}
-                                    {renderCondicionBadges(vaca.condicion)}
-                                </Group>
-                            )}
-                        </Table.Td>
-                        {activeSection === 'bajas' && ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> )}
-                    </Table.Tr>
-                  ))}</Table.Tbody>
-                </Table>
-              </Paper>
-            </>
-          )}
-
-          {activeSection === 'agricultura' && ( <> <Title order={3} mb="lg">Lotes y Parcelas</Title><Paper p="md" mb="lg" radius="md" withBorder><Text fw={700} mb="xs" size="sm" c="dimmed">NUEVO LOTE</Text><Group align="flex-end"><TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} style={{ flex: 1 }} /><TextInput label="Hectáreas" type="number" value={hasLote} onChange={(e) => setHasLote(Number(e.target.value))} w={120} /><Button onClick={guardarLote} loading={loading} color="lime">Crear</Button></Group></Paper><SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>{lotes.map(lote => (<Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}><Group justify="space-between" mb="xs"><Text fw={700}>{lote.nombre}</Text><Badge color={lote.estado === 'SEMBRADO' ? 'lime' : 'gray'}>{lote.estado}</Badge></Group><Group mb="md"><Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>{lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}</Group><Button variant="light" color="lime" fullWidth mt="md" radius="md">Ver Historial</Button></Card>))}</SimpleGrid>{lotes.length === 0 && <Text c="dimmed" ta="center" mt="xl">No hay lotes cargados.</Text>} </> )}
-          {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toro_caravana && (<Text size="xs" c="dimmed">Toro: {ev.datos_extra.toro_caravana}</Text>)}</Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
-        </AppShell.Main>
-      </AppShell> 
+              {activeSection === 'agricultura' && ( <> <Title order={3} mb="lg">Lotes y Parcelas</Title><Paper p="md" mb="lg" radius="md" withBorder><Text fw={700} mb="xs" size="sm" c="dimmed">NUEVO LOTE</Text><Group align="flex-end"><TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} style={{ flex: 1 }} /><TextInput label="Hectáreas" type="number" value={hasLote} onChange={(e) => setHasLote(Number(e.target.value))} w={120} /><Button onClick={guardarLote} loading={loading} color="lime">Crear</Button></Group></Paper><SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>{lotes.map(lote => (<Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}><Group justify="space-between" mb="xs"><Text fw={700}>{lote.nombre}</Text><Badge color={lote.estado === 'SEMBRADO' ? 'lime' : 'gray'}>{lote.estado}</Badge></Group><Group mb="md"><Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>{lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}</Group><Button variant="light" color="lime" fullWidth mt="md" radius="md">Ver Historial</Button></Card>))}</SimpleGrid>{lotes.length === 0 && <Text c="dimmed" ta="center" mt="xl">No hay lotes cargados.</Text>} </> )}
+              {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toro_caravana && (<Text size="xs" c="dimmed">Toro: {ev.datos_extra.toro_caravana}</Text>)}</Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
+            </AppShell.Main>
+          </AppShell>
+        )}
 
       {/* --- MODAL NUEVO ANIMAL (ALTA) --- */}
       <Modal opened={modalAltaOpen} onClose={closeModalAlta} title={<Text fw={700} size="lg">Alta de Nuevo Animal</Text>} centered>
@@ -656,6 +723,16 @@ export default function App() {
              <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
              <Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button>
          </Stack>
+      </Modal>
+
+      {/* --- MODAL EDICION DE EVENTO (Z-INDEX CORREGIDO) --- */}
+      <Modal opened={modalEditEventOpen} onClose={closeModalEditEvent} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
+          <Stack>
+              <TextInput label="Fecha" type="date" value={editingEventDate ? editingEventDate.toISOString().split('T')[0] : ''} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
+              <TextInput label="Resultado" value={editingEventRes} onChange={(e) => setEditingEventRes(e.target.value)}/>
+              <Textarea label="Detalle" value={editingEventDet} onChange={(e) => setEditingEventDet(e.target.value)}/>
+              <Button onClick={guardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button>
+          </Stack>
       </Modal>
 
       {/* --- MODAL GESTION CAMPOS --- */}
@@ -688,7 +765,7 @@ export default function App() {
               {esActivo ? (
                 <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={fechaEvento ? fechaEvento.toISOString().split('T')[0] : ''} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <TextInput label="Caravana del Toro" placeholder="Ej: T-101" value={toroCaravana} onChange={(e) => setToroCaravana(e.target.value)} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
               ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
-              <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => editarEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
+              <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
            <Tabs.Panel value="datos">
               <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><Badge size="lg" variant="filled" color="gray" leftSection={<IconScale size={14}/>}>{ultimoPeso}</Badge></Group></Paper>
