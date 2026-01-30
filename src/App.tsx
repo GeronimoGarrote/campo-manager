@@ -26,23 +26,9 @@ interface Evento { id: string; fecha_evento: string; tipo: string; resultado: st
 interface Lote { id: string; nombre: string; hectareas: number; cultivo_actual: string; estado: string; }
 interface Labor { id: string; fecha: string; actividad: string; cultivo: string; detalle: string; lote_id: string; }
 
-// --- HELPERS DE FECHA ---
-
-// 1. Para MOSTRAR en la tabla (DD/MM/YYYY)
-const formatDate = (dateString: string) => {
-  if (!dateString) return '-';
-  const parts = dateString.split('T')[0].split('-'); 
-  return `${parts[2]}/${parts[1]}/${parts[0]}`; 
-};
-
-// 2. Para los INPUTS (YYYY-MM-DD) respetando la Zona Horaria Local (Arg)
-const getLocalDateForInput = (date: Date | null) => {
-  if (!date) return '';
-  // Restamos el offset de la zona horaria para que toISOString no adelante el dia
-  const offset = date.getTimezoneOffset(); 
-  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
-  return localDate.toISOString().split('T')[0];
-};
+// --- HELPERS ---
+const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
+const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 
 // Componente Header Tabla
 interface ThProps { children: React.ReactNode; reversed: boolean; sorted: boolean; onSort(): void; }
@@ -101,7 +87,6 @@ export default function App() {
   const [eventosFicha, setEventosFicha] = useState<Evento[]>([]);
   const [ultimoPeso, setUltimoPeso] = useState<string>('Sin datos');
   const [madreCaravana, setMadreCaravana] = useState<string>(''); 
-  
   const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string }[]>([]); 
   
   const [modalLoteOpen, { open: openModalLote, close: closeModalLote }] = useDisclosure(false);
@@ -253,45 +238,28 @@ export default function App() {
     if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
     if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
     if (massActividad === 'VENTA' && !massPrecio) return alert("Falta el precio de venta");
-    
     if(!confirm(`¿Confirmar ${massActividad} para ${selectedIds.length} animales?`)) return;
 
     setLoading(true);
     const fechaStr = massFecha.toISOString();
-    
     let resultadoTxt = 'Realizado (Masivo)';
     let datosExtra: any = {};
     if (massActividad === 'VENTA') {
         resultadoTxt = 'VENDIDO';
         datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' };
-    } else if (massActividad === 'CAPADO') {
-        resultadoTxt = 'Realizado';
-    }
+    } else if (massActividad === 'CAPADO') { resultadoTxt = 'Realizado'; }
 
     const inserts = selectedIds.map(animalId => ({
-        animal_id: animalId,
-        fecha_evento: fechaStr,
-        tipo: massActividad,
-        resultado: resultadoTxt,
-        detalle: massDetalle,
-        datos_extra: datosExtra, // Guardar precio aqui
-        establecimiento_id: campoId
+        animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, establecimiento_id: campoId
     }));
-
     const { error } = await supabase.from('eventos').insert(inserts);
 
-    if (!error && massActividad === 'VENTA') {
-        await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', selectedIds);
-    }
-    if (!error && massActividad === 'CAPADO') {
-        await supabase.from('animales').update({ castrado: true }).in('id', selectedIds);
-    }
+    if (!error && massActividad === 'VENTA') await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', selectedIds);
+    if (!error && massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', selectedIds);
 
     setLoading(false);
-    if (error) { alert("Error al guardar: " + error.message); } else {
-        alert("¡Carga masiva exitosa!");
-        setMassDetalle(''); setMassPrecio(''); setMassDestino('');
-        setSelectedIds([]);
+    if (error) { alert("Error: " + error.message); } else {
+        alert("¡Carga masiva exitosa!"); setMassDetalle(''); setMassPrecio(''); setMassDestino(''); setSelectedIds([]);
         if (massActividad === 'VENTA' || massActividad === 'CAPADO') fetchAnimales(); 
         setActiveSection('actividad');
     }
@@ -299,31 +267,20 @@ export default function App() {
 
   // --- FUNCIONES EDICION EVENTOS ---
   async function borrarEvento(id: string) {
-    if(!confirm("¿Estás seguro de borrar este evento?")) return;
+    if(!confirm("¿Borrar evento?")) return;
     await supabase.from('eventos').delete().eq('id', id);
-    if(animalSel) recargarFicha(animalSel.id);
-    fetchActividadGlobal();
+    if(animalSel) recargarFicha(animalSel.id); fetchActividadGlobal();
   }
   function iniciarEdicionEvento(ev: Evento) {
       setEditingEventId(ev.id);
-      // Hack para que al editar la fecha no se reste un dia por timezone
-      const partes = ev.fecha_evento.split('T')[0].split('-'); // [YYYY, MM, DD]
-      // Crear fecha local forzada a mediodia para evitar saltos
+      const partes = ev.fecha_evento.split('T')[0].split('-'); 
       setEditingEventDate(new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]), 12, 0, 0));
-      setEditingEventRes(ev.resultado);
-      setEditingEventDet(ev.detalle || '');
-      openModalEditEvent();
+      setEditingEventRes(ev.resultado); setEditingEventDet(ev.detalle || ''); openModalEditEvent();
   }
   async function guardarEdicionEvento() {
       if(!editingEventId || !editingEventDate) return;
-      await supabase.from('eventos').update({ 
-          fecha_evento: editingEventDate.toISOString(),
-          resultado: editingEventRes, 
-          detalle: editingEventDet 
-      }).eq('id', editingEventId);
-      closeModalEditEvent();
-      if(animalSel) recargarFicha(animalSel.id);
-      fetchActividadGlobal();
+      await supabase.from('eventos').update({ fecha_evento: editingEventDate.toISOString(), resultado: editingEventRes, detalle: editingEventDet }).eq('id', editingEventId);
+      closeModalEditEvent(); if(animalSel) recargarFicha(animalSel.id); fetchActividadGlobal();
   }
   async function recargarFicha(id: string) {
     const { data } = await supabase.from('eventos').select('*').eq('animal_id', id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
@@ -333,20 +290,14 @@ export default function App() {
   // --- FETCHERS ---
   async function loadCampos() {
     const { data } = await supabase.from('establecimientos').select('*').order('created_at');
-    if (data && data.length > 0) {
-      setEstablecimientos(data);
-      const guardado = localStorage.getItem('campoId');
-      if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado);
-      else if (!campoId) setCampoId(data[0].id);
-    }
+    if (data && data.length > 0) { setEstablecimientos(data); const guardado = localStorage.getItem('campoId'); if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado); else if (!campoId) setCampoId(data[0].id); }
   }
   async function fetchAnimales() {
     if (!campoId) return;
     let query = supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); 
     if (activeSection === 'hacienda' || activeSection === 'masivos') query = query.neq('estado', 'VENDIDO').neq('estado', 'MUERTO');
     else if (activeSection === 'bajas') query = query.in('estado', ['VENDIDO', 'MUERTO']);
-    const { data } = await query;
-    setAnimales(data || []);
+    const { data } = await query; setAnimales(data || []);
   }
   async function fetchLotes() { if (!campoId) return; const { data } = await supabase.from('lotes').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setLotes(data || []); }
   async function fetchActividadGlobal() { if (!campoId) return; const { data } = await supabase.from('eventos').select('*, animales!inner(caravana)').eq('establecimiento_id', campoId).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }).limit(50); setEventosGlobales(data as any || []); }
@@ -355,30 +306,24 @@ export default function App() {
   async function crearCampo() {
     if (!nuevoCampoNombre) return;
     const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, user_id: session?.user.id }]);
-    if (error) alert("Error: " + error.message);
-    else { setNuevoCampoNombre(''); loadCampos(); }
+    if (error) alert("Error: " + error.message); else { setNuevoCampoNombre(''); loadCampos(); }
   }
   async function borrarCampo(id: string) {
-    if (!confirm("⚠️ ¿BORRAR ESTABLECIMIENTO COMPLETO?\n\nSe perderán TODOS los animales y datos de este campo. No se puede deshacer.")) return;
+    if (!confirm("⚠️ ¿BORRAR ESTABLECIMIENTO COMPLETO?")) return;
     const { error } = await supabase.from('establecimientos').delete().eq('id', id);
-    if (error) alert("Error: No se pudo borrar.");
-    else { if (id === campoId) { const restantes = establecimientos.filter(e => e.id !== id); if (restantes.length > 0) setCampoId(restantes[0].id); else window.location.reload(); } loadCampos(); }
+    if (error) alert("Error al borrar."); else { if (id === campoId) { const restantes = establecimientos.filter(e => e.id !== id); if (restantes.length > 0) setCampoId(restantes[0].id); else window.location.reload(); } loadCampos(); }
   }
   async function renombrarCampo(id: string, nombreActual: string) {
-    const nuevo = prompt("Nuevo nombre para el campo:", nombreActual);
-    if (!nuevo || nuevo === nombreActual) return;
-    await supabase.from('establecimientos').update({ nombre: nuevo }).eq('id', id);
-    loadCampos();
+    const nuevo = prompt("Nuevo nombre:", nombreActual); if (!nuevo || nuevo === nombreActual) return;
+    await supabase.from('establecimientos').update({ nombre: nuevo }).eq('id', id); loadCampos();
   }
 
   // --- ACCIONES VACA ---
   async function guardarAnimal() {
     if (!caravana || !campoId) return;
-    setLoading(true);
-    const hoy = new Date().toISOString().split('T')[0];
+    setLoading(true); const hoy = new Date().toISOString().split('T')[0];
     const { error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'PROPIO', fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId }]);
-    setLoading(false); 
-    if (!error) { setCaravana(''); fetchAnimales(); closeModalAlta(); }
+    setLoading(false); if (!error) { setCaravana(''); fetchAnimales(); closeModalAlta(); }
   }
 
   async function abrirFichaVaca(animal: Animal) {
@@ -389,53 +334,32 @@ export default function App() {
     setEditCondicion(condArray);
     setEditFechaNac(animal.fecha_nacimiento || ''); setEditFechaIngreso(animal.fecha_ingreso || '');
     if (animal.madre_id) { const m = animales.find(a => a.id === animal.madre_id); setMadreCaravana(m ? m.caravana : 'Desconocida'); } else { setMadreCaravana(''); }
-    
-    // CORRECCION 5: Filtrar hijos eliminados para que no aparezcan fantasmas
-    setHijos([]); 
-    const { data: dataHijos } = await supabase
-        .from('animales')
-        .select('id, caravana, sexo')
-        .eq('madre_id', animal.id)
-        .neq('estado', 'ELIMINADO'); // FILTRO CLAVE
+    setHijos([]); const { data: dataHijos } = await supabase.from('animales').select('id, caravana, sexo').eq('madre_id', animal.id).neq('estado', 'ELIMINADO');
     if(dataHijos) setHijos(dataHijos);
-
     setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setUltimoPeso('Calculando...');
-    if(!modalVacaOpen) openModalVaca(); // Solo abrir si no esta abierto (navegacion)
-    
+    if(!modalVacaOpen) openModalVaca(); 
     recargarFicha(animal.id);
     const { data: pesoData } = await supabase.from('eventos').select('resultado').eq('animal_id', animal.id).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: false }).limit(1);
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
   }
 
-  // Funcion auxiliar para navegar a un hijo desde la ficha madre
   const navegarAHijo = async (hijoId: string) => {
-      // Buscar el objeto animal completo en el array de animales cargados
       const hijo = animales.find(a => a.id === hijoId);
-      if (hijo) {
-          // React update batching hace magia aqui, cambiamos el animal seleccionado y recargamos todo
-          abrirFichaVaca(hijo);
-      } else {
-          // Si por alguna razon no esta en memoria (ej: filtro activado), lo buscamos
-          const { data } = await supabase.from('animales').select('*').eq('id', hijoId).single();
-          if (data) abrirFichaVaca(data);
-      }
+      if (hijo) { abrirFichaVaca(hijo); } else { const { data } = await supabase.from('animales').select('*').eq('id', hijoId).single(); if (data) abrirFichaVaca(data); }
   };
 
   async function guardarEventoVaca() {
     if (!animalSel || !tipoEventoInput || !fechaEvento || !campoId) return alert("Faltan datos");
     setLoading(true);
     let resultadoFinal = resultadoInput; let datosExtra = null; let nuevoEstado = ''; let nuevasCondiciones = [...editCondicion]; let esCastrado = editCastrado; 
-
     if (tipoEventoInput === 'TACTO') { resultadoFinal = tactoResultado || ''; if (tactoResultado === 'PREÑADA') nuevoEstado = 'PREÑADA'; if (tactoResultado === 'VACÍA') nuevoEstado = 'VACÍA'; } 
     else if (tipoEventoInput === 'PARTO') {
       if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
       const fechaParto = fechaEvento.toISOString().split('T')[0];
-      // Insertar y devolver datos para tener el ID
       const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId }]).select().single();
       if (err) { setLoading(false); return alert("Error: " + err.message); }
       nuevoEstado = 'VACÍA'; if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
       resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; 
-      // Actualizar lista hijos visualmente
       if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo }]);
     }
     else if (tipoEventoInput === 'ENFERMEDAD') { if (!nuevasCondiciones.includes('ENFERMA')) nuevasCondiciones.push('ENFERMA'); }
@@ -450,10 +374,7 @@ export default function App() {
     await supabase.from('animales').update(updates).eq('id', animalSel.id);
     setAnimalSel(prev => prev ? { ...prev, estado: nuevoEstado || prev.estado, condicion: stringCondicion, castrado: esCastrado, categoria: (prev.categoria === 'Vaquillona' && nuevoEstado === 'VACÍA') ? 'Vaca' : prev.categoria } : null);
     setEditCondicion(nuevasCondiciones); setEditCastrado(esCastrado); if(nuevoEstado) setEditEstado(nuevoEstado); setLoading(false);
-    if (!error) {
-      recargarFicha(animalSel.id);
-      if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); fetchAnimales(); 
-    }
+    if (!error) { recargarFicha(animalSel.id); if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); fetchAnimales(); }
   }
 
   async function actualizarAnimal() {
@@ -466,7 +387,7 @@ export default function App() {
 
   async function borrarAnimalDefinitivo() {
     if (!animalSel || !campoId) return;
-    if (!confirm("⚠️ ¿BORRAR DEFINITIVAMENTE?\n\nEsta acción quitará al animal de todas las listas. Quedará solo en registros de auditoría.")) return;
+    if (!confirm("⚠️ ¿BORRAR DEFINITIVAMENTE?")) return;
     await supabase.from('animales').update({ estado: 'ELIMINADO' }).eq('id', animalSel.id);
     await supabase.from('eventos').insert({ animal_id: animalSel.id, fecha_evento: new Date().toISOString(), tipo: 'BORRADO', resultado: 'ELIMINADO DEL SISTEMA', detalle: 'Borrado manual por seguridad', establecimiento_id: campoId });
     closeModalVaca(); fetchAnimales();
@@ -481,18 +402,25 @@ export default function App() {
   async function borrarLabor(id: string) { if(!confirm("¿Borrar?")) return; await supabase.from('labores').delete().eq('id', id); setLaboresFicha(laboresFicha.filter(l => l.id !== id)); }
 
   // --- STATS ---
+  // Calculo la "Hacienda en Campo" primero para no repetir filtros
+  const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
+  
   const stats = {
-    total: animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO').length,
-    vacas: animales.filter(a => a.categoria === 'Vaca' && a.estado === 'ACTIVO' || a.estado === 'PREÑADA' || a.estado === 'VACÍA').length,
-    prenadas: animales.filter(a => a.estado === 'PREÑADA').length,
-    enfermos: animales.filter(a => a.condicion && a.condicion.includes('ENFERMA')).length,
-    terneros: animales.filter(a => a.categoria === 'Ternero' && a.estado !== 'VENDIDO' && a.estado !== 'MUERTO').length,
-    ternerosM: animales.filter(a => a.categoria === 'Ternero' && a.sexo === 'M' && a.estado !== 'VENDIDO').length,
-    ternerosH: animales.filter(a => a.categoria === 'Ternero' && a.sexo === 'H' && a.estado !== 'VENDIDO').length,
-    novillos: animales.filter(a => a.categoria === 'Novillo' && a.estado !== 'VENDIDO').length,
-    toros: animales.filter(a => a.categoria === 'Toro' && a.estado !== 'VENDIDO').length,
+    total: haciendaActiva.length,
+    vacas: haciendaActiva.filter(a => a.categoria === 'Vaca').length,
+    vaquillonas: haciendaActiva.filter(a => a.categoria === 'Vaquillona').length,
+    prenadas: haciendaActiva.filter(a => a.estado === 'PREÑADA').length,
+    enfermos: haciendaActiva.filter(a => a.condicion && a.condicion.includes('ENFERMA')).length,
+    terneros: haciendaActiva.filter(a => a.categoria === 'Ternero').length,
+    ternerosM: haciendaActiva.filter(a => a.categoria === 'Ternero' && a.sexo === 'M').length,
+    ternerosH: haciendaActiva.filter(a => a.categoria === 'Ternero' && a.sexo === 'H').length,
+    novillos: haciendaActiva.filter(a => a.categoria === 'Novillo').length,
+    toros: haciendaActiva.filter(a => a.categoria === 'Toro').length,
   };
-  const prenadaPct = stats.vacas > 0 ? Math.round((stats.prenadas / stats.vacas) * 100) : 0;
+
+  // Denominador real: Vacas + Vaquillonas (Vientres totales)
+  const totalVientres = stats.vacas + stats.vaquillonas;
+  const prenadaPct = totalVientres > 0 ? Math.round((stats.prenadas / totalVientres) * 100) : 0;
   
   const opcionesDisponibles = (() => { if (!animalSel) return []; if (['Vaca', 'Vaquillona'].includes(animalSel.categoria)) return ['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'VACUNACION']; if (animalSel.categoria === 'Ternero') return ['PESAJE', 'VACUNACION', 'CAPADO', 'ENFERMEDAD', 'LESION', 'CURACION']; return ['PESAJE', 'ENFERMEDAD', 'LESION', 'CURACION', 'VACUNACION']; })();
   const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO';
@@ -537,7 +465,7 @@ export default function App() {
                     <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="blue"><IconList/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TOTAL HACIENDA</Text><Text fw={700} size="xl">{stats.total}</Text></div></Group></Card>
                     <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} Machos / {stats.ternerosH} Hembras)</Text></div></Group></Card>
                     <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VACAS)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {stats.vacas}</Text></div></Group></Card>
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VIENTRES)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {totalVientres}</Text></div></Group></Card>
                   </SimpleGrid>
                   <SimpleGrid cols={{ base: 1, md: 2 }}>
                     <Card shadow="sm" radius="md" withBorder>
@@ -553,13 +481,14 @@ export default function App() {
                                 label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
                                 sections={[
                                     { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
+                                    { value: (stats.vaquillonas / stats.total) * 100, color: 'pink', tooltip: 'Vaquillonas', onMouseEnter: () => setChartHover({label: 'VAQUILLONAS', value: stats.vaquillonas}), onMouseLeave: () => setChartHover(null) },
                                     { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
                                     { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
                                     { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
                                 ]}
                             />
                         </Group>
-                        <Group justify="center" gap="md" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
+                        <Group justify="center" gap="md" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="pink"/><Text size="xs">Vaq.</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
                     </Card>
                   </SimpleGrid>
                 </>
@@ -584,7 +513,6 @@ export default function App() {
                             />
                             <TextInput 
                                 label="Fecha" type="date" 
-                                // USA HELPER
                                 value={getLocalDateForInput(massFecha)} 
                                 onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}
                             />
