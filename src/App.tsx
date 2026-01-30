@@ -26,7 +26,25 @@ interface Evento { id: string; fecha_evento: string; tipo: string; resultado: st
 interface Lote { id: string; nombre: string; hectareas: number; cultivo_actual: string; estado: string; }
 interface Labor { id: string; fecha: string; actividad: string; cultivo: string; detalle: string; lote_id: string; }
 
-// Componente Header Tabla (Solo Ordenamiento)
+// --- HELPERS DE FECHA ---
+
+// 1. Para MOSTRAR en la tabla (DD/MM/YYYY)
+const formatDate = (dateString: string) => {
+  if (!dateString) return '-';
+  const parts = dateString.split('T')[0].split('-'); 
+  return `${parts[2]}/${parts[1]}/${parts[0]}`; 
+};
+
+// 2. Para los INPUTS (YYYY-MM-DD) respetando la Zona Horaria Local (Arg)
+const getLocalDateForInput = (date: Date | null) => {
+  if (!date) return '';
+  // Restamos el offset de la zona horaria para que toISOString no adelante el dia
+  const offset = date.getTimezoneOffset(); 
+  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().split('T')[0];
+};
+
+// Componente Header Tabla
 interface ThProps { children: React.ReactNode; reversed: boolean; sorted: boolean; onSort(): void; }
 function Th({ children, reversed, sorted, onSort }: ThProps) {
   const Icon = sorted ? (reversed ? IconChevronUp : IconChevronDown) : IconSelector;
@@ -40,7 +58,6 @@ function Th({ children, reversed, sorted, onSort }: ThProps) {
 }
 
 export default function App() {
-  // --- AUTH STATE ---
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,7 +67,6 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('inicio'); 
   const [loading, setLoading] = useState(false);
   
-  // --- ESTADO MULTI-CAMPO ---
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
   const [campoId, setCampoId] = useState<string | null>(null);
   const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false); 
@@ -69,7 +85,6 @@ export default function App() {
   const [animales, setAnimales] = useState<Animal[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [eventosGlobales, setEventosGlobales] = useState<Evento[]>([]);
-  
   const [chartHover, setChartHover] = useState<{ label: string, value: number | string } | null>(null);
 
   // Forms Individuales
@@ -86,7 +101,9 @@ export default function App() {
   const [eventosFicha, setEventosFicha] = useState<Evento[]>([]);
   const [ultimoPeso, setUltimoPeso] = useState<string>('Sin datos');
   const [madreCaravana, setMadreCaravana] = useState<string>(''); 
-  const [hijos, setHijos] = useState<string[]>([]); 
+  
+  const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string }[]>([]); 
+  
   const [modalLoteOpen, { open: openModalLote, close: closeModalLote }] = useDisclosure(false);
   const [loteSel, setLoteSel] = useState<Lote | null>(null);
   const [laboresFicha, setLaboresFicha] = useState<Labor[]>([]);
@@ -123,6 +140,8 @@ export default function App() {
   const [massActividad, setMassActividad] = useState<string | null>('VACUNACION');
   const [massFecha, setMassFecha] = useState<Date | null>(new Date());
   const [massDetalle, setMassDetalle] = useState('');
+  const [massPrecio, setMassPrecio] = useState(''); 
+  const [massDestino, setMassDestino] = useState('');
 
   // --- EDICION EVENTO (MODAL) ---
   const [modalEditEventOpen, { open: openModalEditEvent, close: closeModalEditEvent }] = useDisclosure(false);
@@ -137,13 +156,11 @@ export default function App() {
       setSession(session);
       if (session) loadCampos();
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) loadCampos();
       else { setEstablecimientos([]); setCampoId(null); }
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -164,11 +181,7 @@ export default function App() {
     setAuthLoading(false);
     if (error) alert("Error: " + error.message);
   }
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setSession(null);
-  }
+  async function handleLogout() { await supabase.auth.signOut(); setSession(null); }
 
   // --- LOGICA UI ---
   useEffect(() => { setResultadoInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); }, [tipoEventoInput]);
@@ -178,49 +191,46 @@ export default function App() {
     else { setSexoBloqueado(false); }
   }, [categoria]);
 
-  // --- SORT & FILTER INTELIGENTE ---
+  // --- SORT & FILTER ---
   const setSorting = (field: keyof Animal) => {
     const reversed = field === sortBy ? !reverseSortDirection : false;
     setReverseSortDirection(reversed);
     setSortBy(field);
   };
 
-  const animalesFiltrados = animales
-    .filter(animal => {
-        const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
-        const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
-        const matchSexo = filterSexo ? animal.sexo === filterSexo : true; 
-        let matchAtributos = true;
-        if (filterAtributos.length > 0) {
-            const tagsDelAnimal: string[] = [];
-            tagsDelAnimal.push(animal.estado);
-            if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
-            if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
-            if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
-            if (animal.castrado) tagsDelAnimal.push('CAPADO');
-            matchAtributos = filterAtributos.every(filtro => tagsDelAnimal.includes(filtro));
+  const animalesFiltrados = animales.filter(animal => {
+    const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
+    const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
+    const matchSexo = filterSexo ? animal.sexo === filterSexo : true; 
+    let matchAtributos = true;
+    if (filterAtributos.length > 0) {
+        const tagsDelAnimal: string[] = [];
+        tagsDelAnimal.push(animal.estado);
+        if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
+        if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
+        if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
+        if (animal.castrado) tagsDelAnimal.push('CAPADO');
+        matchAtributos = filterAtributos.every(filtro => tagsDelAnimal.includes(filtro));
+    }
+    return matchBusqueda && matchCategoria && matchSexo && matchAtributos;
+  }).sort((a, b) => {
+    if (busqueda) {
+        const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase();
+        const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase();
+        if (exactA && !exactB) return -1; if (!exactA && exactB) return 1; 
+    }
+    if (sortBy) {
+        if (sortBy === 'caravana') {
+            const numA = parseInt(a.caravana.replace(/\D/g,'')) || 0;
+            const numB = parseInt(b.caravana.replace(/\D/g,'')) || 0;
+            if (numA !== numB) return reverseSortDirection ? numB - numA : numA - numB;
         }
-        return matchBusqueda && matchCategoria && matchSexo && matchAtributos;
-    })
-    .sort((a, b) => {
-        if (busqueda) {
-            const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase();
-            const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase();
-            if (exactA && !exactB) return -1; 
-            if (!exactA && exactB) return 1; 
-        }
-        if (sortBy) {
-            if (sortBy === 'caravana') {
-                const numA = parseInt(a.caravana.replace(/\D/g,'')) || 0;
-                const numB = parseInt(b.caravana.replace(/\D/g,'')) || 0;
-                if (numA !== numB) return reverseSortDirection ? numB - numA : numA - numB;
-            }
-            const valA = a[sortBy]?.toString().toLowerCase() || '';
-            const valB = b[sortBy]?.toString().toLowerCase() || '';
-            return reverseSortDirection ? valB.localeCompare(valA) : valA.localeCompare(valB);
-        }
-        return 0;
-    });
+        const valA = a[sortBy]?.toString().toLowerCase() || '';
+        const valB = b[sortBy]?.toString().toLowerCase() || '';
+        return reverseSortDirection ? valB.localeCompare(valA) : valA.localeCompare(valB);
+    }
+    return 0;
+  });
   
   const eventosFiltrados = eventosGlobales.filter(ev => {
     const coincideTexto = ev.animales?.caravana.toLowerCase().includes(busqueda.toLowerCase()) || ev.tipo.toLowerCase().includes(busqueda.toLowerCase());
@@ -232,51 +242,55 @@ export default function App() {
   const renderCondicionBadges = (condStr: string) => { if (!condStr || condStr === 'SANA') return null; return condStr.split(', ').map((c, i) => ( <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> )); };
 
   // --- FUNCIONES MASIVAS ---
-  const toggleSeleccion = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
-  };
-  
+  const toggleSeleccion = (id: string) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]); };
   const seleccionarGrupo = (categoriaTarget: string | null) => {
     const targets = animalesFiltrados.filter(a => categoriaTarget ? a.categoria === categoriaTarget : true).map(a => a.id);
     setSelectedIds(prev => [...new Set([...prev, ...targets])]);
   };
-
   const limpiarSeleccion = () => setSelectedIds([]);
 
   async function guardarEventoMasivo() {
     if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
     if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
+    if (massActividad === 'VENTA' && !massPrecio) return alert("Falta el precio de venta");
     
     if(!confirm(`¿Confirmar ${massActividad} para ${selectedIds.length} animales?`)) return;
 
     setLoading(true);
     const fechaStr = massFecha.toISOString();
     
+    let resultadoTxt = 'Realizado (Masivo)';
+    let datosExtra: any = {};
+    if (massActividad === 'VENTA') {
+        resultadoTxt = 'VENDIDO';
+        datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' };
+    } else if (massActividad === 'CAPADO') {
+        resultadoTxt = 'Realizado';
+    }
+
     const inserts = selectedIds.map(animalId => ({
         animal_id: animalId,
         fecha_evento: fechaStr,
         tipo: massActividad,
-        resultado: massActividad === 'VENTA' ? 'VENDIDO' : (massActividad === 'CAPADO' ? 'Realizado' : 'Realizado (Masivo)'),
+        resultado: resultadoTxt,
         detalle: massDetalle,
+        datos_extra: datosExtra, // Guardar precio aqui
         establecimiento_id: campoId
     }));
 
     const { error } = await supabase.from('eventos').insert(inserts);
 
     if (!error && massActividad === 'VENTA') {
-        await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: 'Venta Masiva' }).in('id', selectedIds);
+        await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', selectedIds);
     }
     if (!error && massActividad === 'CAPADO') {
         await supabase.from('animales').update({ castrado: true }).in('id', selectedIds);
     }
 
     setLoading(false);
-
-    if (error) {
-        alert("Error al guardar: " + error.message);
-    } else {
+    if (error) { alert("Error al guardar: " + error.message); } else {
         alert("¡Carga masiva exitosa!");
-        setMassDetalle('');
+        setMassDetalle(''); setMassPrecio(''); setMassDestino('');
         setSelectedIds([]);
         if (massActividad === 'VENTA' || massActividad === 'CAPADO') fetchAnimales(); 
         setActiveSection('actividad');
@@ -290,15 +304,16 @@ export default function App() {
     if(animalSel) recargarFicha(animalSel.id);
     fetchActividadGlobal();
   }
-
   function iniciarEdicionEvento(ev: Evento) {
       setEditingEventId(ev.id);
-      setEditingEventDate(new Date(ev.fecha_evento));
+      // Hack para que al editar la fecha no se reste un dia por timezone
+      const partes = ev.fecha_evento.split('T')[0].split('-'); // [YYYY, MM, DD]
+      // Crear fecha local forzada a mediodia para evitar saltos
+      setEditingEventDate(new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]), 12, 0, 0));
       setEditingEventRes(ev.resultado);
       setEditingEventDet(ev.detalle || '');
       openModalEditEvent();
   }
-
   async function guardarEdicionEvento() {
       if(!editingEventId || !editingEventDate) return;
       await supabase.from('eventos').update({ 
@@ -306,17 +321,14 @@ export default function App() {
           resultado: editingEventRes, 
           detalle: editingEventDet 
       }).eq('id', editingEventId);
-      
       closeModalEditEvent();
       if(animalSel) recargarFicha(animalSel.id);
       fetchActividadGlobal();
   }
-
   async function recargarFicha(id: string) {
     const { data } = await supabase.from('eventos').select('*').eq('animal_id', id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
     if (data) setEventosFicha(data);
   }
-
 
   // --- FETCHERS ---
   async function loadCampos() {
@@ -328,7 +340,6 @@ export default function App() {
       else if (!campoId) setCampoId(data[0].id);
     }
   }
-
   async function fetchAnimales() {
     if (!campoId) return;
     let query = supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); 
@@ -343,7 +354,6 @@ export default function App() {
   // --- GESTIÓN DE ESTABLECIMIENTOS ---
   async function crearCampo() {
     if (!nuevoCampoNombre) return;
-    // IMPORTANTE: Al crear campo, se asigna al usuario actual automaticamente
     const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, user_id: session?.user.id }]);
     if (error) alert("Error: " + error.message);
     else { setNuevoCampoNombre(''); loadCampos(); }
@@ -368,11 +378,7 @@ export default function App() {
     const hoy = new Date().toISOString().split('T')[0];
     const { error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'PROPIO', fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId }]);
     setLoading(false); 
-    if (!error) { 
-        setCaravana(''); 
-        fetchAnimales(); 
-        closeModalAlta(); 
-    }
+    if (!error) { setCaravana(''); fetchAnimales(); closeModalAlta(); }
   }
 
   async function abrirFichaVaca(animal: Animal) {
@@ -383,13 +389,37 @@ export default function App() {
     setEditCondicion(condArray);
     setEditFechaNac(animal.fecha_nacimiento || ''); setEditFechaIngreso(animal.fecha_ingreso || '');
     if (animal.madre_id) { const m = animales.find(a => a.id === animal.madre_id); setMadreCaravana(m ? m.caravana : 'Desconocida'); } else { setMadreCaravana(''); }
-    setHijos([]); const { data: dataHijos } = await supabase.from('animales').select('caravana').eq('madre_id', animal.id); if(dataHijos) setHijos(dataHijos.map(h => h.caravana));
+    
+    // CORRECCION 5: Filtrar hijos eliminados para que no aparezcan fantasmas
+    setHijos([]); 
+    const { data: dataHijos } = await supabase
+        .from('animales')
+        .select('id, caravana, sexo')
+        .eq('madre_id', animal.id)
+        .neq('estado', 'ELIMINADO'); // FILTRO CLAVE
+    if(dataHijos) setHijos(dataHijos);
+
     setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setUltimoPeso('Calculando...');
-    openModalVaca(); 
+    if(!modalVacaOpen) openModalVaca(); // Solo abrir si no esta abierto (navegacion)
+    
     recargarFicha(animal.id);
     const { data: pesoData } = await supabase.from('eventos').select('resultado').eq('animal_id', animal.id).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: false }).limit(1);
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
   }
+
+  // Funcion auxiliar para navegar a un hijo desde la ficha madre
+  const navegarAHijo = async (hijoId: string) => {
+      // Buscar el objeto animal completo en el array de animales cargados
+      const hijo = animales.find(a => a.id === hijoId);
+      if (hijo) {
+          // React update batching hace magia aqui, cambiamos el animal seleccionado y recargamos todo
+          abrirFichaVaca(hijo);
+      } else {
+          // Si por alguna razon no esta en memoria (ej: filtro activado), lo buscamos
+          const { data } = await supabase.from('animales').select('*').eq('id', hijoId).single();
+          if (data) abrirFichaVaca(data);
+      }
+  };
 
   async function guardarEventoVaca() {
     if (!animalSel || !tipoEventoInput || !fechaEvento || !campoId) return alert("Faltan datos");
@@ -400,10 +430,13 @@ export default function App() {
     else if (tipoEventoInput === 'PARTO') {
       if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
       const fechaParto = fechaEvento.toISOString().split('T')[0];
-      const { error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId }]);
+      // Insertar y devolver datos para tener el ID
+      const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId }]).select().single();
       if (err) { setLoading(false); return alert("Error: " + err.message); }
       nuevoEstado = 'VACÍA'; if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
-      resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; setHijos(prev => [...prev, nuevoTerneroCaravana]);
+      resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; 
+      // Actualizar lista hijos visualmente
+      if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo }]);
     }
     else if (tipoEventoInput === 'ENFERMEDAD') { if (!nuevasCondiciones.includes('ENFERMA')) nuevasCondiciones.push('ENFERMA'); }
     else if (tipoEventoInput === 'LESION') { if (!nuevasCondiciones.includes('LASTIMADA')) nuevasCondiciones.push('LASTIMADA'); }
@@ -509,7 +542,7 @@ export default function App() {
                   <SimpleGrid cols={{ base: 1, md: 2 }}>
                     <Card shadow="sm" radius="md" withBorder>
                         <Text fw={700} mb="md">Últimos Movimientos</Text>
-                        <Stack gap="xs">{eventosGlobales.slice(0, 5).map(ev => (<Paper key={ev.id} p="xs" withBorder bg="gray.0"><Group justify="space-between"><Group gap="xs"><Badge size="sm" variant="dot" color="blue">{ev.tipo}</Badge><Text size="sm" fw={500}>Animal: {ev.animales?.caravana}</Text></Group><Text size="xs" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Group><Text size="xs" c="dimmed" mt={4}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text></Paper>))}</Stack>
+                        <Stack gap="xs">{eventosGlobales.slice(0, 5).map(ev => (<Paper key={ev.id} p="xs" withBorder bg="gray.0"><Group justify="space-between"><Group gap="xs"><Badge size="sm" variant="dot" color="blue">{ev.tipo}</Badge><Text size="sm" fw={500}>Animal: {ev.animales?.caravana}</Text></Group><Text size="xs" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Group><Text size="xs" c="dimmed" mt={4}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text></Paper>))}</Stack>
                         <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
                     </Card>
                     <Card shadow="sm" radius="md" withBorder>
@@ -551,10 +584,18 @@ export default function App() {
                             />
                             <TextInput 
                                 label="Fecha" type="date" 
-                                value={massFecha ? massFecha.toISOString().split('T')[0] : ''} 
+                                // USA HELPER
+                                value={getLocalDateForInput(massFecha)} 
                                 onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}
                             />
                         </Group>
+                        {/* CAMPO ESPECIAL PRECIO VENTA MASIVA */}
+                        {massActividad === 'VENTA' && (
+                            <Group grow mt="sm">
+                                <TextInput label="Precio Promedio (Kg/Total)" placeholder="Ej: 2200" value={massPrecio} onChange={(e) => setMassPrecio(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/>
+                                <TextInput label="Destino" placeholder="Ej: Frigorifico" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} />
+                            </Group>
+                        )}
                         <TextInput mt="sm" label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
                     </Paper>
 
@@ -695,7 +736,8 @@ export default function App() {
                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (
                                             <Badge color="cyan">CAPADO</Badge>
                                         ) : (
-                                            <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
+                                            // LOGICA CORREGIDA: Si NO es ternero, muestra estado normal
+                                            vaca.categoria !== 'Ternero' && <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
                                         )}
                                         {renderCondicionBadges(vaca.condicion)}
                                     </Group>
@@ -710,7 +752,7 @@ export default function App() {
               )}
 
               {activeSection === 'agricultura' && ( <> <Title order={3} mb="lg">Lotes y Parcelas</Title><Paper p="md" mb="lg" radius="md" withBorder><Text fw={700} mb="xs" size="sm" c="dimmed">NUEVO LOTE</Text><Group align="flex-end"><TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} style={{ flex: 1 }} /><TextInput label="Hectáreas" type="number" value={hasLote} onChange={(e) => setHasLote(Number(e.target.value))} w={120} /><Button onClick={guardarLote} loading={loading} color="lime">Crear</Button></Group></Paper><SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>{lotes.map(lote => (<Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}><Group justify="space-between" mb="xs"><Text fw={700}>{lote.nombre}</Text><Badge color={lote.estado === 'SEMBRADO' ? 'lime' : 'gray'}>{lote.estado}</Badge></Group><Group mb="md"><Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>{lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}</Group><Button variant="light" color="lime" fullWidth mt="md" radius="md">Ver Historial</Button></Card>))}</SimpleGrid>{lotes.length === 0 && <Text c="dimmed" ta="center" mt="xl">No hay lotes cargados.</Text>} </> )}
-              {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toro_caravana && (<Text size="xs" c="dimmed">Toro: {ev.datos_extra.toro_caravana}</Text>)}</Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
+              {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toro_caravana && (<Text size="xs" c="dimmed">Toro: {ev.datos_extra.toro_caravana}</Text>)}</Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
             </AppShell.Main>
           </AppShell>
         )}
@@ -728,7 +770,7 @@ export default function App() {
       {/* --- MODAL EDICION DE EVENTO (Z-INDEX CORREGIDO) --- */}
       <Modal opened={modalEditEventOpen} onClose={closeModalEditEvent} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
           <Stack>
-              <TextInput label="Fecha" type="date" value={editingEventDate ? editingEventDate.toISOString().split('T')[0] : ''} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
+              <TextInput label="Fecha" type="date" value={getLocalDateForInput(editingEventDate)} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
               <TextInput label="Resultado" value={editingEventRes} onChange={(e) => setEditingEventRes(e.target.value)}/>
               <Textarea label="Detalle" value={editingEventDet} onChange={(e) => setEditingEventDet(e.target.value)}/>
               <Button onClick={guardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button>
@@ -763,16 +805,35 @@ export default function App() {
            <Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
            <Tabs.Panel value="historia">
               {esActivo ? (
-                <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={fechaEvento ? fechaEvento.toISOString().split('T')[0] : ''} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <TextInput label="Caravana del Toro" placeholder="Ej: T-101" value={toroCaravana} onChange={(e) => setToroCaravana(e.target.value)} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
+                <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <TextInput label="Caravana del Toro" placeholder="Ej: T-101" value={toroCaravana} onChange={(e) => setToroCaravana(e.target.value)} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
               ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
-              <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{new Date(ev.fecha_evento).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
+              <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
            <Tabs.Panel value="datos">
               <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><Badge size="lg" variant="filled" color="gray" leftSection={<IconScale size={14}/>}>{ultimoPeso}</Badge></Group></Paper>
               <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} />
               <Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
               {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
-              {['Vaca'].includes(editCategoria || '') && ( <Paper withBorder p="xs" mb="sm" bg="teal.0"><Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>{hijos.length > 0 ? ( <Group gap="xs" mt={5}>{hijos.map(h => <Badge key={h} variant="white">{h}</Badge>)}</Group> ) : <Text size="xs" c="dimmed">Sin registros</Text>}</Paper> )}
+              {['Vaca'].includes(editCategoria || '') && ( 
+                <Paper withBorder p="xs" mb="sm" bg="teal.0">
+                    <Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>
+                    {hijos.length > 0 ? ( 
+                        <Group gap="xs" mt={5}>
+                            {hijos.map(h => (
+                                <Badge 
+                                    key={h.id} 
+                                    variant="white" 
+                                    style={{ cursor: 'pointer' }}
+                                    color={h.sexo === 'H' ? 'pink' : 'blue'}
+                                    onClick={() => navegarAHijo(h.id)}
+                                >
+                                    {h.caravana}
+                                </Badge>
+                            ))}
+                        </Group> 
+                    ) : <Text size="xs" c="dimmed">Sin registros</Text>}
+                </Paper> 
+              )}
               <MultiSelect label="Condición Sanitaria" data={['ENFERMA', 'LASTIMADA']} value={editCondicion} onChange={setEditCondicion} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} leftSection={<IconHeartbeat size={16}/>} mb="sm" placeholder="SANA"/>
               {editCategoria === 'Ternero' && editSexo === 'M' && ( <Group justify="space-between" mb="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}><Group gap="xs"><IconScissors size={18}/> <Text size="sm" fw={500}>Condición Sexual</Text></Group><Switch size="lg" onLabel="CAPADO" offLabel="ENTERO" checked={editCastrado} onChange={(e) => setEditCastrado(e.currentTarget.checked)} disabled={!esActivo} /></Group> )}
               <Group grow mb="xl"><TextInput label="Fecha Nacimiento" type="date" value={editFechaNac} onChange={(e) => setEditFechaNac(e.target.value)} disabled={!esActivo} /><TextInput label="Fecha Ingreso" type="date" value={editFechaIngreso} onChange={(e) => setEditFechaIngreso(e.target.value)} disabled={!esActivo} /></Group>
@@ -781,7 +842,7 @@ export default function App() {
          </Tabs>
       </Modal>
       <Modal opened={modalLoteOpen} onClose={closeModalLote} title={<Text fw={700} size="lg">Lote: {loteSel?.nombre}</Text>} size="lg" centered zIndex={2000}>
-         <Tabs defaultValue="labores" color="lime"><Tabs.List grow mb="md"><Tabs.Tab value="labores">Labores</Tabs.Tab></Tabs.List><Tabs.Panel value="labores"><Paper withBorder p="sm" bg="lime.0" mb="md"><Text size="sm" fw={700} mb="xs">Nueva Labor</Text><Group grow mb="sm"><Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION']} value={actividadLote} onChange={setActividadLote} comboboxProps={{ zIndex: 200005 }}/><TextInput placeholder="Cultivo" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} disabled={!['SIEMBRA', 'COSECHA'].includes(actividadLote || '')} /></Group><Textarea placeholder="Detalle..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} mb="sm" rows={2}/><Button fullWidth size="xs" onClick={guardarLabor} color="lime" variant="filled">Registrar</Button></Paper><ScrollArea h={300}>{laboresFicha.length === 0 ? <Text c="dimmed" size="sm">Sin labores registradas.</Text> : (<Table striped><Table.Tbody>{laboresFicha.map(labor => (<Table.Tr key={labor.id}><Table.Td><Text size="xs" c="dimmed">{new Date(labor.fecha).toLocaleDateString()}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{labor.actividad}</Text>{labor.cultivo && <Badge size="xs" color="lime">{labor.cultivo}</Badge>}</Table.Td><Table.Td><Text size="sm">{labor.detalle}</Text></Table.Td><Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarLabor(labor.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table>)}</ScrollArea></Tabs.Panel></Tabs>
+         <Tabs defaultValue="labores" color="lime"><Tabs.List grow mb="md"><Tabs.Tab value="labores">Labores</Tabs.Tab></Tabs.List><Tabs.Panel value="labores"><Paper withBorder p="sm" bg="lime.0" mb="md"><Text size="sm" fw={700} mb="xs">Nueva Labor</Text><Group grow mb="sm"><Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION']} value={actividadLote} onChange={setActividadLote} comboboxProps={{ zIndex: 200005 }}/><TextInput placeholder="Cultivo" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} disabled={!['SIEMBRA', 'COSECHA'].includes(actividadLote || '')} /></Group><Textarea placeholder="Detalle..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} mb="sm" rows={2}/><Button fullWidth size="xs" onClick={guardarLabor} color="lime" variant="filled">Registrar</Button></Paper><ScrollArea h={300}>{laboresFicha.length === 0 ? <Text c="dimmed" size="sm">Sin labores registradas.</Text> : (<Table striped><Table.Tbody>{laboresFicha.map(labor => (<Table.Tr key={labor.id}><Table.Td><Text size="xs" c="dimmed">{formatDate(labor.fecha)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{labor.actividad}</Text>{labor.cultivo && <Badge size="xs" color="lime">{labor.cultivo}</Badge>}</Table.Td><Table.Td><Text size="sm">{labor.detalle}</Text></Table.Td><Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarLabor(labor.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table>)}</ScrollArea></Tabs.Panel></Tabs>
       </Modal>
     </MantineProvider>
   );
