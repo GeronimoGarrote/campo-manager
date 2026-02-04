@@ -8,7 +8,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { 
   IconList, IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, 
   IconCalendar, IconScale, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
-  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout
+  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
@@ -20,11 +20,11 @@ interface Animal {
   id: string; caravana: string; categoria: string; sexo: string; 
   estado: string; condicion: string; origen: string; detalle_baja?: string;
   fecha_nacimiento?: string; fecha_ingreso?: string; madre_id?: string; castrado?: boolean;
-  establecimiento_id: string; 
+  establecimiento_id: string; lote_id?: string; 
 }
 interface Evento { id: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; datos_extra?: any; animales?: { caravana: string } }
-interface Lote { id: string; nombre: string; hectareas: number; cultivo_actual: string; estado: string; }
-interface Labor { id: string; fecha: string; actividad: string; cultivo: string; detalle: string; lote_id: string; }
+interface Lote { id: string; nombre: string; hectareas: number; cultivo_actual: string; estado: string; establecimiento_id: string; }
+interface Labor { id: string; fecha: string; actividad: string; cultivo: string; detalle: string; costo?: number; lote_id: string; } 
 
 // --- HELPERS ---
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
@@ -80,15 +80,22 @@ export default function App() {
   const [sexo, setSexo] = useState<string | null>('H');
   const [sexoBloqueado, setSexoBloqueado] = useState(true);
   
+  // Lotes UI
   const [nombreLote, setNombreLote] = useState('');
-  const [hasLote, setHasLote] = useState<string | number>(0);
+  const [hasLote, setHasLote] = useState<string | number>('');
+  
+  // Vaca UI & Navegacion
   const [modalVacaOpen, { open: openModalVaca, close: closeModalVaca }] = useDisclosure(false);
   const [animalSel, setAnimalSel] = useState<Animal | null>(null);
+  const [fichaAnterior, setFichaAnterior] = useState<Animal | null>(null); 
+  const [activeTabVaca, setActiveTabVaca] = useState<string | null>('historia'); 
+
   const [eventosFicha, setEventosFicha] = useState<Evento[]>([]);
   const [ultimoPeso, setUltimoPeso] = useState<string>('Sin datos');
   const [madreCaravana, setMadreCaravana] = useState<string>(''); 
-  const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string }[]>([]); 
+  const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string, estado: string }[]>([]); 
   
+  // Lote Detalle UI
   const [modalLoteOpen, { open: openModalLote, close: closeModalLote }] = useDisclosure(false);
   const [loteSel, setLoteSel] = useState<Lote | null>(null);
   const [laboresFicha, setLaboresFicha] = useState<Labor[]>([]);
@@ -103,6 +110,7 @@ export default function App() {
   const [toroCaravana, setToroCaravana] = useState('');
   const [nuevoTerneroCaravana, setNuevoTerneroCaravana] = useState('');
   const [nuevoTerneroSexo, setNuevoTerneroSexo] = useState<string | null>('M');
+  const [pesoNacimiento, setPesoNacimiento] = useState(''); 
   
   // Edicion Animal
   const [editCaravana, setEditCaravana] = useState('');
@@ -116,9 +124,12 @@ export default function App() {
   const [modoBaja, setModoBaja] = useState<string | null>(null);
   const [bajaPrecio, setBajaPrecio] = useState<string | number>('');
   const [bajaMotivo, setBajaMotivo] = useState('');
+  
+  // Labores Lote
   const [actividadLote, setActividadLote] = useState<string | null>('FUMIGADA');
   const [cultivoInput, setCultivoInput] = useState(''); 
   const [detalleLabor, setDetalleLabor] = useState('');
+  const [costoLabor, setCostoLabor] = useState<string | number>(''); 
 
   // --- LOGICA MASIVA ---
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -127,6 +138,7 @@ export default function App() {
   const [massDetalle, setMassDetalle] = useState('');
   const [massPrecio, setMassPrecio] = useState(''); 
   const [massDestino, setMassDestino] = useState('');
+  const [massLoteDestino, setMassLoteDestino] = useState<string | null>(null); 
 
   // --- EDICION EVENTO (MODAL) ---
   const [modalEditEventOpen, { open: openModalEditEvent, close: closeModalEditEvent }] = useDisclosure(false);
@@ -153,8 +165,8 @@ export default function App() {
     if (!campoId || !session) return;
     localStorage.setItem('campoId', campoId); 
     setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterSexo(null); setFilterAtributos([]); setSelectedIds([]);
-    if (activeSection === 'inicio') { fetchAnimales(); fetchActividadGlobal(); } 
-    if (activeSection.includes('hacienda') || activeSection === 'bajas' || activeSection === 'masivos') fetchAnimales();
+    if (activeSection === 'inicio') { fetchAnimales(); fetchActividadGlobal(); fetchLotes(); } 
+    if (activeSection.includes('hacienda') || activeSection === 'bajas' || activeSection === 'masivos') { fetchAnimales(); fetchLotes(); }
     if (activeSection === 'actividad') fetchActividadGlobal();
     if (activeSection === 'agricultura') fetchLotes();
   }, [activeSection, campoId, session]); 
@@ -169,7 +181,7 @@ export default function App() {
   async function handleLogout() { await supabase.auth.signOut(); setSession(null); }
 
   // --- LOGICA UI ---
-  useEffect(() => { setResultadoInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); }, [tipoEventoInput]);
+  useEffect(() => { setResultadoInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); setPesoNacimiento(''); }, [tipoEventoInput]);
   useEffect(() => {
     if (['Vaca', 'Vaquillona'].includes(categoria || '')) { setSexo('H'); setSexoBloqueado(true); } 
     else if (['Toro', 'Novillo'].includes(categoria || '')) { setSexo('M'); setSexoBloqueado(true); } 
@@ -225,6 +237,7 @@ export default function App() {
 
   const getEstadoColor = (estado: string) => { if (estado === 'PREÑADA') return 'teal'; if (estado === 'VACÍA') return 'yellow'; return 'blue'; };
   const renderCondicionBadges = (condStr: string) => { if (!condStr || condStr === 'SANA') return null; return condStr.split(', ').map((c, i) => ( <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> )); };
+  const getNombreLote = (id?: string) => { if(!id) return null; const l = lotes.find(lot => lot.id === id); return l ? l.nombre : null; };
 
   // --- FUNCIONES MASIVAS ---
   const toggleSeleccion = (id: string) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]); };
@@ -238,8 +251,8 @@ export default function App() {
     if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
     if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
     if (massActividad === 'VENTA' && !massPrecio) return alert("Falta el precio de venta");
+    if (massActividad === 'MOVIMIENTO' && !massLoteDestino) return alert("Falta el Lote de destino");
     
-    // --- LÓGICA DE FILTRADO PARA CAPADO ---
     let idsParaProcesar = [...selectedIds];
     let mensajeConfirmacion = `¿Confirmar ${massActividad} para ${selectedIds.length} animales?`;
 
@@ -260,9 +273,14 @@ export default function App() {
     let resultadoTxt = 'Realizado (Masivo)';
     let datosExtra: any = {};
     if (massActividad === 'VENTA') {
-        resultadoTxt = 'VENDIDO';
-        datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' };
-    } else if (massActividad === 'CAPADO') { resultadoTxt = 'Realizado'; }
+        resultadoTxt = 'VENDIDO'; datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' };
+    } else if (massActividad === 'CAPADO') { 
+        resultadoTxt = 'Realizado'; 
+    } else if (massActividad === 'MOVIMIENTO') {
+        const loteNom = getNombreLote(massLoteDestino!);
+        resultadoTxt = 'MOVIDO';
+        datosExtra = { lote_destino: loteNom, lote_id: massLoteDestino };
+    }
 
     const inserts = idsParaProcesar.map(animalId => ({
         animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, establecimiento_id: campoId
@@ -270,14 +288,16 @@ export default function App() {
     
     const { error } = await supabase.from('eventos').insert(inserts);
 
-    if (!error && massActividad === 'VENTA') await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', idsParaProcesar);
-    if (!error && massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', idsParaProcesar);
+    if (!error) {
+        if (massActividad === 'VENTA') await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', idsParaProcesar);
+        if (massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', idsParaProcesar);
+        if (massActividad === 'MOVIMIENTO' && massLoteDestino) await supabase.from('animales').update({ lote_id: massLoteDestino }).in('id', idsParaProcesar);
+    }
 
     setLoading(false);
     if (error) { alert("Error: " + error.message); } else {
-        alert("¡Carga masiva exitosa!"); setMassDetalle(''); setMassPrecio(''); setMassDestino(''); setSelectedIds([]);
-        if (massActividad === 'VENTA' || massActividad === 'CAPADO') fetchAnimales(); 
-        setActiveSection('actividad');
+        alert("¡Carga masiva exitosa!"); setMassDetalle(''); setMassPrecio(''); setMassDestino(''); setMassLoteDestino(null); setSelectedIds([]);
+        fetchAnimales(); setActiveSection('actividad');
     }
   }
 
@@ -337,7 +357,6 @@ export default function App() {
   // --- ACCIONES VACA ---
   async function guardarAnimal() {
     if (!caravana || !campoId) return;
-    // VALIDACIÓN DUPLICADOS (NUEVO ANIMAL)
     const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravana.toLowerCase() && a.estado !== 'ELIMINADO');
     if (yaExiste) return alert("❌ ERROR: Ya existe un animal con esa caravana.");
 
@@ -347,6 +366,7 @@ export default function App() {
   }
 
   async function abrirFichaVaca(animal: Animal) {
+    setActiveTabVaca('historia'); 
     setAnimalSel(animal);
     setEditCaravana(animal.caravana); setEditCategoria(animal.categoria); setEditSexo(animal.sexo);
     setEditEstado(animal.estado); setEditCastrado(animal.castrado || false);
@@ -354,18 +374,28 @@ export default function App() {
     setEditCondicion(condArray);
     setEditFechaNac(animal.fecha_nacimiento || ''); setEditFechaIngreso(animal.fecha_ingreso || '');
     if (animal.madre_id) { const m = animales.find(a => a.id === animal.madre_id); setMadreCaravana(m ? m.caravana : 'Desconocida'); } else { setMadreCaravana(''); }
-    setHijos([]); const { data: dataHijos } = await supabase.from('animales').select('id, caravana, sexo').eq('madre_id', animal.id).neq('estado', 'ELIMINADO');
+    
+    // FETCH HIJOS CON ESTADO
+    setHijos([]); 
+    const { data: dataHijos } = await supabase.from('animales').select('id, caravana, sexo, estado').eq('madre_id', animal.id);
     if(dataHijos) setHijos(dataHijos);
-    setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setUltimoPeso('Calculando...');
+
+    setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setUltimoPeso('Calculando...'); setPesoNacimiento('');
     if(!modalVacaOpen) openModalVaca(); 
     recargarFicha(animal.id);
     const { data: pesoData } = await supabase.from('eventos').select('resultado').eq('animal_id', animal.id).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: false }).limit(1);
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
   }
 
+  // --- NAVEGACION PADRE - HIJO ---
   const navegarAHijo = async (hijoId: string) => {
+      if(animalSel) setFichaAnterior(animalSel); 
       const hijo = animales.find(a => a.id === hijoId);
       if (hijo) { abrirFichaVaca(hijo); } else { const { data } = await supabase.from('animales').select('*').eq('id', hijoId).single(); if (data) abrirFichaVaca(data); }
+  };
+
+  const handleCloseModalVaca = () => {
+      if (fichaAnterior) { abrirFichaVaca(fichaAnterior); setActiveTabVaca('datos'); setFichaAnterior(null); } else { closeModalVaca(); }
   };
 
   async function guardarEventoVaca() {
@@ -375,16 +405,21 @@ export default function App() {
     if (tipoEventoInput === 'TACTO') { resultadoFinal = tactoResultado || ''; if (tactoResultado === 'PREÑADA') nuevoEstado = 'PREÑADA'; if (tactoResultado === 'VACÍA') nuevoEstado = 'VACÍA'; } 
     else if (tipoEventoInput === 'PARTO') {
       if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
-      // VALIDACIÓN DUPLICADOS (PARTO)
       const yaExiste = animales.some(a => a.caravana.toLowerCase() === nuevoTerneroCaravana.toLowerCase() && a.estado !== 'ELIMINADO');
       if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal con esa caravana."); }
 
       const fechaParto = fechaEvento.toISOString().split('T')[0];
-      const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId }]).select().single();
+      const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, lote_id: animalSel.lote_id }]).select().single();
       if (err) { setLoading(false); return alert("Error: " + err.message); }
+      
+      // AUTO-PESAJE NACIMIENTO
+      if (pesoNacimiento) {
+          await supabase.from('eventos').insert({ animal_id: nuevoTernero.id, tipo: 'PESAJE', resultado: `${pesoNacimiento}kg`, detalle: 'Peso al nacer', fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
+      }
+
       nuevoEstado = 'VACÍA'; if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
       resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; 
-      if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo }]);
+      if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo, estado: 'ACTIVO' }]);
     }
     else if (tipoEventoInput === 'ENFERMEDAD') { if (!nuevasCondiciones.includes('ENFERMA')) nuevasCondiciones.push('ENFERMA'); }
     else if (tipoEventoInput === 'LESION') { if (!nuevasCondiciones.includes('LASTIMADA')) nuevasCondiciones.push('LASTIMADA'); }
@@ -398,7 +433,7 @@ export default function App() {
     await supabase.from('animales').update(updates).eq('id', animalSel.id);
     setAnimalSel(prev => prev ? { ...prev, estado: nuevoEstado || prev.estado, condicion: stringCondicion, castrado: esCastrado, categoria: (prev.categoria === 'Vaquillona' && nuevoEstado === 'VACÍA') ? 'Vaca' : prev.categoria } : null);
     setEditCondicion(nuevasCondiciones); setEditCastrado(esCastrado); if(nuevoEstado) setEditEstado(nuevoEstado); setLoading(false);
-    if (!error) { recargarFicha(animalSel.id); if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); fetchAnimales(); }
+    if (!error) { recargarFicha(animalSel.id); if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setToroCaravana(''); setNuevoTerneroCaravana(''); setPesoNacimiento(''); fetchAnimales(); }
   }
 
   async function actualizarAnimal() {
@@ -420,10 +455,28 @@ export default function App() {
   async function confirmarBaja() { if (!animalSel || !modoBaja || !campoId) return; if (modoBaja === 'VENDIDO' && !bajaPrecio) return alert("Ingresá el precio"); if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); if (!confirm("¿Confirmar salida?")) return; const resumen = modoBaja === 'VENDIDO' ? `$${bajaPrecio}` : bajaMotivo; await supabase.from('animales').update({ estado: modoBaja, detalle_baja: resumen }).eq('id', animalSel.id); const det = modoBaja === 'VENDIDO' ? `Precio: $${bajaPrecio}/kg - ${bajaMotivo}` : `Causa: ${bajaMotivo}`; await supabase.from('eventos').insert([{ animal_id: animalSel.id, tipo: 'BAJA', resultado: modoBaja, detalle: det, datos_extra: modoBaja === 'VENDIDO' ? { precio_kg: bajaPrecio, destino: bajaMotivo } : { causa: bajaMotivo }, establecimiento_id: campoId }]); closeModalVaca(); fetchAnimales(); }
   async function restaurarAnimal() { if (!animalSel || !confirm("¿Restaurar?")) return; await supabase.from('animales').update({ estado: 'ACTIVO', detalle_baja: null }).eq('id', animalSel.id); await supabase.from('eventos').insert([{ animal_id: animalSel.id, tipo: 'RESTAURACION', resultado: 'Reingreso', detalle: 'Restaurado', establecimiento_id: campoId! }]); closeModalVaca(); fetchAnimales(); }
   
-  async function guardarLote() { if (!nombreLote || !campoId) return; setLoading(true); const { error } = await supabase.from('lotes').insert([{ nombre: nombreLote, hectareas: hasLote, estado: 'DESCANSO', establecimiento_id: campoId }]); setLoading(false); if (!error) { setNombreLote(''); fetchLotes(); } }
-  async function abrirFichaLote(lote: Lote) { setLoteSel(lote); setLaboresFicha([]); openModalLote(); const { data } = await supabase.from('labores').select('*').eq('lote_id', lote.id).order('fecha', { ascending: false }); if (data) setLaboresFicha(data); }
-  async function guardarLabor() { if (!loteSel || !actividadLote || !campoId) return; const { error } = await supabase.from('labores').insert([{ lote_id: loteSel.id, actividad: actividadLote, cultivo: cultivoInput, detalle: detalleLabor, establecimiento_id: campoId }]); if (!error) { if (actividadLote === 'SIEMBRA') { await supabase.from('lotes').update({ estado: 'SEMBRADO', cultivo_actual: cultivoInput }).eq('id', loteSel.id); setLoteSel({...loteSel, estado: 'SEMBRADO', cultivo_actual: cultivoInput}); fetchLotes(); } else if (actividadLote === 'COSECHA') { await supabase.from('lotes').update({ estado: 'DESCANSO', cultivo_actual: null }).eq('id', loteSel.id); setLoteSel({...loteSel, estado: 'DESCANSO', cultivo_actual: ''}); fetchLotes(); } const { data } = await supabase.from('labores').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false }); if (data) setLaboresFicha(data); setDetalleLabor(''); } }
+  // --- ACCIONES LOTE ---
+  async function guardarLote() { if (!nombreLote || !campoId) return; setLoading(true); const { error } = await supabase.from('lotes').insert([{ nombre: nombreLote, hectareas: Number(hasLote), estado: 'DESCANSO', establecimiento_id: campoId }]); setLoading(false); if (!error) { setNombreLote(''); setHasLote(''); fetchLotes(); closeModalAlta(); } }
+  
+  async function abrirFichaLote(lote: Lote) { 
+      setLoteSel(lote); setLaboresFicha([]); openModalLote(); 
+      const { data } = await supabase.from('labores').select('*').eq('lote_id', lote.id).order('fecha', { ascending: false }); 
+      if (data) setLaboresFicha(data); 
+  }
+  
+  async function guardarLabor() { 
+      if (!loteSel || !actividadLote || !campoId) return; 
+      const { error } = await supabase.from('labores').insert([{ lote_id: loteSel.id, actividad: actividadLote, cultivo: cultivoInput, detalle: detalleLabor, costo: Number(costoLabor), establecimiento_id: campoId }]); // Agregado COSTO
+      if (!error) { 
+          if (actividadLote === 'SIEMBRA') { await supabase.from('lotes').update({ estado: 'SEMBRADO', cultivo_actual: cultivoInput }).eq('id', loteSel.id); setLoteSel({...loteSel, estado: 'SEMBRADO', cultivo_actual: cultivoInput}); fetchLotes(); } 
+          else if (actividadLote === 'COSECHA') { await supabase.from('lotes').update({ estado: 'DESCANSO', cultivo_actual: null }).eq('id', loteSel.id); setLoteSel({...loteSel, estado: 'DESCANSO', cultivo_actual: ''}); fetchLotes(); } 
+          const { data } = await supabase.from('labores').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false }); 
+          if (data) setLaboresFicha(data); setDetalleLabor(''); setCostoLabor('');
+      } 
+  }
+  
   async function borrarLabor(id: string) { if(!confirm("¿Borrar?")) return; await supabase.from('labores').delete().eq('id', id); setLaboresFicha(laboresFicha.filter(l => l.id !== id)); }
+  async function borrarLote(id: string) { if(!confirm("¿BORRAR LOTE? Se perderán las labores.")) return; await supabase.from('lotes').delete().eq('id', id); fetchLotes(); closeModalLote(); }
 
   // --- STATS ---
   const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
@@ -544,6 +597,17 @@ export default function App() {
                                 <TextInput label="Destino" placeholder="Ej: Frigorifico" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} />
                             </Group>
                         )}
+                        {/* CAMPO ESPECIAL MOVIMIENTO MASIVO */}
+                        {massActividad === 'MOVIMIENTO' && (
+                            <Select 
+                                label="Lote de Destino" 
+                                placeholder="Seleccionar Lote"
+                                data={lotes.map(l => ({ value: l.id, label: l.nombre }))}
+                                value={massLoteDestino} onChange={setMassLoteDestino}
+                                leftSection={<IconMapPin size={16}/>}
+                                mt="sm"
+                            />
+                        )}
                         <TextInput mt="sm" label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
                     </Paper>
 
@@ -574,6 +638,7 @@ export default function App() {
                                     <Table.Th>Caravana</Table.Th>
                                     <Table.Th>Categoría</Table.Th>
                                     <Table.Th>Estado</Table.Th>
+                                    <Table.Th>Ubicación</Table.Th>
                                 </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
@@ -585,14 +650,10 @@ export default function App() {
                                         <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
                                         <Table.Td>{animal.categoria}</Table.Td>
                                         <Table.Td>
-                                            {/* LOGICA TERNEROS EN TABLA MASIVA */}
-                                            {animal.categoria === 'Ternero' ? (
-                                                <Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light">
-                                                    {animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
-                                                </Badge>
-                                            ) : (
-                                                <Badge size="sm" color="gray">{animal.estado}</Badge>
-                                            )}
+                                            <Badge size="sm" color="gray">{animal.estado}</Badge>
+                                        </Table.Td>
+                                        <Table.Td>
+                                            {animal.lote_id ? <Badge size="sm" variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{getNombreLote(animal.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}
                                         </Table.Td>
                                     </Table.Tr>
                                 ))}
@@ -664,6 +725,7 @@ export default function App() {
                               <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
                               <Table.Th>Categoría</Table.Th> {/* SIN SORT */}
                               <Table.Th>Estado / Condición</Table.Th> {/* SIN SORT */}
+                              <Table.Th>Ubicación</Table.Th>
                               {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
                           </Table.Tr>
                       </Table.Thead>
@@ -684,12 +746,14 @@ export default function App() {
                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (
                                             <Badge color="cyan">CAPADO</Badge>
                                         ) : (
-                                            // LOGICA CORREGIDA: Si NO es ternero, muestra estado normal
                                             vaca.categoria !== 'Ternero' && <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
                                         )}
                                         {renderCondicionBadges(vaca.condicion)}
                                     </Group>
                                 )}
+                            </Table.Td>
+                            <Table.Td>
+                                {vaca.lote_id ? <Badge variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}
                             </Table.Td>
                             {activeSection === 'bajas' && ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> )}
                         </Table.Tr>
@@ -699,23 +763,71 @@ export default function App() {
                 </>
               )}
 
-              {activeSection === 'agricultura' && ( <> <Title order={3} mb="lg">Lotes y Parcelas</Title><Paper p="md" mb="lg" radius="md" withBorder><Text fw={700} mb="xs" size="sm" c="dimmed">NUEVO LOTE</Text><Group align="flex-end"><TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} style={{ flex: 1 }} /><TextInput label="Hectáreas" type="number" value={hasLote} onChange={(e) => setHasLote(Number(e.target.value))} w={120} /><Button onClick={guardarLote} loading={loading} color="lime">Crear</Button></Group></Paper><SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>{lotes.map(lote => (<Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}><Group justify="space-between" mb="xs"><Text fw={700}>{lote.nombre}</Text><Badge color={lote.estado === 'SEMBRADO' ? 'lime' : 'gray'}>{lote.estado}</Badge></Group><Group mb="md"><Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>{lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}</Group><Button variant="light" color="lime" fullWidth mt="md" radius="md">Ver Historial</Button></Card>))}</SimpleGrid>{lotes.length === 0 && <Text c="dimmed" ta="center" mt="xl">No hay lotes cargados.</Text>} </> )}
+              {activeSection === 'agricultura' && ( 
+                <> 
+                  <Group justify="space-between" mb="lg" align="center">
+                    <Group>
+                        <Title order={3}>Agricultura / Lotes</Title>
+                        <Badge size="xl" color="lime" circle>{lotes.length}</Badge>
+                    </Group>
+                    <Button leftSection={<IconPlus size={22}/>} color="lime" size="md" variant="filled" onClick={() => { setNombreLote(''); setHasLote(''); openModalAlta(); }} w={180} mr="md">Nuevo Lote</Button>
+                  </Group>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+                    {lotes.map(lote => {
+                        // Calcular animales en este lote
+                        const animalesEnLote = haciendaActiva.filter(a => a.lote_id === lote.id).length;
+                        return (
+                            <Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}>
+                                <Group justify="space-between" mb="xs">
+                                    <Text fw={700} size="lg">{lote.nombre}</Text>
+                                    <Badge color={lote.estado === 'SEMBRADO' ? 'green' : 'yellow'}>{lote.estado}</Badge>
+                                </Group>
+                                <Group mb="md" gap="xs">
+                                    <Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>
+                                    {lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}
+                                </Group>
+                                <Paper bg="gray.0" p="xs" radius="md" mt="sm">
+                                    <Group justify="space-between">
+                                        <Text size="xs" fw={700} c="dimmed">CARGA ANIMAL</Text>
+                                        <Badge color="blue" variant="light">{animalesEnLote} Cab</Badge>
+                                    </Group>
+                                </Paper>
+                                <Button variant="light" color="lime" fullWidth mt="md" radius="md">Gestionar Lote</Button>
+                            </Card>
+                        )
+                    })}
+                  </SimpleGrid>
+                  {lotes.length === 0 && <Text c="dimmed" ta="center" mt="xl">No hay lotes cargados.</Text>} 
+                </> 
+              )}
+              
               {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toro_caravana && (<Text size="xs" c="dimmed">Toro: {ev.datos_extra.toro_caravana}</Text>)}</Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
             </AppShell.Main>
           </AppShell>
         )}
 
-      {/* --- MODAL NUEVO ANIMAL (ALTA) --- */}
-      <Modal opened={modalAltaOpen} onClose={closeModalAlta} title={<Text fw={700} size="lg">Alta de Nuevo Animal</Text>} centered>
+      {/* --- MODAL NUEVO ANIMAL / LOTE (REUTILIZADO SEGUN SECCION) --- */}
+      <Modal opened={modalAltaOpen} onClose={closeModalAlta} title={<Text fw={700} size="lg">{activeSection === 'agricultura' ? 'Nuevo Lote' : 'Alta de Nuevo Animal'}</Text>} centered>
          <Stack>
-             <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
-             <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
-             <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
-             <Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button>
+             {activeSection === 'agricultura' ? (
+                 <>
+                    <TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} />
+                    <TextInput label="Hectáreas" type="number" placeholder="Ej: 50" value={hasLote} onChange={(e) => setHasLote(e.target.value)} />
+                    <Button onClick={guardarLote} loading={loading} color="lime" fullWidth mt="md">Crear Lote</Button>
+                 </>
+             ) : (
+                 <>
+                    <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
+                    <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
+                    <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
+                    <Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button>
+                 </>
+             )}
          </Stack>
       </Modal>
 
-      {/* --- MODAL EDICION DE EVENTO (Z-INDEX CORREGIDO) --- */}
+      {/* --- MODAL EDICION DE EVENTO --- */}
       <Modal opened={modalEditEventOpen} onClose={closeModalEditEvent} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
           <Stack>
               <TextInput label="Fecha" type="date" value={getLocalDateForInput(editingEventDate)} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
@@ -748,12 +860,12 @@ export default function App() {
          </Stack>
       </Modal>
 
-      <Modal opened={modalVacaOpen} onClose={closeModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
-         <Tabs defaultValue="historia" color="teal">
+      <Modal opened={modalVacaOpen} onClose={handleCloseModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
+         <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal">
            <Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
            <Tabs.Panel value="historia">
               {esActivo ? (
-                <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <TextInput label="Caravana del Toro" placeholder="Ej: T-101" value={toroCaravana} onChange={(e) => setToroCaravana(e.target.value)} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
+                <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <TextInput label="Caravana del Toro" placeholder="Ej: T-101" value={toroCaravana} onChange={(e) => setToroCaravana(e.target.value)} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
               ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
@@ -767,17 +879,20 @@ export default function App() {
                     <Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>
                     {hijos.length > 0 ? ( 
                         <Group gap="xs" mt={5}>
-                            {hijos.map(h => (
-                                <Badge 
-                                    key={h.id} 
-                                    variant="white" 
-                                    style={{ cursor: 'pointer' }}
-                                    color={h.sexo === 'H' ? 'pink' : 'blue'}
-                                    onClick={() => navegarAHijo(h.id)}
-                                >
-                                    {h.caravana}
-                                </Badge>
-                            ))}
+                            {hijos.map(h => {
+                                const isGone = ['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(h.estado);
+                                return (
+                                    <Badge 
+                                        key={h.id} 
+                                        variant={isGone ? 'light' : 'white'} 
+                                        style={{ cursor: 'pointer', opacity: isGone ? 0.5 : 1 }}
+                                        color={h.sexo === 'H' ? 'pink' : 'blue'}
+                                        onClick={() => navegarAHijo(h.id)}
+                                    >
+                                        {h.caravana}
+                                    </Badge>
+                                )
+                            })}
                         </Group> 
                     ) : <Text size="xs" c="dimmed">Sin registros</Text>}
                 </Paper> 
@@ -790,7 +905,39 @@ export default function App() {
          </Tabs>
       </Modal>
       <Modal opened={modalLoteOpen} onClose={closeModalLote} title={<Text fw={700} size="lg">Lote: {loteSel?.nombre}</Text>} size="lg" centered zIndex={2000}>
-         <Tabs defaultValue="labores" color="lime"><Tabs.List grow mb="md"><Tabs.Tab value="labores">Labores</Tabs.Tab></Tabs.List><Tabs.Panel value="labores"><Paper withBorder p="sm" bg="lime.0" mb="md"><Text size="sm" fw={700} mb="xs">Nueva Labor</Text><Group grow mb="sm"><Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION']} value={actividadLote} onChange={setActividadLote} comboboxProps={{ zIndex: 200005 }}/><TextInput placeholder="Cultivo" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} disabled={!['SIEMBRA', 'COSECHA'].includes(actividadLote || '')} /></Group><Textarea placeholder="Detalle..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} mb="sm" rows={2}/><Button fullWidth size="xs" onClick={guardarLabor} color="lime" variant="filled">Registrar</Button></Paper><ScrollArea h={300}>{laboresFicha.length === 0 ? <Text c="dimmed" size="sm">Sin labores registradas.</Text> : (<Table striped><Table.Tbody>{laboresFicha.map(labor => (<Table.Tr key={labor.id}><Table.Td><Text size="xs" c="dimmed">{formatDate(labor.fecha)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{labor.actividad}</Text>{labor.cultivo && <Badge size="xs" color="lime">{labor.cultivo}</Badge>}</Table.Td><Table.Td><Text size="sm">{labor.detalle}</Text></Table.Td><Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarLabor(labor.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table>)}</ScrollArea></Tabs.Panel></Tabs>
+         <Tabs defaultValue="labores" color="lime">
+            <Tabs.List grow mb="md"><Tabs.Tab value="labores">Labores</Tabs.Tab><Tabs.Tab value="animales">Hacienda</Tabs.Tab></Tabs.List>
+            
+            <Tabs.Panel value="labores">
+                <Paper withBorder p="sm" bg="lime.0" mb="md">
+                    <Text size="sm" fw={700} mb="xs">Nueva Labor</Text>
+                    <Group grow mb="sm"><Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadLote} onChange={setActividadLote} comboboxProps={{ zIndex: 200005 }}/><TextInput placeholder="Cultivo / Producto" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} /></Group>
+                    <Group grow mb="sm"><TextInput placeholder="Costo ($)" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={costoLabor} onChange={(e) => setCostoLabor(e.target.value)}/><Textarea placeholder="Detalle..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} rows={1}/></Group>
+                    <Button fullWidth size="xs" onClick={guardarLabor} color="lime" variant="filled">Registrar</Button>
+                </Paper>
+                <ScrollArea h={300}>{laboresFicha.length === 0 ? <Text c="dimmed" size="sm">Sin labores registradas.</Text> : (<Table striped><Table.Tbody>{laboresFicha.map(labor => (<Table.Tr key={labor.id}><Table.Td><Text size="xs" c="dimmed">{formatDate(labor.fecha)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{labor.actividad}</Text>{labor.cultivo && <Badge size="xs" color="lime">{labor.cultivo}</Badge>}</Table.Td><Table.Td><Text size="sm">{labor.detalle}</Text></Table.Td><Table.Td><Text size="sm" fw={700} c="dimmed">${labor.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarLabor(labor.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table>)}</ScrollArea>
+                <Button fullWidth color="red" variant="subtle" mt="xl" onClick={() => borrarLote(loteSel!.id)}>Borrar Lote</Button>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="animales">
+                {/* Lista de animales que estan actualmente en este lote */}
+                <ScrollArea h={400}>
+                    <Table>
+                        <Table.Thead><Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th></Table.Tr></Table.Thead>
+                        <Table.Tbody>
+                            {haciendaActiva.filter(a => a.lote_id === loteSel?.id).length > 0 ? (
+                                haciendaActiva.filter(a => a.lote_id === loteSel?.id).map(a => (
+                                    <Table.Tr key={a.id}>
+                                        <Table.Td fw={700}>{a.caravana}</Table.Td>
+                                        <Table.Td>{a.categoria}</Table.Td>
+                                    </Table.Tr>
+                                ))
+                            ) : <Text c="dimmed" size="sm" p="md">No hay animales en este lote.</Text>}
+                        </Table.Tbody>
+                    </Table>
+                </ScrollArea>
+            </Tabs.Panel>
+         </Tabs>
       </Modal>
     </MantineProvider>
   );
