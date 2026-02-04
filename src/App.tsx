@@ -240,30 +240,18 @@ export default function App() {
     if (massActividad === 'VENTA' && !massPrecio) return alert("Falta el precio de venta");
     
     // --- LÓGICA DE FILTRADO PARA CAPADO ---
-    let idsParaProcesar = [...selectedIds]; // Copia de los IDs seleccionados
+    let idsParaProcesar = [...selectedIds];
     let mensajeConfirmacion = `¿Confirmar ${massActividad} para ${selectedIds.length} animales?`;
 
     if (massActividad === 'CAPADO') {
-        // Buscar los objetos animales correspondientes a los IDs seleccionados
         const animalesSeleccionados = animales.filter(a => selectedIds.includes(a.id));
-        // Filtrar SOLO los machos
         const machos = animalesSeleccionados.filter(a => a.sexo === 'M');
-        // Actualizar la lista de IDs a procesar
         idsParaProcesar = machos.map(a => a.id);
-
         const hembrasDescartadas = selectedIds.length - idsParaProcesar.length;
-        
-        if (idsParaProcesar.length === 0) {
-            return alert("Error: Has seleccionado solo Hembras. No hay machos para capar.");
-        }
-
-        if (hembrasDescartadas > 0) {
-            mensajeConfirmacion = `⚠️ ATENCIÓN: Se detectaron ${hembrasDescartadas} HEMBRAS en la selección.\n\nEl sistema las ignorará automáticamente y solo capará a los ${idsParaProcesar.length} MACHOS.\n\n¿Desea continuar?`;
-        } else {
-            mensajeConfirmacion = `¿Confirmar CAPADO para ${idsParaProcesar.length} machos?`;
-        }
+        if (idsParaProcesar.length === 0) return alert("Error: Has seleccionado solo Hembras. No hay machos para capar.");
+        if (hembrasDescartadas > 0) mensajeConfirmacion = `⚠️ ATENCIÓN: Se detectaron ${hembrasDescartadas} HEMBRAS.\n\nEl sistema las ignorará y solo capará a los ${idsParaProcesar.length} MACHOS.\n\n¿Continuar?`;
+        else mensajeConfirmacion = `¿Confirmar CAPADO para ${idsParaProcesar.length} machos?`;
     }
-    // -------------------------------------
 
     if(!confirm(mensajeConfirmacion)) return;
 
@@ -276,7 +264,6 @@ export default function App() {
         datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' };
     } else if (massActividad === 'CAPADO') { resultadoTxt = 'Realizado'; }
 
-    // Usamos idsParaProcesar en lugar de selectedIds
     const inserts = idsParaProcesar.map(animalId => ({
         animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, establecimiento_id: campoId
     }));
@@ -350,6 +337,10 @@ export default function App() {
   // --- ACCIONES VACA ---
   async function guardarAnimal() {
     if (!caravana || !campoId) return;
+    // VALIDACIÓN DUPLICADOS (NUEVO ANIMAL)
+    const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravana.toLowerCase() && a.estado !== 'ELIMINADO');
+    if (yaExiste) return alert("❌ ERROR: Ya existe un animal con esa caravana.");
+
     setLoading(true); const hoy = new Date().toISOString().split('T')[0];
     const { error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'PROPIO', fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId }]);
     setLoading(false); if (!error) { setCaravana(''); fetchAnimales(); closeModalAlta(); }
@@ -384,6 +375,10 @@ export default function App() {
     if (tipoEventoInput === 'TACTO') { resultadoFinal = tactoResultado || ''; if (tactoResultado === 'PREÑADA') nuevoEstado = 'PREÑADA'; if (tactoResultado === 'VACÍA') nuevoEstado = 'VACÍA'; } 
     else if (tipoEventoInput === 'PARTO') {
       if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
+      // VALIDACIÓN DUPLICADOS (PARTO)
+      const yaExiste = animales.some(a => a.caravana.toLowerCase() === nuevoTerneroCaravana.toLowerCase() && a.estado !== 'ELIMINADO');
+      if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal con esa caravana."); }
+
       const fechaParto = fechaEvento.toISOString().split('T')[0];
       const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId }]).select().single();
       if (err) { setLoading(false); return alert("Error: " + err.message); }
