@@ -238,7 +238,34 @@ export default function App() {
     if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
     if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
     if (massActividad === 'VENTA' && !massPrecio) return alert("Falta el precio de venta");
-    if(!confirm(`¿Confirmar ${massActividad} para ${selectedIds.length} animales?`)) return;
+    
+    // --- LÓGICA DE FILTRADO PARA CAPADO ---
+    let idsParaProcesar = [...selectedIds]; // Copia de los IDs seleccionados
+    let mensajeConfirmacion = `¿Confirmar ${massActividad} para ${selectedIds.length} animales?`;
+
+    if (massActividad === 'CAPADO') {
+        // Buscar los objetos animales correspondientes a los IDs seleccionados
+        const animalesSeleccionados = animales.filter(a => selectedIds.includes(a.id));
+        // Filtrar SOLO los machos
+        const machos = animalesSeleccionados.filter(a => a.sexo === 'M');
+        // Actualizar la lista de IDs a procesar
+        idsParaProcesar = machos.map(a => a.id);
+
+        const hembrasDescartadas = selectedIds.length - idsParaProcesar.length;
+        
+        if (idsParaProcesar.length === 0) {
+            return alert("Error: Has seleccionado solo Hembras. No hay machos para capar.");
+        }
+
+        if (hembrasDescartadas > 0) {
+            mensajeConfirmacion = `⚠️ ATENCIÓN: Se detectaron ${hembrasDescartadas} HEMBRAS en la selección.\n\nEl sistema las ignorará automáticamente y solo capará a los ${idsParaProcesar.length} MACHOS.\n\n¿Desea continuar?`;
+        } else {
+            mensajeConfirmacion = `¿Confirmar CAPADO para ${idsParaProcesar.length} machos?`;
+        }
+    }
+    // -------------------------------------
+
+    if(!confirm(mensajeConfirmacion)) return;
 
     setLoading(true);
     const fechaStr = massFecha.toISOString();
@@ -249,13 +276,15 @@ export default function App() {
         datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' };
     } else if (massActividad === 'CAPADO') { resultadoTxt = 'Realizado'; }
 
-    const inserts = selectedIds.map(animalId => ({
+    // Usamos idsParaProcesar en lugar de selectedIds
+    const inserts = idsParaProcesar.map(animalId => ({
         animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, establecimiento_id: campoId
     }));
+    
     const { error } = await supabase.from('eventos').insert(inserts);
 
-    if (!error && massActividad === 'VENTA') await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', selectedIds);
-    if (!error && massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', selectedIds);
+    if (!error && massActividad === 'VENTA') await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', idsParaProcesar);
+    if (!error && massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', idsParaProcesar);
 
     setLoading(false);
     if (error) { alert("Error: " + error.message); } else {
@@ -402,9 +431,7 @@ export default function App() {
   async function borrarLabor(id: string) { if(!confirm("¿Borrar?")) return; await supabase.from('labores').delete().eq('id', id); setLaboresFicha(laboresFicha.filter(l => l.id !== id)); }
 
   // --- STATS ---
-  // Calculo la "Hacienda en Campo" primero para no repetir filtros
   const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
-  
   const stats = {
     total: haciendaActiva.length,
     vacas: haciendaActiva.filter(a => a.categoria === 'Vaca').length,
@@ -417,8 +444,6 @@ export default function App() {
     novillos: haciendaActiva.filter(a => a.categoria === 'Novillo').length,
     toros: haciendaActiva.filter(a => a.categoria === 'Toro').length,
   };
-
-  // Denominador real: Vacas + Vaquillonas (Vientres totales)
   const totalVientres = stats.vacas + stats.vaquillonas;
   const prenadaPct = totalVientres > 0 ? Math.round((stats.prenadas / totalVientres) * 100) : 0;
   
