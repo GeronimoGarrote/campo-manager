@@ -7,9 +7,11 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { 
   IconList, IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, 
-  IconCalendar, IconScale, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
-  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle
+  IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
+  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle, IconChartDots
 } from '@tabler/icons-react';
+// IMPORTACIONES DE RECHARTS (GRAFICOS)
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
@@ -98,6 +100,11 @@ export default function App() {
   const [madreCaravana, setMadreCaravana] = useState<string>(''); 
   const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string, estado: string }[]>([]); 
   
+  // --- GRAFICO PESO ---
+  const [modalGraficoOpen, { open: openModalGrafico, close: closeModalGrafico }] = useDisclosure(false);
+  const [datosGrafico, setDatosGrafico] = useState<any[]>([]);
+  const [statsGrafico, setStatsGrafico] = useState({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
+
   // Estado para el cartel de toros (consulta directa a BD)
   const [nombresTorosCartel, setNombresTorosCartel] = useState<string | null>(null);
 
@@ -105,6 +112,12 @@ export default function App() {
   const [modalLoteOpen, { open: openModalLote, close: closeModalLote }] = useDisclosure(false);
   const [loteSel, setLoteSel] = useState<Lote | null>(null);
   const [laboresFicha, setLaboresFicha] = useState<Labor[]>([]);
+  
+  // Variables Lotes
+  const [actividadLote, setActividadLote] = useState<string | null>('FUMIGADA');
+  const [cultivoInput, setCultivoInput] = useState('');
+  const [detalleLabor, setDetalleLabor] = useState('');
+  const [costoLabor, setCostoLabor] = useState<string | number>('');
 
   // Inputs Eventos
   const [fechaEvento, setFechaEvento] = useState<Date | null>(new Date());
@@ -135,12 +148,6 @@ export default function App() {
   const [bajaPrecio, setBajaPrecio] = useState<string | number>('');
   const [bajaMotivo, setBajaMotivo] = useState('');
   
-  // Labores Lote
-  const [actividadLote, setActividadLote] = useState<string | null>('FUMIGADA');
-  const [cultivoInput, setCultivoInput] = useState(''); 
-  const [detalleLabor, setDetalleLabor] = useState('');
-  const [costoLabor, setCostoLabor] = useState<string | number>(''); 
-
   // --- LOGICA MASIVA ---
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [massActividad, setMassActividad] = useState<string | null>('VACUNACION');
@@ -469,6 +476,49 @@ export default function App() {
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
   }
 
+  // --- NUEVA FUNCION PARA EL GRAFICO DE PESO ---
+  const abrirGraficoPeso = () => {
+    const pesajes = eventosFicha
+        .filter(e => e.tipo === 'PESAJE')
+        .sort((a, b) => new Date(a.fecha_evento).getTime() - new Date(b.fecha_evento).getTime());
+
+    const data = pesajes.map(p => {
+        const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
+        return {
+            fecha: formatDate(p.fecha_evento), 
+            rawDate: new Date(p.fecha_evento), 
+            peso: isNaN(pesoNum) ? 0 : pesoNum
+        };
+    }).filter(p => p.peso > 0);
+
+    setDatosGrafico(data);
+
+    if (data.length > 1) {
+        const inicio = data[0];
+        const fin = data[data.length - 1];
+        const gananciaTotal = fin.peso - inicio.peso;
+        
+        const diffTime = Math.abs(fin.rawDate.getTime() - inicio.rawDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        
+        const adpvPromedio = diffDays > 0 ? (gananciaTotal / diffDays).toFixed(3) : '0';
+
+        setStatsGrafico({
+            inicio: inicio.peso,
+            actual: fin.peso,
+            ganancia: gananciaTotal,
+            dias: diffDays,
+            adpv: adpvPromedio
+        });
+    } else if (data.length === 1) {
+         setStatsGrafico({ inicio: data[0].peso, actual: data[0].peso, ganancia: 0, dias: 0, adpv: '0' });
+    } else {
+         setStatsGrafico({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
+    }
+
+    openModalGrafico();
+  };
+
   const navegarAHijo = async (hijoId: string) => {
       const currentAnimal = animales.find(a => a.id === animalSelId);
       if(currentAnimal) setFichaAnterior(currentAnimal); 
@@ -527,16 +577,14 @@ export default function App() {
 
     const { error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: datosExtra, costo: Number(costoEvento), establecimiento_id: campoId }]);
     
-    // UPDATES DE ESTADO
     const stringCondicion = nuevasCondiciones.length > 0 ? nuevasCondiciones.join(', ') : 'SANA';
     const updates: any = { condicion: stringCondicion, castrado: esCastrado }; 
     if (nuevoEstado) updates.estado = nuevoEstado;
-    if (tipoEventoInput === 'SERVICIO' && tipoServicio === 'TORO') updates.toros_servicio_ids = torosIdsInput; // Guardar ARRAY
+    if (tipoEventoInput === 'SERVICIO' && tipoServicio === 'TORO') updates.toros_servicio_ids = torosIdsInput; 
     if (tipoEventoInput === 'PARTO') updates.toros_servicio_ids = null; 
 
     await supabase.from('animales').update(updates).eq('id', animalSel.id);
 
-    // UPDATE DE TOROS (SI FUE SERVICIO)
     if (torosToUpdate.length > 0) {
         await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', torosToUpdate);
     }
@@ -593,8 +641,12 @@ export default function App() {
   async function borrarLabor(id: string) { if(!confirm("¿Borrar?")) return; await supabase.from('labores').delete().eq('id', id); setLaboresFicha(laboresFicha.filter(l => l.id !== id)); }
   async function borrarLote(id: string) { if(!confirm("¿BORRAR LOTE? Se perderán las labores.")) return; await supabase.from('lotes').delete().eq('id', id); fetchLotes(); closeModalLote(); }
 
-  // --- STATS ---
+  // ------------------------------------------------------------------
+  // BLOQUE DE ESTADÍSTICAS Y VARIABLES AUXILIARES (RECUPERADO)
+  // ------------------------------------------------------------------
+
   const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
+
   const stats = {
     total: haciendaActiva.length,
     vacas: haciendaActiva.filter(a => a.categoria === 'Vaca').length,
@@ -607,10 +659,12 @@ export default function App() {
     novillos: haciendaActiva.filter(a => a.categoria === 'Novillo').length,
     toros: haciendaActiva.filter(a => a.categoria === 'Toro').length,
   };
+
   const totalVientres = stats.vacas + stats.vaquillonas;
   const prenadaPct = totalVientres > 0 ? Math.round((stats.prenadas / totalVientres) * 100) : 0;
   
-  // --- OPCIONES DISPONIBLES (VALIDACION) ---
+  const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO';
+
   const opcionesDisponibles = (() => { 
       if (!animalSel) return []; 
       if (['Vaca', 'Vaquillona'].includes(animalSel.categoria)) return ['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'VACUNACION']; 
@@ -618,7 +672,8 @@ export default function App() {
       if (animalSel.categoria === 'Toro') return ['PESAJE', 'VACUNACION', 'RASPAJE', 'APARTADO', 'ENFERMEDAD', 'CURACION']; 
       return ['PESAJE', 'ENFERMEDAD', 'LESION', 'CURACION', 'VACUNACION']; 
   })();
-  const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO';
+
+  // ------------------------------------------------------------------
 
   return (
     <MantineProvider>
@@ -985,6 +1040,43 @@ export default function App() {
          </Stack>
       </Modal>
 
+      {/* --- MODAL GRAFICO PESO --- */}
+      <Modal opened={modalGraficoOpen} onClose={closeModalGrafico} title={<Text fw={700} size="lg">Evolución de Peso: {animalSel?.caravana}</Text>} size="lg" centered zIndex={3000}>
+          {datosGrafico.length > 0 ? (
+              <>
+                  <div style={{ width: '100%', height: 300 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={datosGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="fecha" />
+                              <YAxis domain={['auto', 'auto']} />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="peso" stroke="#82ca9d" strokeWidth={3} activeDot={{ r: 8 }} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+                  <SimpleGrid cols={3} mt="lg">
+                      <Paper withBorder p="xs" ta="center">
+                          <Text size="xs" c="dimmed" fw={700} tt="uppercase">Peso Inicial</Text>
+                          <Text fw={700} size="lg">{statsGrafico.inicio} kg</Text>
+                      </Paper>
+                      <Paper withBorder p="xs" ta="center">
+                          <Text size="xs" c="dimmed" fw={700} tt="uppercase">Ganancia Total</Text>
+                          <Text fw={700} size="lg" c={statsGrafico.ganancia > 0 ? 'teal' : 'red'}>{statsGrafico.ganancia > 0 ? '+' : ''}{statsGrafico.ganancia} kg</Text>
+                      </Paper>
+                      <Paper withBorder p="xs" ta="center">
+                          <Text size="xs" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text>
+                          <Text fw={700} size="lg" c="blue">{statsGrafico.adpv} kg/día</Text>
+                      </Paper>
+                  </SimpleGrid>
+              </>
+          ) : (
+              <Alert color="blue" title="Sin datos">
+                  Este animal no tiene suficientes registros de peso para generar una curva.
+              </Alert>
+          )}
+      </Modal>
+
       <Modal opened={modalVacaOpen} onClose={handleCloseModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
          <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal">
            <Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
@@ -995,24 +1087,19 @@ export default function App() {
               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
            <Tabs.Panel value="datos">
-              <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><Badge size="lg" variant="filled" color="gray" leftSection={<IconScale size={14}/>}>{ultimoPeso}</Badge></Group></Paper>
+              <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={abrirGraficoPeso}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>
               <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} />
               <Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
               {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
-              
-              {/* --- CARTEL TOROS (NUEVO DISEÑO MAS VISIBLE) --- */}
+              {/* --- NUEVO DISEÑO CARTEL (CONSULTA DIRECTA) --- */}
               {nombresTorosCartel && (
-                  <Paper withBorder p="md" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '6px solid #fa5252' }}>
-                      <Group gap="sm">
-                          <ThemeIcon color="pink" variant="filled" size="lg" radius="xl"><IconInfoCircle size={20}/></ThemeIcon>
-                          <Stack gap={0}>
-                              <Text size="xs" fw={700} c="pink.9" tt="uppercase">Servicio Activo</Text>
-                              <Text size="sm" c="dark.9">En servicio con Toro/s: <b>{nombresTorosCartel}</b></Text>
-                          </Stack>
+                  <Paper withBorder p="xs" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '4px solid #fa5252' }}>
+                      <Group gap="xs">
+                          <ThemeIcon color="pink" variant="light" size="sm"><IconInfoCircle size={14}/></ThemeIcon>
+                          <Text size="sm" c="pink.9">En servicio con Toro/s: <Text span fw={700}>{nombresTorosCartel}</Text></Text>
                       </Group>
                   </Paper>
               )}
-
               {['Vaca'].includes(editCategoria || '') && ( 
                 <Paper withBorder p="xs" mb="sm" bg="teal.0">
                     <Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>
