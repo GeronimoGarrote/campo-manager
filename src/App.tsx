@@ -10,7 +10,6 @@ import {
   IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
   IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle, IconChartDots
 } from '@tabler/icons-react';
-// IMPORTACIONES DE RECHARTS (GRAFICOS)
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
@@ -44,6 +43,32 @@ function Th({ children, reversed, sorted, onSort }: ThProps) {
     </Table.Th>
   );
 }
+
+// Tooltip Personalizado para el Gráfico
+const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+            <div style={{ backgroundColor: 'white', padding: '10px', border: '1px solid #ccc', borderRadius: '5px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: 0, fontWeight: 'bold' }}>{data.fecha}</p>
+                <p style={{ margin: 0, color: '#12b886', fontWeight: 'bold', marginTop: '4px' }}>Peso: {data.peso} kg</p>
+                
+                {data.gananciaIntervalo !== null && data.gananciaIntervalo !== undefined && (
+                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#868e96', textTransform: 'uppercase' }}>Rendimiento parcial:</p>
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: data.gananciaIntervalo >= 0 ? '#228be6' : '#fa5252' }}>
+                            {data.gananciaIntervalo > 0 ? '+' : ''}{data.gananciaIntervalo} kg
+                        </p>
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#7950f2' }}>
+                            {data.adpvIntervalo} kg/día
+                        </p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    return null;
+};
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -102,10 +127,12 @@ export default function App() {
   
   // --- GRAFICO PESO ---
   const [modalGraficoOpen, { open: openModalGrafico, close: closeModalGrafico }] = useDisclosure(false);
+  const [graficoAnimalId, setGraficoAnimalId] = useState<string | null>(null);
   const [datosGrafico, setDatosGrafico] = useState<any[]>([]);
   const [statsGrafico, setStatsGrafico] = useState({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
+  const [loadingGrafico, setLoadingGrafico] = useState(false);
 
-  // Estado para el cartel de toros (consulta directa a BD)
+  // Estado para el cartel de toros
   const [nombresTorosCartel, setNombresTorosCartel] = useState<string | null>(null);
 
   // Lote Detalle UI
@@ -230,6 +257,70 @@ export default function App() {
     else { setSexoBloqueado(false); }
   }, [categoria]);
 
+  // --- EFECTO DE CARGA PARA EL GRAFICO DE PESO ---
+  useEffect(() => {
+    async function cargarDatosGrafico() {
+        if (!graficoAnimalId) return;
+        setLoadingGrafico(true);
+        
+        const { data } = await supabase
+            .from('eventos')
+            .select('*')
+            .eq('animal_id', graficoAnimalId)
+            .eq('tipo', 'PESAJE')
+            .order('fecha_evento', { ascending: true });
+
+        if (data) {
+            const pesajesValidos = data.map(p => {
+                const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
+                return {
+                    fecha: formatDate(p.fecha_evento),
+                    rawDate: new Date(p.fecha_evento),
+                    peso: isNaN(pesoNum) ? 0 : pesoNum
+                };
+            }).filter(p => p.peso > 0);
+
+            const finalData = pesajesValidos.map((p, index) => {
+                if (index === 0) return { ...p, gananciaIntervalo: null, adpvIntervalo: null };
+                const prev = pesajesValidos[index - 1];
+                const ganancia = p.peso - prev.peso;
+                const diffTime = Math.abs(p.rawDate.getTime() - prev.rawDate.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return {
+                    ...p,
+                    gananciaIntervalo: ganancia,
+                    adpvIntervalo: diffDays > 0 ? (ganancia / diffDays).toFixed(3) : '0'
+                };
+            });
+
+            setDatosGrafico(finalData);
+
+            if (finalData.length > 1) {
+                const inicio = finalData[0];
+                const fin = finalData[finalData.length - 1];
+                const gananciaTotal = fin.peso - inicio.peso;
+                const diffTime = Math.abs(fin.rawDate.getTime() - inicio.rawDate.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                setStatsGrafico({
+                    inicio: inicio.peso,
+                    actual: fin.peso,
+                    ganancia: gananciaTotal,
+                    dias: diffDays,
+                    adpv: diffDays > 0 ? (gananciaTotal / diffDays).toFixed(3) : '0'
+                });
+            } else if (finalData.length === 1) {
+                 setStatsGrafico({ inicio: finalData[0].peso, actual: finalData[0].peso, ganancia: 0, dias: 0, adpv: '0' });
+            } else {
+                 setStatsGrafico({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
+            }
+        }
+        setLoadingGrafico(false);
+    }
+    cargarDatosGrafico();
+  }, [graficoAnimalId]);
+
+
   // --- SORT & FILTER ---
   const setSorting = (field: keyof Animal) => {
     const reversed = field === sortBy ? !reverseSortDirection : false;
@@ -296,7 +387,6 @@ export default function App() {
   };
   const limpiarSeleccion = () => setSelectedIds([]);
 
-  // LOGICA PARA DESVINCULAR TOROS CUANDO SE APARTAN
   const desvincularToroDeVacas = async (toroId: string) => {
       const vacasAfectadas = animales.filter(a => a.toros_servicio_ids && a.toros_servicio_ids.includes(toroId));
       for (const vaca of vacasAfectadas) {
@@ -476,46 +566,8 @@ export default function App() {
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
   }
 
-  // --- NUEVA FUNCION PARA EL GRAFICO DE PESO ---
   const abrirGraficoPeso = () => {
-    const pesajes = eventosFicha
-        .filter(e => e.tipo === 'PESAJE')
-        .sort((a, b) => new Date(a.fecha_evento).getTime() - new Date(b.fecha_evento).getTime());
-
-    const data = pesajes.map(p => {
-        const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
-        return {
-            fecha: formatDate(p.fecha_evento), 
-            rawDate: new Date(p.fecha_evento), 
-            peso: isNaN(pesoNum) ? 0 : pesoNum
-        };
-    }).filter(p => p.peso > 0);
-
-    setDatosGrafico(data);
-
-    if (data.length > 1) {
-        const inicio = data[0];
-        const fin = data[data.length - 1];
-        const gananciaTotal = fin.peso - inicio.peso;
-        
-        const diffTime = Math.abs(fin.rawDate.getTime() - inicio.rawDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        
-        const adpvPromedio = diffDays > 0 ? (gananciaTotal / diffDays).toFixed(3) : '0';
-
-        setStatsGrafico({
-            inicio: inicio.peso,
-            actual: fin.peso,
-            ganancia: gananciaTotal,
-            dias: diffDays,
-            adpv: adpvPromedio
-        });
-    } else if (data.length === 1) {
-         setStatsGrafico({ inicio: data[0].peso, actual: data[0].peso, ganancia: 0, dias: 0, adpv: '0' });
-    } else {
-         setStatsGrafico({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
-    }
-
+    setGraficoAnimalId(animalSelId);
     openModalGrafico();
   };
 
@@ -642,7 +694,7 @@ export default function App() {
   async function borrarLote(id: string) { if(!confirm("¿BORRAR LOTE? Se perderán las labores.")) return; await supabase.from('lotes').delete().eq('id', id); fetchLotes(); closeModalLote(); }
 
   // ------------------------------------------------------------------
-  // BLOQUE DE ESTADÍSTICAS Y VARIABLES AUXILIARES (RECUPERADO)
+  // BLOQUE DE ESTADÍSTICAS Y VARIABLES AUXILIARES
   // ------------------------------------------------------------------
 
   const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
@@ -673,8 +725,6 @@ export default function App() {
       return ['PESAJE', 'ENFERMEDAD', 'LESION', 'CURACION', 'VACUNACION']; 
   })();
 
-  // ------------------------------------------------------------------
-
   return (
     <MantineProvider>
         {!session ? (
@@ -689,21 +739,48 @@ export default function App() {
           </Container>
         ) : (
           <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
-            <AppShell.Header><Group h="100%" px="md"><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" /><IconLeaf color="teal" size={28} /><Title order={3}>AgroControl</Title></Group></AppShell.Header>
-            <AppShell.Navbar p="md">
-              <Paper p="xs" bg="gray.1" mb="lg" radius="md"><Text size="xs" fw={700} c="dimmed" mb={4}>ESTABLECIMIENTO</Text><Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} /></Paper>
-              <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md"/>
-              <Text size="xs" fw={500} c="dimmed" mb="sm">GANADERÍA</Text>
-              <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" />
-              <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" />
-              <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" />
-              <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
-              <NavLink label="Lotes y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" />
-              <Text size="xs" fw={500} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
-              <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" />
-              <AppShell.Section style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
-                <Button fullWidth variant="subtle" color="gray" leftSection={<IconSettings size={18}/>} onClick={openModalConfig}>Gestionar Campos</Button>
-                <Button fullWidth variant="light" color="red" mt="xs" leftSection={<IconLogout size={18}/>} onClick={handleLogout}>Cerrar Sesión</Button>
+            <AppShell.Header>
+              <Group h="100%" px="md">
+                <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+                <Group gap="sm" style={{ flex: 1 }} align="center">
+                    <IconLeaf color="teal" size={28} />
+                    <Title order={3}>AgroControl</Title>
+                    
+                    {/* --- NUEVO DISEÑO DEL NOMBRE DEL CAMPO --- */}
+                    {campoId && establecimientos.length > 0 && (
+                        <Group gap="sm" align="center">
+                            <Text size="xl" c="dimmed" style={{ fontWeight: 300, userSelect: 'none' }}>
+                                |
+                            </Text>
+                            <Title order={4} c="dimmed" fw={500}>
+                                {establecimientos.find(e => e.id === campoId)?.nombre || ''}
+                            </Title>
+                        </Group>
+                    )}
+                    {/* --------------------------------------- */}
+                    
+                </Group>
+              </Group>
+            </AppShell.Header>
+            <AppShell.Navbar p="md" style={{ display: 'flex', flexDirection: 'column' }}>
+              <ScrollArea style={{ flex: 1 }} offsetScrollbars>
+                  <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md" style={{ borderRadius: 8 }}/>
+                  <Text size="xs" fw={700} c="dimmed" mb="sm" mt="md">GANADERÍA</Text>
+                  <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" style={{ borderRadius: 8 }}/>
+                  <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" style={{ borderRadius: 8 }}/>
+                  <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" style={{ borderRadius: 8 }}/>
+                  <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
+                  <NavLink label="Lotes y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }}/>
+                  <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
+                  <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }}/>
+              </ScrollArea>
+              <AppShell.Section style={{ borderTop: '1px solid #eee', paddingTop: '1rem', marginTop: '1rem' }}>
+                  <Text size="xs" fw={700} c="dimmed" mb="xs" ml={4}>ESTABLECIMIENTO</Text>
+                  <Group wrap="nowrap" gap="xs" mb="sm">
+                      <Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} variant="filled" style={{ flex: 1 }} comboboxProps={{ zIndex: 1001 }}/>
+                      <ActionIcon variant="light" color="gray" size="lg" onClick={openModalConfig} title="Gestionar Campos" style={{ width: 36, height: 36 }}><IconSettings size={20}/></ActionIcon>
+                  </Group>
+                  <Button fullWidth variant="subtle" color="red" leftSection={<IconLogout size={18}/>} onClick={handleLogout}>Cerrar Sesión</Button>
               </AppShell.Section>
             </AppShell.Navbar>
 
@@ -750,194 +827,51 @@ export default function App() {
                         <Title order={2}>Carga de Eventos Masivos</Title>
                         <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
                     </Group>
-                    
-                    {/* 1. CONFIGURACION DEL EVENTO */}
                     <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                         <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
                         <Group grow align="flex-start">
-                            <Select 
-                                label="Tipo de Actividad" 
-                                data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'VENTA', 'CAPADO', 'RASPAJE', 'OTRO']} 
-                                value={massActividad} onChange={setMassActividad}
-                                allowDeselect={false}
-                            />
-                            <TextInput 
-                                label="Fecha" type="date" 
-                                value={getLocalDateForInput(massFecha)} 
-                                onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}
-                            />
+                            <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO', 'VENTA', 'CAPADO', 'RASPAJE', 'OTRO']} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
+                            <TextInput label="Fecha" type="date" value={getLocalDateForInput(massFecha)} onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
                         </Group>
-                        {/* CAMPO ESPECIAL PRECIO VENTA MASIVA */}
-                        {massActividad === 'VENTA' && (
-                            <Group grow mt="sm">
-                                <TextInput label="Precio Promedio (Kg/Total)" placeholder="Ej: 2200" value={massPrecio} onChange={(e) => setMassPrecio(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/>
-                                <TextInput label="Destino" placeholder="Ej: Frigorifico" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} />
-                            </Group>
-                        )}
-                        {/* CAMPO ESPECIAL MOVIMIENTO MASIVO */}
-                        {massActividad === 'MOVIMIENTO' && (
-                            <Select 
-                                label="Lote de Destino" 
-                                placeholder="Seleccionar Lote"
-                                data={lotes.map(l => ({ value: l.id, label: l.nombre }))}
-                                value={massLoteDestino} onChange={setMassLoteDestino}
-                                leftSection={<IconMapPin size={16}/>}
-                                mt="sm"
-                            />
-                        )}
-                        <Group grow mt="sm">
-                            <TextInput label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
-                            <TextInput label="Costo Unitario ($)" placeholder="Opcional" type="number" value={massCostoUnitario} onChange={(e) => setMassCostoUnitario(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/>
-                        </Group>
+                        {massActividad === 'VENTA' && ( <Group grow mt="sm"><TextInput label="Precio Promedio (Kg/Total)" placeholder="Ej: 2200" value={massPrecio} onChange={(e) => setMassPrecio(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/><TextInput label="Destino" placeholder="Ej: Frigorifico" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} /></Group> )}
+                        {massActividad === 'MOVIMIENTO' && ( <Select label="Lote de Destino" placeholder="Seleccionar Lote" data={lotes.map(l => ({ value: l.id, label: l.nombre }))} value={massLoteDestino} onChange={setMassLoteDestino} leftSection={<IconMapPin size={16}/>} mt="sm"/> )}
+                        <Group grow mt="sm"><TextInput label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/><TextInput label="Costo Unitario ($)" placeholder="Opcional" type="number" value={massCostoUnitario} onChange={(e) => setMassCostoUnitario(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/></Group>
                     </Paper>
-
-                    {/* 2. SELECCION DE ANIMALES */}
                     <Text fw={700} size="lg" mb="sm">2. Seleccionar Animales</Text>
-                    
-                    {/* Botones de Seleccion Rapida */}
                     <Group mb="md">
                         <Button variant="light" color="blue" size="xs" onClick={() => seleccionarGrupo('Vaca')}>Todas las Vacas</Button>
                         <Button variant="light" color="teal" size="xs" onClick={() => seleccionarGrupo('Ternero')}>Todos los Terneros</Button>
                         <Button variant="light" color="gray" size="xs" onClick={() => seleccionarGrupo(null)}>Seleccionar TODO lo visible</Button>
                         {selectedIds.length > 0 && <Button variant="outline" color="red" size="xs" onClick={limpiarSeleccion}>Borrar Selección</Button>}
                     </Group>
-
-                    {/* Filtros visuales (para ayudar a buscar) */}
                     <Group mb="md">
                         <TextInput placeholder="Buscar por caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 1}}/>
                         <Select placeholder="Filtrar Vista" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
                         <Select placeholder="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{flex: 0.5}}/>
                     </Group>
-
                     <Paper withBorder radius="md" h={400} style={{ display: 'flex', flexDirection: 'column' }}>
                         <ScrollArea style={{ flex: 1 }}>
                         <Table stickyHeader>
-                            <Table.Thead bg="gray.1">
-                                <Table.Tr>
-                                    <Table.Th w={50}>Check</Table.Th>
-                                    <Table.Th>Caravana</Table.Th>
-                                    <Table.Th>Categoría</Table.Th>
-                                    <Table.Th>Estado</Table.Th>
-                                    <Table.Th>Ubicación</Table.Th>
-                                </Table.Tr>
-                            </Table.Thead>
-                            <Table.Tbody>
-                                {animalesFiltrados.map(animal => (
-                                    <Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}>
-                                        <Table.Td>
-                                            <Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} />
-                                        </Table.Td>
-                                        <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
-                                        <Table.Td>{animal.categoria}</Table.Td>
-                                        <Table.Td>
-                                            <Badge size="sm" color={getEstadoColor(animal.estado)}>{animal.estado}</Badge>
-                                        </Table.Td>
-                                        <Table.Td>
-                                            {animal.lote_id ? <Badge size="sm" variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{getNombreLote(animal.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}
-                                        </Table.Td>
-                                    </Table.Tr>
-                                ))}
-                            </Table.Tbody>
+                            <Table.Thead bg="gray.1"><Table.Tr><Table.Th w={50}>Check</Table.Th><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Estado</Table.Th><Table.Th>Ubicación</Table.Th></Table.Tr></Table.Thead>
+                            <Table.Tbody>{animalesFiltrados.map(animal => (<Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}><Table.Td><Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} /></Table.Td><Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td><Table.Td>{animal.categoria}</Table.Td><Table.Td><Badge size="sm" color={getEstadoColor(animal.estado)}>{animal.estado}</Badge></Table.Td><Table.Td>{animal.lote_id ? <Badge size="sm" variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{getNombreLote(animal.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td></Table.Tr>))}</Table.Tbody>
                         </Table>
                         </ScrollArea>
                     </Paper>
-
-                    {/* BOTON FLOTANTE CONFIRMACION */}
-                    {selectedIds.length > 0 && (
-                        <Paper 
-                            shadow="xl" p="md" radius="md" withBorder bg="gray.0" 
-                            style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}
-                        >
-                            <Group>
-                                <Stack gap={0}>
-                                    <Text fw={700} size="sm">CONFIRMAR ACCIÓN</Text>
-                                    <Text size="xs" c="dimmed">{massActividad} en {selectedIds.length} animales</Text>
-                                </Stack>
-                                <Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>
-                                    CONFIRMAR
-                                </Button>
-                            </Group>
-                        </Paper>
-                    )}
+                    {selectedIds.length > 0 && ( <Paper shadow="xl" p="md" radius="md" withBorder bg="gray.0" style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}><Group><Stack gap={0}><Text fw={700} size="sm">CONFIRMAR ACCIÓN</Text><Text size="xs" c="dimmed">{massActividad} en {selectedIds.length} animales</Text></Stack><Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>CONFIRMAR</Button></Group></Paper> )}
                   </>
               )}
 
               {(activeSection === 'hacienda' || activeSection === 'bajas') && (
                 <>
-                  {/* HEADER DE LA SECCION CON BOTON NUEVO GRANDE Y TEAL */}
                   <Group justify="space-between" mb="lg" align="center">
-                    <Group>
-                        <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title>
-                        <Badge size="xl" circle>{animalesFiltrados.length}</Badge>
-                    </Group>
-                    {activeSection === 'hacienda' && (
-                        <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180} mr="md">Nuevo Animal</Button>
-                    )}
+                    <Group><Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title><Badge size="xl" circle>{animalesFiltrados.length}</Badge></Group>
+                    {activeSection === 'hacienda' && (<Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180} mr="md">Nuevo Animal</Button>)}
                   </Group>
-                  
-                  {/* BARRA DE FILTROS AVANZADOS (UX PRO) */}
-                  <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
-                      <Group grow align="flex-end">
-                        <TextInput 
-                            label="Buscar" placeholder="Caravana..." 
-                            leftSection={<IconSearch size={16}/>} 
-                            value={busqueda} onChange={(e) => setBusqueda(e.target.value)} 
-                        />
-                        <Select 
-                            label="Filtrar Categoría" placeholder="Todas" 
-                            data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} 
-                            value={filterCategoria} onChange={setFilterCategoria} clearable 
-                        />
-                        <MultiSelect 
-                            label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..."
-                            data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA']}
-                            value={filterAtributos} onChange={setFilterAtributos}
-                            leftSection={<IconFilter size={16}/>}
-                            clearable
-                        />
-                      </Group>
-                  </Paper>
-
+                  <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0"><Group grow align="flex-end"><TextInput label="Buscar" placeholder="Caravana..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable /><MultiSelect label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable /></Group></Paper>
                   <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                     <Table striped highlightOnHover>
-                      <Table.Thead bg="gray.1">
-                          <Table.Tr>
-                              <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
-                              <Table.Th>Categoría</Table.Th> {/* SIN SORT */}
-                              <Table.Th>Estado / Condición</Table.Th> {/* SIN SORT */}
-                              <Table.Th>Ubicación</Table.Th>
-                              {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
-                          </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>{animalesFiltrados.map((vaca) => (
-                        <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }}>
-                            <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
-                            <Table.Td>{vaca.categoria}</Table.Td>
-                            <Table.Td>
-                                {activeSection === 'bajas' ? (
-                                    <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
-                                ) : (
-                                    <Group gap="xs">
-                                        {vaca.categoria === 'Ternero' && (
-                                            <Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">
-                                                {vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}
-                                            </Badge>
-                                        )}
-                                        {vaca.categoria === 'Ternero' && vaca.castrado ? (
-                                            <Badge color="cyan">CAPADO</Badge>
-                                        ) : (
-                                            vaca.categoria !== 'Ternero' && <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>
-                                        )}
-                                        {renderCondicionBadges(vaca.condicion)}
-                                    </Group>
-                                )}
-                            </Table.Td>
-                            <Table.Td>
-                                {vaca.lote_id ? <Badge variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}
-                            </Table.Td>
-                            {activeSection === 'bajas' ? ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> ) : null}
-                        </Table.Tr>
-                      ))}</Table.Tbody>
+                      <Table.Thead bg="gray.1"><Table.Tr><Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th><Table.Th>Categoría</Table.Th><Table.Th>Estado / Condición</Table.Th><Table.Th>Ubicación</Table.Th>{activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}</Table.Tr></Table.Thead>
+                      <Table.Tbody>{animalesFiltrados.map((vaca) => (<Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }}><Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td><Table.Td>{vaca.categoria}</Table.Td><Table.Td>{activeSection === 'bajas' ? (<Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>) : (<Group gap="xs">{vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}{vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : (vaca.categoria !== 'Ternero' && <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>)}{renderCondicionBadges(vaca.condicion)}</Group>)}</Table.Td><Table.Td>{vaca.lote_id ? <Badge variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>{activeSection === 'bajas' ? ( <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td> ) : null}</Table.Tr>))}</Table.Tbody>
                     </Table>
                   </Paper>
                 </>
@@ -945,39 +879,8 @@ export default function App() {
 
               {activeSection === 'agricultura' && ( 
                 <> 
-                  <Group justify="space-between" mb="lg" align="center">
-                    <Group>
-                        <Title order={3}>Agricultura / Lotes</Title>
-                        <Badge size="xl" color="lime" circle>{lotes.length}</Badge>
-                    </Group>
-                    <Button leftSection={<IconPlus size={22}/>} color="lime" size="md" variant="filled" onClick={() => { setNombreLote(''); setHasLote(''); openModalAlta(); }} w={180} mr="md">Nuevo Lote</Button>
-                  </Group>
-
-                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                    {lotes.map(lote => {
-                        // Calcular animales en este lote
-                        const animalesEnLote = haciendaActiva.filter(a => a.lote_id === lote.id).length;
-                        return (
-                            <Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}>
-                                <Group justify="space-between" mb="xs">
-                                    <Text fw={700} size="lg">{lote.nombre}</Text>
-                                    <Badge color={lote.estado === 'SEMBRADO' ? 'green' : 'yellow'}>{lote.estado}</Badge>
-                                </Group>
-                                <Group mb="md" gap="xs">
-                                    <Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>
-                                    {lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}
-                                </Group>
-                                <Paper bg="gray.0" p="xs" radius="md" mt="sm">
-                                    <Group justify="space-between">
-                                        <Text size="xs" fw={700} c="dimmed">CARGA ANIMAL</Text>
-                                        <Badge color="blue" variant="light">{animalesEnLote} Cab</Badge>
-                                    </Group>
-                                </Paper>
-                                <Button variant="light" color="lime" fullWidth mt="md" radius="md">Gestionar Lote</Button>
-                            </Card>
-                        )
-                    })}
-                  </SimpleGrid>
+                  <Group justify="space-between" mb="lg" align="center"><Group><Title order={3}>Agricultura / Lotes</Title><Badge size="xl" color="lime" circle>{lotes.length}</Badge></Group><Button leftSection={<IconPlus size={22}/>} color="lime" size="md" variant="filled" onClick={() => { setNombreLote(''); setHasLote(''); openModalAlta(); }} w={180} mr="md">Nuevo Lote</Button></Group>
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>{lotes.map(lote => { const animalesEnLote = haciendaActiva.filter(a => a.lote_id === lote.id).length; return (<Card key={lote.id} shadow="sm" padding="lg" radius="md" withBorder style={{ cursor: 'pointer' }} onClick={() => abrirFichaLote(lote)}><Group justify="space-between" mb="xs"><Text fw={700} size="lg">{lote.nombre}</Text><Badge color={lote.estado === 'SEMBRADO' ? 'green' : 'yellow'}>{lote.estado}</Badge></Group><Group mb="md" gap="xs"><Badge variant="outline" color="gray">{lote.hectareas} Has</Badge>{lote.cultivo_actual && <Badge variant="dot" color="lime">{lote.cultivo_actual}</Badge>}</Group><Paper bg="gray.0" p="xs" radius="md" mt="sm"><Group justify="space-between"><Text size="xs" fw={700} c="dimmed">CARGA ANIMAL</Text><Badge color="blue" variant="light">{animalesEnLote} Cab</Badge></Group></Paper><Button variant="light" color="lime" fullWidth mt="md" radius="md">Gestionar Lote</Button></Card>)})}</SimpleGrid>
                   {lotes.length === 0 && <Text c="dimmed" ta="center" mt="xl">No hay lotes cargados.</Text>} 
                 </> 
               )}
@@ -987,142 +890,35 @@ export default function App() {
           </AppShell>
         )}
 
-      {/* --- MODAL NUEVO ANIMAL / LOTE (REUTILIZADO SEGUN SECCION) --- */}
       <Modal opened={modalAltaOpen} onClose={closeModalAlta} title={<Text fw={700} size="lg">{activeSection === 'agricultura' ? 'Nuevo Lote' : 'Alta de Nuevo Animal'}</Text>} centered>
-         <Stack>
-             {activeSection === 'agricultura' ? (
-                 <>
-                    <TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} />
-                    <TextInput label="Hectáreas" type="number" placeholder="Ej: 50" value={hasLote} onChange={(e) => setHasLote(e.target.value)} />
-                    <Button onClick={guardarLote} loading={loading} color="lime" fullWidth mt="md">Crear Lote</Button>
-                 </>
-             ) : (
-                 <>
-                    <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
-                    <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
-                    <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
-                    <Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button>
-                 </>
-             )}
-         </Stack>
+         <Stack>{activeSection === 'agricultura' ? ( <><TextInput label="Nombre del Lote" placeholder="Ej: Lote del Fondo" value={nombreLote} onChange={(e) => setNombreLote(e.target.value)} /><TextInput label="Hectáreas" type="number" placeholder="Ej: 50" value={hasLote} onChange={(e) => setHasLote(e.target.value)} /><Button onClick={guardarLote} loading={loading} color="lime" fullWidth mt="md">Crear Lote</Button></> ) : ( <><TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} /><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} /><Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} /><Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button></> )}</Stack>
       </Modal>
-
-      {/* --- MODAL EDICION DE EVENTO --- */}
       <Modal opened={modalEditEventOpen} onClose={closeModalEditEvent} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
-          <Stack>
-              <TextInput label="Fecha" type="date" value={getLocalDateForInput(editingEventDate)} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
-              <TextInput label="Resultado" value={editingEventRes} onChange={(e) => setEditingEventRes(e.target.value)}/>
-              <Textarea label="Detalle" value={editingEventDet} onChange={(e) => setEditingEventDet(e.target.value)}/>
-              <Button onClick={guardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button>
-          </Stack>
+          <Stack><TextInput label="Fecha" type="date" value={getLocalDateForInput(editingEventDate)} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/><TextInput label="Resultado" value={editingEventRes} onChange={(e) => setEditingEventRes(e.target.value)}/><Textarea label="Detalle" value={editingEventDet} onChange={(e) => setEditingEventDet(e.target.value)}/><Button onClick={guardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button></Stack>
       </Modal>
-
-      {/* --- MODAL GESTION CAMPOS --- */}
       <Modal opened={modalConfigOpen} onClose={closeModalConfig} title={<Text fw={700} size="lg">Mis Establecimientos</Text>} centered>
-         <Group align="flex-end" mb="lg">
-            <TextInput label="Nuevo Campo" placeholder="Nombre" value={nuevoCampoNombre} onChange={(e) => setNuevoCampoNombre(e.target.value)} style={{flex: 1}}/>
-            <Button onClick={crearCampo} leftSection={<IconPlus size={16}/>}>Crear</Button>
-         </Group>
-         <Stack>
-            {establecimientos.map(e => (
-                <Group key={e.id} justify="space-between" p="sm" bg="gray.0" style={{borderRadius: 8}}>
-                    <Group>
-                        <IconBuilding size={18} color="gray"/>
-                        <Text fw={500}>{e.nombre}</Text>
-                        {e.id === campoId && <Badge color="teal" size="sm">ACTIVO</Badge>}
-                    </Group>
-                    <Group gap="xs">
-                        <ActionIcon variant="subtle" color="blue" onClick={() => renombrarCampo(e.id, e.nombre)}><IconEdit size={16}/></ActionIcon>
-                        <ActionIcon variant="subtle" color="red" onClick={() => borrarCampo(e.id)}><IconTrash size={16}/></ActionIcon>
-                    </Group>
-                </Group>
-            ))}
-         </Stack>
+         <Group align="flex-end" mb="lg"><TextInput label="Nuevo Campo" placeholder="Nombre" value={nuevoCampoNombre} onChange={(e) => setNuevoCampoNombre(e.target.value)} style={{flex: 1}}/><Button onClick={crearCampo} leftSection={<IconPlus size={16}/>}>Crear</Button></Group>
+         <Stack>{establecimientos.map(e => (<Group key={e.id} justify="space-between" p="sm" bg="gray.0" style={{borderRadius: 8}}><Group><IconBuilding size={18} color="gray"/><Text fw={500}>{e.nombre}</Text>{e.id === campoId && <Badge color="teal" size="sm">ACTIVO</Badge>}</Group><Group gap="xs"><ActionIcon variant="subtle" color="blue" onClick={() => renombrarCampo(e.id, e.nombre)}><IconEdit size={16}/></ActionIcon><ActionIcon variant="subtle" color="red" onClick={() => borrarCampo(e.id)}><IconTrash size={16}/></ActionIcon></Group></Group>))}</Stack>
       </Modal>
-
-      {/* --- MODAL GRAFICO PESO --- */}
-      <Modal opened={modalGraficoOpen} onClose={closeModalGrafico} title={<Text fw={700} size="lg">Evolución de Peso: {animalSel?.caravana}</Text>} size="lg" centered zIndex={3000}>
-          {datosGrafico.length > 0 ? (
-              <>
-                  <div style={{ width: '100%', height: 300 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={datosGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="fecha" />
-                              <YAxis domain={['auto', 'auto']} />
-                              <Tooltip />
-                              <Line type="monotone" dataKey="peso" stroke="#82ca9d" strokeWidth={3} activeDot={{ r: 8 }} />
-                          </LineChart>
-                      </ResponsiveContainer>
-                  </div>
-                  <SimpleGrid cols={3} mt="lg">
-                      <Paper withBorder p="xs" ta="center">
-                          <Text size="xs" c="dimmed" fw={700} tt="uppercase">Peso Inicial</Text>
-                          <Text fw={700} size="lg">{statsGrafico.inicio} kg</Text>
-                      </Paper>
-                      <Paper withBorder p="xs" ta="center">
-                          <Text size="xs" c="dimmed" fw={700} tt="uppercase">Ganancia Total</Text>
-                          <Text fw={700} size="lg" c={statsGrafico.ganancia > 0 ? 'teal' : 'red'}>{statsGrafico.ganancia > 0 ? '+' : ''}{statsGrafico.ganancia} kg</Text>
-                      </Paper>
-                      <Paper withBorder p="xs" ta="center">
-                          <Text size="xs" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text>
-                          <Text fw={700} size="lg" c="blue">{statsGrafico.adpv} kg/día</Text>
-                      </Paper>
-                  </SimpleGrid>
-              </>
-          ) : (
-              <Alert color="blue" title="Sin datos">
-                  Este animal no tiene suficientes registros de peso para generar una curva.
-              </Alert>
-          )}
+      <Modal opened={modalGraficoOpen} onClose={closeModalGrafico} title={<Text fw={700} size="lg">Evolución de Peso</Text>} size="lg" centered zIndex={3000}>
+          <Select label="Caravana a graficar" placeholder="Buscar Caravana" searchable data={animales.map(a => ({ value: a.id, label: `Caravana: ${a.caravana} (${a.categoria})` }))} value={graficoAnimalId} onChange={setGraficoAnimalId} comboboxProps={{ zIndex: 3005 }} mb="md" />
+          {loadingGrafico ? (<Text ta="center" c="dimmed" my="xl">Cargando datos...</Text>) : datosGrafico.length > 0 ? (
+              <><div style={{ width: '100%', height: 300 }}><ResponsiveContainer width="100%" height="100%"><LineChart data={datosGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="fecha" /><YAxis domain={['auto', 'auto']} /><Tooltip content={<CustomTooltip />} /><Line type="monotone" dataKey="peso" stroke="#82ca9d" strokeWidth={3} activeDot={{ r: 8 }} /></LineChart></ResponsiveContainer></div>
+                  <SimpleGrid cols={3} mt="lg"><Paper withBorder p="xs" ta="center"><Text size="xs" c="dimmed" fw={700} tt="uppercase">Peso Inicial</Text><Text fw={700} size="lg">{statsGrafico.inicio} kg</Text></Paper><Paper withBorder p="xs" ta="center"><Text size="xs" c="dimmed" fw={700} tt="uppercase">Ganancia Total</Text><Text fw={700} size="lg" c={statsGrafico.ganancia > 0 ? 'teal' : 'red'}>{statsGrafico.ganancia > 0 ? '+' : ''}{statsGrafico.ganancia} kg</Text></Paper><Paper withBorder p="xs" ta="center"><Text size="xs" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text><Text fw={700} size="lg" c="blue">{statsGrafico.adpv} kg/día</Text></Paper></SimpleGrid></>
+          ) : (<Alert color="blue" title="Sin datos">Este animal no tiene suficientes registros de peso para generar una curva.</Alert>)}
       </Modal>
-
       <Modal opened={modalVacaOpen} onClose={handleCloseModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
-         <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal">
-           <Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
+         <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal"><Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
            <Tabs.Panel value="historia">
-              {esActivo ? (
-                <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}{/* COSTO INDIVIDUAL */}<TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>{adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper>
-              ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
+              {esActivo ? ( <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>{tipoEventoInput === 'TACTO' && ( <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} mb="sm" comboboxProps={{ zIndex: 200005 }}/> )}{tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>{adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper> ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
            <Tabs.Panel value="datos">
               <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={abrirGraficoPeso}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>
-              <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} />
-              <Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
+              <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} /><Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
               {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
-              {/* --- NUEVO DISEÑO CARTEL (CONSULTA DIRECTA) --- */}
-              {nombresTorosCartel && (
-                  <Paper withBorder p="xs" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '4px solid #fa5252' }}>
-                      <Group gap="xs">
-                          <ThemeIcon color="pink" variant="light" size="sm"><IconInfoCircle size={14}/></ThemeIcon>
-                          <Text size="sm" c="pink.9">En servicio con Toro/s: <Text span fw={700}>{nombresTorosCartel}</Text></Text>
-                      </Group>
-                  </Paper>
-              )}
-              {['Vaca'].includes(editCategoria || '') && ( 
-                <Paper withBorder p="xs" mb="sm" bg="teal.0">
-                    <Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>
-                    {hijos.length > 0 ? ( 
-                        <Group gap="xs" mt={5}>
-                            {hijos.map(h => {
-                                const isGone = ['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(h.estado);
-                                return (
-                                    <Badge 
-                                        key={h.id} 
-                                        variant={isGone ? 'light' : 'white'} 
-                                        style={{ cursor: 'pointer', opacity: isGone ? 0.5 : 1 }}
-                                        color={h.sexo === 'H' ? 'pink' : 'blue'}
-                                        onClick={() => navegarAHijo(h.id)}
-                                    >
-                                        {h.caravana}
-                                    </Badge>
-                                )
-                            })}
-                        </Group> 
-                    ) : <Text size="xs" c="dimmed">Sin registros</Text>}
-                </Paper> 
-              )}
+              {nombresTorosCartel && ( <Paper withBorder p="xs" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '4px solid #fa5252' }}><Group gap="xs"><ThemeIcon color="pink" variant="light" size="sm"><IconInfoCircle size={14}/></ThemeIcon><Text size="sm" c="pink.9">En servicio con Toro/s: <Text span fw={700}>{nombresTorosCartel}</Text></Text></Group></Paper> )}
+              {['Vaca'].includes(editCategoria || '') && ( <Paper withBorder p="xs" mb="sm" bg="teal.0"><Text size="xs" fw={700} c="teal">HIJOS REGISTRADOS:</Text>{hijos.length > 0 ? ( <Group gap="xs" mt={5}>{hijos.map(h => { const isGone = ['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(h.estado); return (<Badge key={h.id} variant={isGone ? 'light' : 'white'} style={{ cursor: 'pointer', opacity: isGone ? 0.5 : 1 }} color={h.sexo === 'H' ? 'pink' : 'blue'} onClick={() => navegarAHijo(h.id)}>{h.caravana}</Badge>)})}</Group> ) : <Text size="xs" c="dimmed">Sin registros</Text>}</Paper> )}
               <MultiSelect label="Condición Sanitaria" data={['ENFERMA', 'LASTIMADA']} value={editCondicion} onChange={setEditCondicion} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} leftSection={<IconHeartbeat size={16}/>} mb="sm" placeholder="SANA"/>
               {editCategoria === 'Ternero' && editSexo === 'M' && ( <Group justify="space-between" mb="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}><Group gap="xs"><IconScissors size={18}/> <Text size="sm" fw={500}>Condición Sexual</Text></Group><Switch size="lg" onLabel="CAPADO" offLabel="ENTERO" checked={editCastrado} onChange={(e) => setEditCastrado(e.currentTarget.checked)} disabled={!esActivo} /></Group> )}
               <Group grow mb="xl"><TextInput label="Fecha Nacimiento" type="date" value={editFechaNac} onChange={(e) => setEditFechaNac(e.target.value)} disabled={!esActivo} /><TextInput label="Fecha Ingreso" type="date" value={editFechaIngreso} onChange={(e) => setEditFechaIngreso(e.target.value)} disabled={!esActivo} /></Group>
@@ -1131,37 +927,14 @@ export default function App() {
          </Tabs>
       </Modal>
       <Modal opened={modalLoteOpen} onClose={closeModalLote} title={<Text fw={700} size="lg">Lote: {loteSel?.nombre}</Text>} size="lg" centered zIndex={2000}>
-         <Tabs defaultValue="labores" color="lime">
-            <Tabs.List grow mb="md"><Tabs.Tab value="labores">Labores</Tabs.Tab><Tabs.Tab value="animales">Hacienda</Tabs.Tab></Tabs.List>
-            
+         <Tabs defaultValue="labores" color="lime"><Tabs.List grow mb="md"><Tabs.Tab value="labores">Labores</Tabs.Tab><Tabs.Tab value="animales">Hacienda</Tabs.Tab></Tabs.List>
             <Tabs.Panel value="labores">
-                <Paper withBorder p="sm" bg="lime.0" mb="md">
-                    <Text size="sm" fw={700} mb="xs">Nueva Labor</Text>
-                    <Group grow mb="sm"><Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadLote} onChange={setActividadLote} comboboxProps={{ zIndex: 200005 }}/><TextInput placeholder="Cultivo / Producto" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} /></Group>
-                    <Group grow mb="sm"><TextInput placeholder="Costo ($)" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={costoLabor} onChange={(e) => setCostoLabor(e.target.value)}/><Textarea placeholder="Detalle..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} rows={1}/></Group>
-                    <Button fullWidth size="xs" onClick={guardarLabor} color="lime" variant="filled">Registrar</Button>
-                </Paper>
+                <Paper withBorder p="sm" bg="lime.0" mb="md"><Text size="sm" fw={700} mb="xs">Nueva Labor</Text><Group grow mb="sm"><Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadLote} onChange={setActividadLote} comboboxProps={{ zIndex: 200005 }}/><TextInput placeholder="Cultivo / Producto" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} /></Group><Group grow mb="sm"><TextInput placeholder="Costo ($)" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={costoLabor} onChange={(e) => setCostoLabor(e.target.value)}/><Textarea placeholder="Detalle..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} rows={1}/></Group><Button fullWidth size="xs" onClick={guardarLabor} color="lime" variant="filled">Registrar</Button></Paper>
                 <ScrollArea h={300}>{laboresFicha.length === 0 ? <Text c="dimmed" size="sm">Sin labores registradas.</Text> : (<Table striped><Table.Tbody>{laboresFicha.map(labor => (<Table.Tr key={labor.id}><Table.Td><Text size="xs" c="dimmed">{formatDate(labor.fecha)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{labor.actividad}</Text>{labor.cultivo && <Badge size="xs" color="lime">{labor.cultivo}</Badge>}</Table.Td><Table.Td><Text size="sm">{labor.detalle}</Text></Table.Td><Table.Td><Text size="sm" fw={700} c="dimmed">${labor.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarLabor(labor.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table>)}</ScrollArea>
                 <Button fullWidth color="red" variant="subtle" mt="xl" onClick={() => borrarLote(loteSel!.id)}>Borrar Lote</Button>
             </Tabs.Panel>
-
             <Tabs.Panel value="animales">
-                {/* Lista de animales que estan actualmente en este lote */}
-                <ScrollArea h={400}>
-                    <Table>
-                        <Table.Thead><Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th></Table.Tr></Table.Thead>
-                        <Table.Tbody>
-                            {haciendaActiva.filter(a => a.lote_id === loteSel?.id).length > 0 ? (
-                                haciendaActiva.filter(a => a.lote_id === loteSel?.id).map(a => (
-                                    <Table.Tr key={a.id}>
-                                        <Table.Td fw={700}>{a.caravana}</Table.Td>
-                                        <Table.Td>{a.categoria}</Table.Td>
-                                    </Table.Tr>
-                                ))
-                            ) : <Text c="dimmed" size="sm" p="md">No hay animales en este lote.</Text>}
-                        </Table.Tbody>
-                    </Table>
-                </ScrollArea>
+                <ScrollArea h={400}><Table><Table.Thead><Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{haciendaActiva.filter(a => a.lote_id === loteSel?.id).length > 0 ? (haciendaActiva.filter(a => a.lote_id === loteSel?.id).map(a => (<Table.Tr key={a.id}><Table.Td fw={700}>{a.caravana}</Table.Td><Table.Td>{a.categoria}</Table.Td></Table.Tr>))) : <Text c="dimmed" size="sm" p="md">No hay animales en este lote.</Text>}</Table.Tbody></Table></ScrollArea>
             </Tabs.Panel>
          </Tabs>
       </Modal>
