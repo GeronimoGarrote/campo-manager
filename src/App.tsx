@@ -8,7 +8,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { 
   IconList, IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, 
   IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
-  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle, IconChartDots
+  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle, IconChartDots, IconDownload
 } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import '@mantine/core/styles.css';
@@ -697,6 +697,41 @@ export default function App() {
   // BLOQUE DE ESTADÍSTICAS Y VARIABLES AUXILIARES
   // ------------------------------------------------------------------
 
+  // --- EXPORTAR A EXCEL (CSV) ---
+  const exportarAExcel = () => {
+    if (animalesFiltrados.length === 0) return alert("No hay datos para exportar");
+
+    // 1. Definir Cabeceras
+    const cabeceras = ['Caravana', 'Categoria', 'Sexo', 'Estado', 'Condicion Sanitaria', 'Lote', 'Fecha Ingreso'];
+
+    // 2. Mapear los datos de la tabla visible
+    const filas = animalesFiltrados.map(a => [
+        a.caravana,
+        a.categoria,
+        a.sexo === 'M' ? 'Macho' : 'Hembra',
+        a.estado,
+        a.condicion || 'SANA',
+        getNombreLote(a.lote_id) || 'Sin Lote',
+        a.fecha_ingreso ? formatDate(a.fecha_ingreso) : '-'
+    ]);
+
+    // 3. Unir todo con punto y coma (Formato Excel ES-AR)
+    const contenidoCsv = [
+        cabeceras.join(';'),
+        ...filas.map(fila => fila.join(';'))
+    ].join('\n');
+
+    // 4. Crear el archivo en memoria y forzar descarga (\ufeff es para que los acentos se vean bien)
+    const blob = new Blob(["\ufeff", contenidoCsv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Hacienda_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
 
   const stats = {
@@ -864,8 +899,20 @@ export default function App() {
               {(activeSection === 'hacienda' || activeSection === 'bajas') && (
                 <>
                   <Group justify="space-between" mb="lg" align="center">
-                    <Group><Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title><Badge size="xl" circle>{animalesFiltrados.length}</Badge></Group>
-                    {activeSection === 'hacienda' && (<Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180} mr="md">Nuevo Animal</Button>)}
+                    <Group>
+                        <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda' : 'Archivo Bajas'}</Title>
+                        <Badge size="xl" circle>{animalesFiltrados.length}</Badge>
+                    </Group>
+                    <Group gap="sm" mr="md">
+                        <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel}>
+                            Excel
+                        </Button>
+                        {activeSection === 'hacienda' && (
+                            <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180}>
+                                Nuevo Animal
+                            </Button>
+                        )}
+                    </Group>
                   </Group>
                   <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0"><Group grow align="flex-end"><TextInput label="Buscar" placeholder="Caravana..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable /><MultiSelect label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable /></Group></Paper>
                   <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
