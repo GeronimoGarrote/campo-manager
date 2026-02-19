@@ -556,7 +556,7 @@ export default function App() {
     if (animal.madre_id) { const m = animales.find(a => a.id === animal.madre_id); setMadreCaravana(m ? m.caravana : 'Desconocida'); } else { setMadreCaravana(''); }
     
     setHijos([]); 
-    const { data: dataHijos } = await supabase.from('animales').select('id, caravana, sexo, estado').eq('madre_id', animal.id);
+    const { data: dataHijos } = await supabase.from('animales').select('id, caravana, sexo, estado').eq('madre_id', animal.id).neq('estado', 'ELIMINADO');
     if(dataHijos) setHijos(dataHijos);
 
     setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setUltimoPeso('Calculando...'); setPesoNacimiento(''); setCostoEvento('');
