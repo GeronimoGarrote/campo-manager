@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { 
   MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, 
   Paper, TextInput, Select, Button, Table, Badge, Tabs, 
-  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox, PasswordInput, Container, Tooltip, Indicator, Popover
+  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox, PasswordInput, Container, Tooltip, Indicator, Popover, Grid
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { 
@@ -35,6 +35,7 @@ interface AgendaItem { id: string; establecimiento_id: string; fecha_programada:
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
+const diasDiferencia = (fechaFuturaStr: string) => { const hoy = new Date(); hoy.setHours(0,0,0,0); const fechaParto = new Date(fechaFuturaStr); fechaParto.setHours(0,0,0,0); const diffTime = fechaParto.getTime() - hoy.getTime(); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); return diffDays; };
 
 interface ThProps { children: React.ReactNode; reversed: boolean; sorted: boolean; onSort(): void; }
 function Th({ children, reversed, sorted, onSort }: ThProps) {
@@ -89,6 +90,28 @@ const CustomTooltip = ({ active, payload }: any) => {
         );
     }
     return null;
+};
+
+const getIconoEvento = (tipo: string) => {
+    switch(tipo) {
+        case 'PESAJE': return <ThemeIcon color="blue" size="md" variant="light" radius="xl"><IconChartDots size={14}/></ThemeIcon>;
+        case 'VACUNACION': 
+        case 'SANIDAD':
+        case 'TRATAMIENTO':
+        case 'ENFERMEDAD':
+        case 'LESION':
+        case 'CURACION': return <ThemeIcon color="red" size="md" variant="light" radius="xl"><IconHeartbeat size={14}/></ThemeIcon>;
+        case 'TACTO':
+        case 'SERVICIO':
+        case 'PARTO': return <ThemeIcon color="pink" size="md" variant="light" radius="xl"><IconBabyCarriage size={14}/></ThemeIcon>;
+        case 'MOVIMIENTO_POTRERO':
+        case 'CAMBIO_LOTE': return <ThemeIcon color="orange" size="md" variant="light" radius="xl"><IconMapPin size={14}/></ThemeIcon>;
+        case 'VENTA': return <ThemeIcon color="green" size="md" variant="light" radius="xl"><IconCurrencyDollar size={14}/></ThemeIcon>;
+        case 'BAJA':
+        case 'MUERTO':
+        case 'BORRADO': return <ThemeIcon color="dark" size="md" variant="light" radius="xl"><IconSkull size={14}/></ThemeIcon>;
+        default: return <ThemeIcon color="gray" size="md" variant="light" radius="xl"><IconActivity size={14}/></ThemeIcon>;
+    }
 };
 
 export default function App() {
@@ -284,8 +307,8 @@ export default function App() {
           const ultimoPesaje = eventosFicha.find(e => e.tipo === 'PESAJE');
           if (ultimoPesaje && fechaEvento) {
               const pesoViejo = parseFloat(ultimoPesaje.resultado.replace(/[^0-9.]/g, ''));
-              const pesoNuevo = parseFloat(resultadoInput.replace(/[^0-9.]/g, ''));
-              if (!isNaN(pesoViejo) && !isNaN(pesoNuevo)) {
+              const pesoNuevo = parseFloat(resultadoInput.replace(/[^\d.-]/g, ''));
+              if (!isNaN(pesoViejo) && !isNaN(pesoNuevo) && pesoNuevo > 0) {
                   const fechaVieja = new Date(ultimoPesaje.fecha_evento); const diffTime = Math.abs(fechaEvento.getTime() - fechaVieja.getTime()); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
                   if (diffDays > 0) { const ganancia = pesoNuevo - pesoViejo; const adpv = ganancia / diffDays; setAdpvCalculado(`${adpv.toFixed(3)} kg/día (${diffDays} días)`); }
               }
@@ -330,6 +353,12 @@ export default function App() {
   const tareasPendientesUrgentes = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
   const tareasParaHoy = agenda.filter(t => !t.completado && t.fecha_programada === hoyFormateado);
   const tareasAtrasadas = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
+
+  const partosProximos = useMemo(() => {
+    return agenda
+        .filter(tarea => tarea.tipo === 'PARTO_ESTIMADO' && !tarea.completado && tarea.fecha_programada >= hoyFormateado)
+        .sort((a, b) => a.fecha_programada.localeCompare(b.fecha_programada));
+  }, [agenda, hoyFormateado]);
 
   // --- FUNCIONES SINGULARES ---
   async function recargarFicha(id: string) {
@@ -474,7 +503,7 @@ export default function App() {
     if (massActividad === 'CAPADO') {
         const machos = animales.filter(a => selectedIds.includes(a.id) && a.sexo === 'M' && a.categoria === 'Ternero'); idsParaProcesar = machos.map(a => a.id);
         const descartados = selectedIds.length - idsParaProcesar.length;
-        if (idsParaProcesar.length === 0) return alert("Error: No hay Terneros Machos en la selection.");
+        if (idsParaProcesar.length === 0) return alert("Error: No hay Terneros Machos en la selección.");
         if (descartados > 0) mensajeConfirmacion = `⚠️ ATENCIÓN: Se detectaron ${descartados} animales inválidos.\nSolo se capará a ${idsParaProcesar.length} TERNEROS MACHOS.\n\n¿Continuar?`;
         else mensajeConfirmacion = `¿Confirmar CAPADO para ${idsParaProcesar.length} terneros?`;
     }
@@ -765,13 +794,18 @@ export default function App() {
   }
 
   // --- ACCIONES VACA INDIVIDUAL ---
-  async function guardarAnimal() {
+  async function guardarAnimal(cerrarModal: boolean = true) {
     if (!caravana || !campoId) return;
     const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravana.toLowerCase() && a.estado !== 'ELIMINADO');
     if (yaExiste) return alert("❌ ERROR: Ya existe un animal con esa caravana.");
     setLoading(true); const hoy = new Date().toISOString().split('T')[0];
     const { error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'PROPIO', fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId }]);
-    setLoading(false); if (!error) { setCaravana(''); fetchAnimales(); closeModalAlta(); }
+    setLoading(false); 
+    if (!error) { 
+        setCaravana(''); 
+        fetchAnimales(); 
+        if (cerrarModal) closeModalAlta(); 
+    }
   }
 
   async function abrirFichaVaca(animal: Animal) {
@@ -830,6 +864,20 @@ export default function App() {
       if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
       const yaExiste = animales.some(a => a.caravana.toLowerCase() === nuevoTerneroCaravana.toLowerCase() && a.estado !== 'ELIMINADO');
       if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal con esa caravana."); }
+      
+      if (pesoNacimiento) {
+          if (pesoNacimiento.includes('-')) {
+              setLoading(false);
+              return alert("❌ ERROR: No se permiten pesos negativos.");
+          }
+          const pesoClean = pesoNacimiento.replace(/[^\d.]/g, '');
+          const pesoNacNum = parseFloat(pesoClean);
+          if (isNaN(pesoNacNum) || pesoNacNum <= 0) {
+              setLoading(false);
+              return alert("❌ ERROR: El peso de nacimiento debe ser un número positivo mayor a 0.");
+          }
+      }
+
       const fechaParto = fechaEvento.toISOString().split('T')[0];
       const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, potrero_id: animalSel.potrero_id, parcela_id: animalSel.parcela_id, lote_id: animalSel.lote_id }]).select().single();
       if (err) { setLoading(false); return alert("Error: " + err.message); }
@@ -852,6 +900,19 @@ export default function App() {
         } else { resultadoFinal = 'IA'; }
     }
     else if (tipoEventoInput === 'APARTADO') { if(animalSel.categoria === 'Toro') { nuevoEstado = 'APARTADO'; await desvincularToroDeVacas(animalSel.id); } }
+
+    if (tipoEventoInput === 'PESAJE') {
+        if (resultadoInput.includes('-')) {
+            setLoading(false);
+            return alert("❌ ERROR: No se permiten pesos negativos.");
+        }
+        const pesoClean = resultadoInput.replace(/[^\d.]/g, ''); 
+        const pesoNum = parseFloat(pesoClean);
+        if (isNaN(pesoNum) || pesoNum <= 0) {
+            setLoading(false);
+            return alert("❌ ERROR: El peso ingresado debe ser un número positivo mayor a 0.");
+        }
+    }
 
     const { error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: datosExtra, costo: Number(costoEvento), establecimiento_id: campoId }]);
     const stringCondicion = nuevasCondiciones.length > 0 ? nuevasCondiciones.join(', ') : 'SANA'; const updates: any = { condicion: stringCondicion, castrado: esCastrado }; 
@@ -1096,34 +1157,135 @@ export default function App() {
               {activeSection === 'inicio' && (
                 <>
                   <Title order={2} mb="lg">Resumen General</Title>
+                  
+                  {/* FILA 1: KPIs Rápidos */}
                   <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="xl">
                     <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="blue"><IconList/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TOTAL HACIENDA</Text><Text fw={700} size="xl">{stats.total}</Text></div></Group></Card>
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} Machos / {stats.ternerosH} Hembras)</Text></div></Group></Card>
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
                     <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VIENTRES)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {totalVientres}</Text></div></Group></Card>
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} M / {stats.ternerosH} H)</Text></div></Group></Card>
+                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
                   </SimpleGrid>
-                  <SimpleGrid cols={{ base: 1, md: 2 }}>
-                    <Card shadow="sm" radius="md" withBorder>
-                        <Text fw={700} mb="md">Últimos Movimientos</Text>
-                        <Stack gap="xs">{eventosGlobales.slice(0, 5).map(ev => (<Paper key={ev.id} p="xs" withBorder bg="gray.0"><Group justify="space-between"><Group gap="xs"><Badge size="sm" variant="dot" color="blue">{ev.tipo}</Badge><Text size="sm" fw={500}>Animal: {ev.animales?.caravana}</Text></Group><Text size="xs" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Group><Text size="xs" c="dimmed" mt={4}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text></Paper>))}</Stack>
-                        <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
-                    </Card>
-                    <Card shadow="sm" radius="md" withBorder>
-                        <Text fw={700} mb="md">Distribución del Rodeo</Text>
-                        <Group justify="center">
-                            <RingProgress size={220} thickness={20} label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
-                                sections={[
-                                    { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
-                                    { value: (stats.vaquillonas / stats.total) * 100, color: 'pink', tooltip: 'Vaquillonas', onMouseEnter: () => setChartHover({label: 'VAQUILLONAS', value: stats.vaquillonas}), onMouseLeave: () => setChartHover(null) },
-                                    { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
-                                    { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
-                                    { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
-                                ]}
-                            />
-                        </Group>
-                        <Group justify="center" gap="md" mt="md"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="pink"/><Text size="xs">Vaq.</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
-                    </Card>
-                  </SimpleGrid>
+                  
+                  {/* FILA 2: Dashboard Principal (7/5) */}
+                  <Grid gutter="lg" align="flex-start">
+                    
+                    {/* COLUMNA IZQUIERDA (7) - Partos y Urgencias */}
+                    <Grid.Col span={{ base: 12, md: 7 }}>
+                      <Card shadow="sm" radius="md" p="md" withBorder mb="md">
+                          <Group gap="xs" mb="sm">
+                              <ThemeIcon size="lg" radius="md" color={partosProximos.length > 0 ? "teal" : "orange"}>
+                                  {partosProximos.length > 0 ? <IconBabyCarriage size={20} /> : <IconCalendarEvent size={20} />}
+                              </ThemeIcon>
+                              <Text fw={700} size="xl">{partosProximos.length > 0 ? "Próximos Partos" : "Tareas para Hoy"}</Text>
+                              {partosProximos.length > 0 && <Badge color="teal" variant="light">{partosProximos.length} en espera</Badge>}
+                              {partosProximos.length === 0 && tareasParaHoy.length > 0 && <Badge color="orange" variant="light">{tareasParaHoy.length} pendientes</Badge>}
+                          </Group>
+                          
+                          <ScrollArea h={500} offsetScrollbars>
+                              {partosProximos.length > 0 ? (
+                                  <Table striped stickyHeader>
+                                      <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Fecha Est.</Table.Th><Table.Th>Vaca</Table.Th><Table.Th>Ubicación</Table.Th></Table.Tr></Table.Thead>
+                                      <Table.Tbody>
+                                          {partosProximos.map(parto => {
+                                              const vacaVal = animales.find(a => a.id === parto.animal_id);
+                                              const diasFaltan = diasDiferencia(parto.fecha_programada);
+                                              const colorBadge = diasFaltan < 7 ? 'red' : diasFaltan < 15 ? 'orange' : 'teal';
+                                              return (
+                                                  <Table.Tr key={parto.id}>
+                                                      <Table.Td>
+                                                          <Group gap="xs">
+                                                              <Text size="sm" fw={700} c={colorBadge}>
+                                                                  {formatDate(parto.fecha_programada)}
+                                                              </Text>
+                                                              <Badge size="sm" color={colorBadge} variant="light">{diasFaltan} días</Badge>
+                                                          </Group>
+                                                      </Table.Td>
+                                                      <Table.Td>
+                                                          <Text fw={700} size="sm">{vacaVal?.caravana || '?'}</Text>
+                                                      </Table.Td>
+                                                      <Table.Td>
+                                                          {vacaVal ? getUbicacionCompleta(vacaVal.potrero_id, vacaVal.parcela_id) : '-'}
+                                                      </Table.Td>
+                                                  </Table.Tr>
+                                              );
+                                          })}
+                                      </Table.Tbody>
+                                  </Table>
+                              ) : tareasParaHoy.length > 0 ? (
+                                  <Stack gap="xs" p="xs" mt="sm">
+                                      {tareasParaHoy.map(tarea => (
+                                          <Paper key={tarea.id} p="md" withBorder shadow="sm" radius="md" style={{ borderLeft: `4px solid #fd7e14` }}>
+                                              <Group justify="space-between" align="center" wrap="nowrap">
+                                                  <Checkbox size="lg" color="green" checked={tarea.completado} onChange={() => toggleCompletadoTarea(tarea.id, tarea.completado)} />
+                                                  <div style={{ flex: 1 }}>
+                                                      <Text fw={700} size="md" c="dark">{tarea.titulo}</Text>
+                                                      {tarea.descripcion && <Text size="sm" c="dimmed" mt={4}>{tarea.descripcion}</Text>}
+                                                  </div>
+                                                  <ActionIcon variant="subtle" color="red" onClick={() => borrarTareaAgenda(tarea.id)}><IconTrash size={18}/></ActionIcon>
+                                              </Group>
+                                          </Paper>
+                                      ))}
+                                  </Stack>
+                              ) : (
+                                  <Center h="100%" style={{ display: 'flex', flexDirection: 'column', paddingTop: '2rem' }}>
+                                      <ThemeIcon size={80} radius="100%" variant="light" color="gray" mb="md">
+                                          <IconCheck size={40} />
+                                      </ThemeIcon>
+                                      <Text c="dimmed" size="lg" fw={700}>¡Todo al día!</Text>
+                                      <Text c="dimmed" size="sm">No hay partos próximos ni tareas para hoy.</Text>
+                                  </Center>
+                              )}
+                          </ScrollArea>
+                      </Card>
+                    </Grid.Col>
+
+                    {/* COLUMNA DERECHA (5) - Rodeo y Movimientos */}
+                    <Grid.Col span={{ base: 12, md: 5 }}>
+                      <Stack gap="md">
+                          <Card shadow="sm" radius="md" p="md" withBorder>
+                              <Text fw={700} mb="sm">Distribución del Rodeo</Text>
+                              <Center>
+                                  <RingProgress size={200} thickness={18} label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
+                                      sections={[
+                                          { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
+                                          { value: (stats.vaquillonas / stats.total) * 100, color: 'pink', tooltip: 'Vaquillonas', onMouseEnter: () => setChartHover({label: 'VAQUILLONAS', value: stats.vaquillonas}), onMouseLeave: () => setChartHover(null) },
+                                          { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
+                                          { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
+                                          { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
+                                      ]}
+                                  />
+                              </Center>
+                              <Group justify="center" gap="xs" mt="sm"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="pink"/><Text size="xs">Vaq.</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
+                          </Card>
+
+                          <Card shadow="sm" radius="md" p="md" withBorder>
+                              <Group gap="xs" mb="sm">
+                                  <ThemeIcon size="lg" radius="md" color="blue">
+                                      <IconActivity size={20} />
+                                  </ThemeIcon>
+                                  <Text fw={700} size="lg">Últimos Movimientos</Text>
+                              </Group>
+                              <ScrollArea h={240} offsetScrollbars>
+                                  <Stack gap="xs" mt="xs">
+                                      {eventosGlobales.slice(0, 10).map(ev => (
+                                          <Group key={ev.id} wrap="nowrap" align="flex-start" gap="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}>
+                                              {getIconoEvento(ev.tipo)}
+                                              <div style={{ flex: 1 }}>
+                                                  <Group justify="space-between" mb={2}>
+                                                      <Text size="sm" fw={700}>{ev.tipo} <Text span c="dimmed" fw={400}>• {ev.animales?.caravana || 'Lote'}</Text></Text>
+                                                      <Text size="xs" c="dimmed">{formatDate(ev.fecha_evento)}</Text>
+                                                  </Group>
+                                                  <Text size="xs" c="dimmed" lineClamp={1}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text>
+                                              </div>
+                                          </Group>
+                                      ))}
+                                  </Stack>
+                              </ScrollArea>
+                              <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
+                          </Card>
+                      </Stack>
+                    </Grid.Col>
+                  </Grid>
                 </>
               )}
 
@@ -1536,7 +1698,7 @@ export default function App() {
                                   <Paper withBorder p="md" bg="lime.0" mb="lg" radius="md">
                                       <Text size="sm" fw={700} mb="xs" c="lime.9">Registrar Nueva Labor</Text>
                                       <Group grow mb="sm">
-                                          <Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadPotrero} onChange={setActividadPotrero}/>
+                                          <Select data={['SIEM बुन्देल', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadPotrero} onChange={setActividadPotrero}/>
                                           <TextInput placeholder="Cultivo / Producto" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} />
                                       </Group>
                                       <Group grow mb="sm">
@@ -1632,7 +1794,15 @@ export default function App() {
          <Stack>
             {activeSection === 'agricultura' ? ( <><TextInput label="Nombre del Potrero" placeholder="Ej: Potrero del Fondo" value={nombrePotrero} onChange={(e) => setNombrePotrero(e.target.value)} /><TextInput label="Hectáreas" type="number" placeholder="Ej: 50" value={hasPotrero} onChange={(e) => setHasPotrero(e.target.value)} /><Button onClick={guardarPotrero} loading={loading} color="lime" fullWidth mt="md">Crear Potrero</Button></> ) : 
              activeSection === 'lotes' ? ( <><TextInput label="Nombre del Lote (Grupo)" placeholder="Ej: Recría 2026" value={nuevoLoteNombre} onChange={(e) => setNuevoLoteNombre(e.target.value)} /><Button onClick={crearLoteGrupo} loading={loading} color="grape" fullWidth mt="md">Crear Lote</Button></> ) :
-             ( <><TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} /><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} /><Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} /><Button onClick={guardarAnimal} loading={loading} color="teal" fullWidth mt="md">Guardar Animal</Button></> )}
+             ( <>
+                <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
+                <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
+                <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
+                <Group grow mt="md">
+                    <Button onClick={() => guardarAnimal(false)} loading={loading} color="teal" variant="outline">Guardar y agregar otro</Button>
+                    <Button onClick={() => guardarAnimal(true)} loading={loading} color="teal">Guardar y cerrar</Button>
+                </Group>
+             </> )}
          </Stack>
       </Modal>
       
@@ -1675,7 +1845,7 @@ export default function App() {
                       )}
                   </Group>
               )}
-               
+              
               {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}{tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}{!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}<TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>{adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}<Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper> ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está archivado. Solo lectura.</Alert> )}
               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && <Badge size="xs" color="pink" variant="outline" ml="xs">Toro/s: {ev.datos_extra.toros_caravanas}</Badge>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
            </Tabs.Panel>
