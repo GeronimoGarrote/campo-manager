@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import Economia from './Economia';
 import { 
   MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, 
   Paper, TextInput, Select, Button, Table, Badge, Tabs, 
@@ -1132,17 +1133,24 @@ export default function App() {
             <AppShell.Navbar p="md" style={{ display: 'flex', flexDirection: 'column' }}>
               <ScrollArea style={{ flex: 1 }} offsetScrollbars>
                   <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md" style={{ borderRadius: 8 }}/>
+                  
                   <Text size="xs" fw={700} c="dimmed" mb="sm" mt="md">GANADERÍA</Text>
                   <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Lotes y Nutrición" leftSection={<IconTag size={20}/>} active={activeSection === 'lotes' || activeSection === 'lote_detalle'} onClick={() => { setActiveSection('lotes'); toggle(); }} color="grape" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Agenda / Tareas" leftSection={<IconCalendarEvent size={20}/>} active={activeSection === 'agenda'} onClick={() => { setActiveSection('agenda'); toggle(); }} color="orange" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" style={{ borderRadius: 8 }}/>
+                  
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
                   <NavLink label="Potreros y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura' || activeSection === 'potrero_detalle'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }}/>
+                  
+                  <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">ADMINISTRACIÓN</Text>
+                  <NavLink label="Caja / Economía" leftSection={<IconCurrencyDollar size={20}/>} active={activeSection === 'economia'} onClick={() => { setActiveSection('economia'); toggle(); }} color="green" variant="filled" style={{ borderRadius: 8 }}/>
+                  
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
                   <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }}/>
               </ScrollArea>
+              
               <AppShell.Section style={{ borderTop: '1px solid #eee', paddingTop: '1rem', marginTop: '1rem' }}>
                   <Text size="xs" fw={700} c="dimmed" mb="xs" ml={4}>ESTABLECIMIENTO</Text>
                   <Group wrap="nowrap" gap="xs" mb="sm">
@@ -1802,6 +1810,9 @@ export default function App() {
               )}
               
               {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO', 'TRATAMIENTO', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'OTRO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th><Table.Th>Costo</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && (<Text size="xs" c="dimmed">Toro/s: {ev.datos_extra.toros_caravanas}</Text>)}{ev.datos_extra && ev.datos_extra.potrero_destino && (<Text size="xs" c="dimmed">Destino: {ev.datos_extra.potrero_destino} {ev.datos_extra.parcela_destino ? `(${ev.datos_extra.parcela_destino})` : ''}</Text>)}{ev.datos_extra && ev.datos_extra.lote_destino && (<Text size="xs" c="dimmed">Grupo: {ev.datos_extra.lote_destino}</Text>)}</Table.Td><Table.Td><Text size="sm" c="dimmed">${ev.costo || 0}</Text></Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
+              {activeSection === 'economia' && campoId && (
+                  <Economia campoId={campoId} />
+              )}
             </AppShell.Main>
           </AppShell>
         )}
