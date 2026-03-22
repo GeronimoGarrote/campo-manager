@@ -1196,7 +1196,7 @@ export default function App() {
                               {partosProximos.length === 0 && tareasParaHoy.length > 0 && <Badge color="orange" variant="light">{tareasParaHoy.length} pendientes</Badge>}
                           </Group>
                           
-                          <ScrollArea h={500} offsetScrollbars>
+                          <ScrollArea h={583} offsetScrollbars>
                               {partosProximos.length > 0 ? (
                                   <Table striped stickyHeader>
                                       <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Fecha Est.</Table.Th><Table.Th>Vaca</Table.Th><Table.Th>Ubicación</Table.Th></Table.Tr></Table.Thead>
@@ -1282,7 +1282,7 @@ export default function App() {
                               </ThemeIcon>
                               <Text fw={700} size="lg">Últimos Movimientos</Text>
                           </Group>
-                          <ScrollArea h={240} offsetScrollbars>
+                          <ScrollArea h={320} offsetScrollbars>
                               <Stack gap="xs" mt="xs">
                                   {eventosGlobales.slice(0, 15).map(ev => (
                                       <Group key={ev.id} wrap="nowrap" align="flex-start" gap="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}>
