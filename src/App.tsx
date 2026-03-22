@@ -1158,20 +1158,35 @@ export default function App() {
                 <>
                   <Title order={2} mb="lg">Resumen General</Title>
                   
-                  {/* FILA 1: KPIs Rápidos */}
-                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="xl">
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="blue"><IconList/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TOTAL HACIENDA</Text><Text fw={700} size="xl">{stats.total}</Text></div></Group></Card>
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><RingProgress size={60} thickness={6} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} /><div><Text size="xs" c="dimmed" fw={700}>PREÑEZ (VIENTRES)</Text><Text fw={700} size="xl" c="teal">{stats.prenadas} / {totalVientres}</Text></div></Group></Card>
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>TERNEROS</Text><Text fw={700} size="xl">{stats.terneros}</Text><Text size="xs" c="dimmed">({stats.ternerosM} M / {stats.ternerosH} H)</Text></div></Group></Card>
-                    <Card shadow="sm" radius="md" p="md" withBorder><Group><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>ENFERMOS</Text><Text fw={700} size="xl" c={stats.enfermos > 0 ? 'red' : 'dimmed'}>{stats.enfermos}</Text></div></Group></Card>
-                  </SimpleGrid>
-                  
-                  {/* FILA 2: Dashboard Principal (7/5) */}
-                  <Grid gutter="lg" align="flex-start">
+                  <Grid gutter="lg">
                     
-                    {/* COLUMNA IZQUIERDA (7) - Partos y Urgencias */}
+                    {/* COLUMNA IZQUIERDA (7) - KPIs y Partos */}
                     <Grid.Col span={{ base: 12, md: 7 }}>
-                      <Card shadow="sm" radius="md" p="md" withBorder mb="md">
+                      
+                      {/* Fila de 3 KPIs */}
+                      <SimpleGrid cols={{ base: 1, sm: 3 }} mb="lg">
+                        <Card shadow="sm" radius="md" p="md" withBorder>
+                          <Group wrap="nowrap" gap="xs">
+                            <RingProgress size={54} thickness={5} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} />
+                            <div><Text size="xs" c="dimmed" fw={700} lh={1.2} mb={2}>PREÑEZ (VIENTRES)</Text><Text fw={700} size="lg" c="teal" lh={1}>{stats.prenadas} / {totalVientres}</Text></div>
+                          </Group>
+                        </Card>
+                        <Card shadow="sm" radius="md" p="md" withBorder>
+                          <Group wrap="nowrap" gap="sm">
+                            <ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon>
+                            <div><Text size="xs" c="dimmed" fw={700} lh={1.2} mb={2}>TERNEROS</Text><Text fw={700} size="lg" lh={1}>{stats.terneros}</Text><Text size="xs" c="dimmed" lh={1}>({stats.ternerosM} M / {stats.ternerosH} H)</Text></div>
+                          </Group>
+                        </Card>
+                        <Card shadow="sm" radius="md" p="md" withBorder>
+                          <Group wrap="nowrap" gap="sm">
+                            <ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon>
+                            <div><Text size="xs" c="dimmed" fw={700} lh={1.2} mb={2}>ENFERMOS</Text><Text fw={700} size="lg" c={stats.enfermos > 0 ? 'red' : 'dimmed'} lh={1}>{stats.enfermos}</Text></div>
+                          </Group>
+                        </Card>
+                      </SimpleGrid>
+
+                      {/* Tarjeta de Partos */}
+                      <Card shadow="sm" radius="md" p="md" withBorder>
                           <Group gap="xs" mb="sm">
                               <ThemeIcon size="lg" radius="md" color={partosProximos.length > 0 ? "teal" : "orange"}>
                                   {partosProximos.length > 0 ? <IconBabyCarriage size={20} /> : <IconCalendarEvent size={20} />}
@@ -1197,7 +1212,7 @@ export default function App() {
                                                               <Text size="sm" fw={700} c={colorBadge}>
                                                                   {formatDate(parto.fecha_programada)}
                                                               </Text>
-                                                              <Badge size="sm" color={colorBadge} variant="light">{diasFaltan} días</Badge>
+                                                              <Badge size="xs" color={colorBadge} variant="light">{diasFaltan} días</Badge>
                                                           </Group>
                                                       </Table.Td>
                                                       <Table.Td>
@@ -1239,51 +1254,52 @@ export default function App() {
                       </Card>
                     </Grid.Col>
 
-                    {/* COLUMNA DERECHA (5) - Rodeo y Movimientos */}
+                    {/* COLUMNA DERECHA (5) - Gráfico y Movimientos */}
                     <Grid.Col span={{ base: 12, md: 5 }}>
-                      <Stack gap="md">
-                          <Card shadow="sm" radius="md" p="md" withBorder>
-                              <Text fw={700} mb="sm">Distribución del Rodeo</Text>
-                              <Center>
-                                  <RingProgress size={200} thickness={18} label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
-                                      sections={[
-                                          { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
-                                          { value: (stats.vaquillonas / stats.total) * 100, color: 'pink', tooltip: 'Vaquillonas', onMouseEnter: () => setChartHover({label: 'VAQUILLONAS', value: stats.vaquillonas}), onMouseLeave: () => setChartHover(null) },
-                                          { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
-                                          { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
-                                          { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
-                                      ]}
-                                  />
-                              </Center>
-                              <Group justify="center" gap="xs" mt="sm"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="pink"/><Text size="xs">Vaq.</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
-                          </Card>
+                      
+                      {/* Gráfico de Torta */}
+                      <Card shadow="sm" radius="md" p="md" withBorder mb="lg">
+                          <Text fw={700} mb="sm">Distribución del Rodeo</Text>
+                          <Center>
+                              <RingProgress size={200} thickness={18} label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
+                                  sections={[
+                                      { value: (stats.vacas / stats.total) * 100, color: 'blue', tooltip: 'Vacas', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
+                                      { value: (stats.vaquillonas / stats.total) * 100, color: 'pink', tooltip: 'Vaquillonas', onMouseEnter: () => setChartHover({label: 'VAQUILLONAS', value: stats.vaquillonas}), onMouseLeave: () => setChartHover(null) },
+                                      { value: (stats.terneros / stats.total) * 100, color: 'teal', tooltip: 'Terneros', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
+                                      { value: (stats.novillos / stats.total) * 100, color: 'orange', tooltip: 'Novillos', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
+                                      { value: (stats.toros / stats.total) * 100, color: 'grape', tooltip: 'Toros', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
+                                  ]}
+                              />
+                          </Center>
+                          <Group justify="center" gap="xs" mt="sm"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="pink"/><Text size="xs">Vaq.</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
+                      </Card>
 
-                          <Card shadow="sm" radius="md" p="md" withBorder>
-                              <Group gap="xs" mb="sm">
-                                  <ThemeIcon size="lg" radius="md" color="blue">
-                                      <IconActivity size={20} />
-                                  </ThemeIcon>
-                                  <Text fw={700} size="lg">Últimos Movimientos</Text>
-                              </Group>
-                              <ScrollArea h={240} offsetScrollbars>
-                                  <Stack gap="xs" mt="xs">
-                                      {eventosGlobales.slice(0, 10).map(ev => (
-                                          <Group key={ev.id} wrap="nowrap" align="flex-start" gap="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}>
-                                              {getIconoEvento(ev.tipo)}
-                                              <div style={{ flex: 1 }}>
-                                                  <Group justify="space-between" mb={2}>
-                                                      <Text size="sm" fw={700}>{ev.tipo} <Text span c="dimmed" fw={400}>• {ev.animales?.caravana || 'Lote'}</Text></Text>
-                                                      <Text size="xs" c="dimmed">{formatDate(ev.fecha_evento)}</Text>
-                                                  </Group>
-                                                  <Text size="xs" c="dimmed" lineClamp={1}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text>
-                                              </div>
-                                          </Group>
-                                      ))}
-                                  </Stack>
-                              </ScrollArea>
-                              <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
-                          </Card>
-                      </Stack>
+                      {/* Tarjeta de Movimientos */}
+                      <Card shadow="sm" radius="md" p="md" withBorder>
+                          <Group gap="xs" mb="sm">
+                              <ThemeIcon size="lg" radius="md" color="blue">
+                                  <IconActivity size={20} />
+                              </ThemeIcon>
+                              <Text fw={700} size="lg">Últimos Movimientos</Text>
+                          </Group>
+                          <ScrollArea h={240} offsetScrollbars>
+                              <Stack gap="xs" mt="xs">
+                                  {eventosGlobales.slice(0, 15).map(ev => (
+                                      <Group key={ev.id} wrap="nowrap" align="flex-start" gap="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}>
+                                          {getIconoEvento(ev.tipo)}
+                                          <div style={{ flex: 1 }}>
+                                              <Group justify="space-between" mb={2}>
+                                                  <Text size="sm" fw={700}>{ev.tipo} <Text span c="dimmed" fw={400}>• {ev.animales?.caravana || 'Lote'}</Text></Text>
+                                                  <Text size="xs" c="dimmed">{formatDate(ev.fecha_evento)}</Text>
+                                              </Group>
+                                              <Text size="xs" c="dimmed" lineClamp={1}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text>
+                                          </div>
+                                      </Group>
+                                  ))}
+                              </Stack>
+                          </ScrollArea>
+                          <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
+                      </Card>
                     </Grid.Col>
                   </Grid>
                 </>
@@ -1698,7 +1714,7 @@ export default function App() {
                                   <Paper withBorder p="md" bg="lime.0" mb="lg" radius="md">
                                       <Text size="sm" fw={700} mb="xs" c="lime.9">Registrar Nueva Labor</Text>
                                       <Group grow mb="sm">
-                                          <Select data={['SIEM बुन्देल', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadPotrero} onChange={setActividadPotrero}/>
+                                          <Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadPotrero} onChange={setActividadPotrero}/>
                                           <TextInput placeholder="Cultivo / Producto" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} />
                                       </Group>
                                       <Group grow mb="sm">
