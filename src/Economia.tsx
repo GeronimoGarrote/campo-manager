@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip } from '@mantine/core';
+import { useState, useEffect, useMemo } from 'react';
+import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconRobot } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconRobot, IconSearch, IconFilter, IconCalendar } from '@tabler/icons-react';
 import { supabase } from './supabase';
 
 interface EconomiaProps {
@@ -15,7 +15,7 @@ interface Movimiento {
   categoria: string;
   detalle: string;
   monto: number;
-  esManual: boolean; // Para saber si le mostramos el tachito de basura acá o no
+  esManual: boolean;
 }
 
 const formatDate = (dateString: string) => { 
@@ -43,13 +43,18 @@ export default function Economia({ campoId }: EconomiaProps) {
   const [detalleInput, setDetalleInput] = useState('');
   const [montoInput, setMontoInput] = useState<number | ''>('');
 
+  // Filtros State
+  const [filtroFecha, setFiltroFecha] = useState<string | null>('este_mes');
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState<string | null>(null);
+  const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
+
   const categorias = [
     'Hacienda (Venta/Compra)', 'Alimentación / Nutrición', 'Sanidad Veterinaria', 
     'Agricultura / Semillas', 'Maquinaria / Combustible', 'Infraestructura / Alambrados', 
     'Sueldos / Honorarios', 'Impuestos / Servicios', 'Otros'
   ];
 
-  // Al cargar la vista, chupamos datos de TODOS lados
   useEffect(() => {
     fetchTodosLosMovimientos();
   }, [campoId]);
@@ -58,36 +63,26 @@ export default function Economia({ campoId }: EconomiaProps) {
     if (!campoId) return;
     setLoadingDatos(true);
 
-    // 1. Buscamos los movimientos manuales de la Caja
     const pCaja = supabase.from('caja').select('*').eq('establecimiento_id', campoId);
-    
-    // 2. Buscamos los Eventos de las vacas que hayan tenido costo
     const pEventos = supabase.from('eventos').select('id, fecha_evento, tipo, detalle, resultado, costo, animales(caravana)').eq('establecimiento_id', campoId).gt('costo', 0);
-    
-    // 3. Buscamos los gastos de Labores Agrícolas
     const pLabores = supabase.from('labores').select('id, fecha, actividad, cultivo, detalle, costo').eq('establecimiento_id', campoId).gt('costo', 0);
-    
-    // 4. Buscamos los gastos de Nutrición/Lotes
     const pLotes = supabase.from('lotes_eventos').select('id, fecha, tipo, detalle, costo').eq('establecimiento_id', campoId).gt('costo', 0);
 
-    // Ejecutamos las 4 búsquedas a la vez para que sea rapidísimo
     const [resCaja, resEventos, resLabores, resLotes] = await Promise.all([pCaja, pEventos, pLabores, pLotes]);
 
     let todos: Movimiento[] = [];
 
-    // Mapeamos Caja (Manuales)
     if (resCaja.data) {
       todos = [...todos, ...resCaja.data.map(m => ({
         id: m.id, fecha: m.fecha, tipo: m.tipo, categoria: m.categoria, detalle: m.detalle, monto: m.monto, esManual: true
       }))];
     }
 
-    // Mapeamos Eventos Vacas (Automáticos)
     if (resEventos.data) {
       todos = [...todos, ...resEventos.data.map((e: any) => ({
         id: e.id, 
         fecha: e.fecha_evento.split('T')[0], 
-        tipo: 'EGRESO' as const, // Asumimos que los costos de eventos son egresos por ahora
+        tipo: 'EGRESO' as const, 
         categoria: 'Sanidad Veterinaria', 
         detalle: `Vaca ${e.animales?.caravana || '?'}: ${e.tipo} ${e.detalle ? `- ${e.detalle}` : ''}`.trim(), 
         monto: e.costo, 
@@ -95,7 +90,6 @@ export default function Economia({ campoId }: EconomiaProps) {
       }))];
     }
 
-    // Mapeamos Labores Agricultura (Automáticos)
     if (resLabores.data) {
       todos = [...todos, ...resLabores.data.map((l: any) => ({
         id: l.id, 
@@ -108,7 +102,6 @@ export default function Economia({ campoId }: EconomiaProps) {
       }))];
     }
 
-    // Mapeamos Eventos Lotes Ganaderos (Automáticos)
     if (resLotes.data) {
       todos = [...todos, ...resLotes.data.map((le: any) => ({
         id: le.id, 
@@ -121,19 +114,67 @@ export default function Economia({ campoId }: EconomiaProps) {
       }))];
     }
 
-    // Ordenamos la ensalada de datos por fecha (del más nuevo al más viejo)
     todos.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-
     setMovimientos(todos);
     setLoadingDatos(false);
   }
 
-  // Cálculos rápidos
-  const totalIngresos = movimientos.filter(m => m.tipo === 'INGRESO').reduce((acc, curr) => acc + curr.monto, 0);
-  const totalEgresos = movimientos.filter(m => m.tipo === 'EGRESO').reduce((acc, curr) => acc + curr.monto, 0);
+  // --- MOTOR DE FILTROS ---
+  const movimientosFiltrados = useMemo(() => {
+    const hoy = new Date();
+    const currentMonth = hoy.getMonth();
+    const currentYear = hoy.getFullYear();
+
+    return movimientos.filter(mov => {
+      // 1. Filtro de Búsqueda (Texto)
+      const matchBusqueda = mov.detalle.toLowerCase().includes(busqueda.toLowerCase()) || 
+                            mov.categoria.toLowerCase().includes(busqueda.toLowerCase());
+      
+      // 2. Filtro de Tipo (Ingreso/Egreso)
+      const matchTipo = filtroTipo ? mov.tipo === filtroTipo : true;
+      
+      // 3. Filtro de Categoría
+      const matchCategoria = filtroCategoria ? mov.categoria === filtroCategoria : true;
+
+      // 4. Filtro Maestro de Fecha
+      let matchFecha = true;
+      if (filtroFecha !== 'siempre') {
+        const fechaMov = new Date(mov.fecha + 'T12:00:00'); // Evita desfase horario
+        const m = fechaMov.getMonth();
+        const y = fechaMov.getFullYear();
+
+        if (filtroFecha === 'este_mes') {
+          matchFecha = (m === currentMonth && y === currentYear);
+        } else if (filtroFecha === 'mes_pasado') {
+          const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+          const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+          matchFecha = (m === prevMonth && y === prevYear);
+        } else if (filtroFecha === 'ultimos_3') {
+          const tresMesesAtras = new Date();
+          tresMesesAtras.setMonth(hoy.getMonth() - 3);
+          matchFecha = fechaMov >= tresMesesAtras;
+        } else if (filtroFecha === 'este_ano') {
+          matchFecha = y === currentYear;
+        }
+      }
+
+      return matchBusqueda && matchTipo && matchCategoria && matchFecha;
+    });
+  }, [movimientos, busqueda, filtroTipo, filtroCategoria, filtroFecha]);
+
+  // Cálculos reactivos basados en lo que está filtrado
+  const totalIngresos = movimientosFiltrados.filter(m => m.tipo === 'INGRESO').reduce((acc, curr) => acc + curr.monto, 0);
+  const totalEgresos = movimientosFiltrados.filter(m => m.tipo === 'EGRESO').reduce((acc, curr) => acc + curr.monto, 0);
   const saldoNeto = totalIngresos - totalEgresos;
 
-  // Guardar nuevo movimiento manual
+  const hayFiltrosActivos = busqueda !== '' || filtroTipo !== null || filtroCategoria !== null;
+
+  function limpiarFiltrosSecundarios() {
+    setBusqueda('');
+    setFiltroTipo(null);
+    setFiltroCategoria(null);
+  }
+
   async function guardarMovimiento() {
     if (!fechaInput || !tipoInput || !categoriaInput || !detalleInput || montoInput === '' || !campoId) {
       return alert("Completá todos los campos para registrar el movimiento en caja.");
@@ -170,12 +211,28 @@ export default function Economia({ campoId }: EconomiaProps) {
     <>
       <Group justify="space-between" mb="lg">
         <Title order={2}>Caja y Finanzas</Title>
-        <Button leftSection={<IconPlus size={20} />} color="green" onClick={open}>
-          Nuevo Movimiento
-        </Button>
+        <Group>
+          <Select 
+            value={filtroFecha} 
+            onChange={setFiltroFecha} 
+            data={[
+              { value: 'este_mes', label: 'Este Mes' },
+              { value: 'mes_pasado', label: 'Mes Pasado' },
+              { value: 'ultimos_3', label: 'Últimos 3 Meses' },
+              { value: 'este_ano', label: 'Este Año' },
+              { value: 'siempre', label: 'Histórico (Todo)' },
+            ]}
+            allowDeselect={false}
+            leftSection={<IconCalendar size={16}/>}
+            variant="filled"
+          />
+          <Button leftSection={<IconPlus size={20} />} color="green" onClick={open}>
+            Nuevo Movimiento
+          </Button>
+        </Group>
       </Group>
 
-      {/* DASHBOARD FINANCIERO */}
+      {/* DASHBOARD FINANCIERO DINÁMICO */}
       <SimpleGrid cols={{ base: 1, sm: 3 }} mb="xl">
         <Card shadow="sm" radius="md" p="md" withBorder>
           <Group wrap="nowrap" gap="sm">
@@ -197,12 +254,14 @@ export default function Economia({ campoId }: EconomiaProps) {
           </Group>
         </Card>
 
-        <Card shadow="sm" radius="md" p="md" withBorder bg={saldoNeto >= 0 ? 'green.0' : 'red.0'}>
+        <Card shadow="sm" radius="md" p="md" withBorder bg={saldoNeto > 0 ? 'green.0' : saldoNeto < 0 ? 'red.0' : 'gray.0'}>
           <Group wrap="nowrap" gap="sm">
-            <ThemeIcon size="xl" radius="md" color={saldoNeto >= 0 ? 'green' : 'red'}><IconCurrencyDollar /></ThemeIcon>
+            <ThemeIcon size="xl" radius="md" color={saldoNeto > 0 ? 'green' : saldoNeto < 0 ? 'red' : 'gray'}>
+              <IconCurrencyDollar />
+            </ThemeIcon>
             <div>
-              <Text size="xs" fw={700} c={saldoNeto >= 0 ? 'green.9' : 'red.9'}>SALDO NETO</Text>
-              <Text fw={900} size="xl" c={saldoNeto >= 0 ? 'green.9' : 'red.9'}>
+              <Text size="xs" fw={700} c={saldoNeto > 0 ? 'green.9' : saldoNeto < 0 ? 'red.9' : 'gray.7'}>BALANCE DEL PERÍODO</Text>
+              <Text fw={900} size="xl" c={saldoNeto > 0 ? 'green.9' : saldoNeto < 0 ? 'red.9' : 'gray.7'}>
                 ${saldoNeto.toLocaleString('es-AR')}
               </Text>
             </div>
@@ -210,11 +269,47 @@ export default function Economia({ campoId }: EconomiaProps) {
         </Card>
       </SimpleGrid>
 
+      {/* BARRA DE FILTROS SECUNDARIOS */}
+      <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
+          <Group grow align="center">
+              <TextInput 
+                placeholder="Buscar detalle o concepto..." 
+                leftSection={<IconSearch size={16}/>} 
+                value={busqueda} 
+                onChange={(e) => setBusqueda(e.target.value)} 
+              />
+              <Select 
+                placeholder="Tipo de Movimiento" 
+                data={[
+                  { value: 'INGRESO', label: 'Solo Ingresos' },
+                  { value: 'EGRESO', label: 'Solo Egresos' }
+                ]} 
+                value={filtroTipo} 
+                onChange={setFiltroTipo} 
+                clearable 
+                leftSection={<IconFilter size={16}/>} 
+              />
+              <Select 
+                placeholder="Filtrar por Categoría" 
+                data={categorias} 
+                value={filtroCategoria} 
+                onChange={setFiltroCategoria} 
+                clearable 
+              />
+              {hayFiltrosActivos && (
+                <Button variant="outline" color="red" onClick={limpiarFiltrosSecundarios} rightSection={<CloseButton size="sm" component="span" c="red"/>} style={{ maxWidth: 150 }}>
+                  Limpiar
+                </Button>
+              )}
+          </Group>
+      </Paper>
+
       {/* LIBRO MAYOR / TABLA */}
       <Paper radius="md" withBorder style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }} h={550}>
         <Group p="md" bg="gray.0" style={{ borderBottom: '1px solid #eee' }}>
             <ThemeIcon variant="light" color="gray"><IconReceipt size={20}/></ThemeIcon>
             <Text fw={700}>Historial de Movimientos</Text>
+            <Badge color="gray" variant="outline" ml="auto">{movimientosFiltrados.length} Registros</Badge>
         </Group>
         <ScrollArea style={{ flex: 1 }}>
             <Table striped highlightOnHover>
@@ -233,12 +328,12 @@ export default function Economia({ campoId }: EconomiaProps) {
                    <Table.Tr>
                      <Table.Td colSpan={6} ta="center" c="dimmed" p="xl">Sincronizando caja con potreros y animales...</Table.Td>
                    </Table.Tr>
-                ) : movimientos.length === 0 ? (
+                ) : movimientosFiltrados.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={6} ta="center" c="dimmed" p="xl">No hay movimientos registrados en la caja.</Table.Td>
+                    <Table.Td colSpan={6} ta="center" c="dimmed" p="xl">No hay movimientos que coincidan con tus filtros.</Table.Td>
                   </Table.Tr>
                 ) : (
-                  movimientos.map(mov => (
+                  movimientosFiltrados.map(mov => (
                     <Table.Tr key={`${mov.id}-${mov.esManual ? 'man' : 'auto'}`}>
                       <Table.Td fw={500}><Text size="sm">{formatDate(mov.fecha)}</Text></Table.Td>
                       <Table.Td>
