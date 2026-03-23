@@ -305,7 +305,7 @@ export default function Economia({ campoId }: EconomiaProps) {
       </Paper>
 
       {/* LIBRO MAYOR / TABLA */}
-      <Paper radius="md" withBorder style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }} h={550}>
+      <Paper radius="md" withBorder style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }} h={570}>
         <Group p="md" bg="gray.0" style={{ borderBottom: '1px solid #eee' }}>
             <ThemeIcon variant="light" color="gray"><IconReceipt size={20}/></ThemeIcon>
             <Text fw={700}>Historial de Movimientos</Text>

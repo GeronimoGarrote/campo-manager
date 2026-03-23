@@ -3,13 +3,13 @@ import Economia from './Economia';
 import { 
   MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, 
   Paper, TextInput, Select, Button, Table, Badge, Tabs, 
-  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox, PasswordInput, Container, Tooltip, Indicator, Popover, Grid
+  Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, rem, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, Checkbox, PasswordInput, Container, Tooltip, Indicator, Popover, Grid, Menu
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { 
   IconList, IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, 
   IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconSearch, 
-  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle, IconChartDots, IconDownload, IconStar, IconStarFilled, IconTag, IconUnlink, IconArrowLeft, IconCalendarEvent, IconBell
+  IconHeartbeat, IconChevronUp, IconChevronDown, IconSelector, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconFilter, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconInfoCircle, IconChartDots, IconDownload, IconStar, IconStarFilled, IconTag, IconUnlink, IconArrowLeft, IconCalendarEvent, IconBell, IconSortAscending, IconSortDescending
 } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import '@mantine/core/styles.css';
@@ -37,6 +37,23 @@ const formatDate = (dateString: string) => { if (!dateString) return '-'; const 
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 const diasDiferencia = (fechaFuturaStr: string) => { const hoy = new Date(); hoy.setHours(0,0,0,0); const fechaParto = new Date(fechaFuturaStr); fechaParto.setHours(0,0,0,0); const diffTime = fechaParto.getTime() - hoy.getTime(); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); return diffDays; };
+
+const calcularEdad = (nacimiento?: string, ingreso?: string) => {
+    const fechaStr = nacimiento || ingreso;
+    if (!fechaStr) return { texto: '-', dias: -1 }; 
+    
+    const hoy = new Date();
+    const fecha = new Date(fechaStr + 'T12:00:00');
+    if (fecha > hoy) return { texto: 'Recién nacido', dias: 0 };
+
+    const diffTime = Math.abs(hoy.getTime() - fecha.getTime());
+    const diffDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDias < 31) return { texto: `${diffDias} días`, dias: diffDias };
+    if (diffDias < 365) return { texto: `${Math.floor(diffDias / 30.4)} meses`, dias: diffDias };
+    const anios = Math.floor(diffDias / 365);
+    return { texto: `${anios} año${anios > 1 ? 's' : ''}`, dias: diffDias };
+};
 
 interface ThProps { children: React.ReactNode; reversed: boolean; sorted: boolean; onSort(): void; }
 function Th({ children, reversed, sorted, onSort }: ThProps) {
@@ -139,7 +156,8 @@ export default function App() {
   const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
   const [filterLote, setFilterLote] = useState<string | null>(null); 
   const [filtroTipoEvento, setFiltroTipoEvento] = useState<string | null>(''); 
-  const [sortBy, setSortBy] = useState<keyof Animal | null>(null);
+  const [ordenEdad, setOrdenEdad] = useState<string | null>(null); // Filtro especial para edad
+  const [sortBy, setSortBy] = useState<string | null>(null); 
   const [reverseSortDirection, setReverseSortDirection] = useState(false);
   
   const [animales, setAnimales] = useState<Animal[]>([]);
@@ -265,8 +283,11 @@ export default function App() {
   const [massActividad, setMassActividad] = useState<string | null>('VACUNACION');
   const [massFecha, setMassFecha] = useState<Date | null>(new Date());
   const [massDetalle, setMassDetalle] = useState('');
-  const [massPrecio, setMassPrecio] = useState(''); 
   const [massCostoUnitario, setMassCostoUnitario] = useState(''); 
+  const [massModalidadVenta, setMassModalidadVenta] = useState<string>('TOTAL');
+  const [massPrecioVenta, setMassPrecioVenta] = useState('');
+  const [massKilosTotales, setMassKilosTotales] = useState('');
+  const [massGastosVenta, setMassGastosVenta] = useState('');
   const [massDestino, setMassDestino] = useState('');
   const [massPotreroDestino, setMassPotreroDestino] = useState<string | null>(null); 
   const [massParcelaDestino, setMassParcelaDestino] = useState<string | null>(null); 
@@ -292,7 +313,7 @@ export default function App() {
   useEffect(() => {
     if (!campoId || !session) return;
     localStorage.setItem('campoId', campoId); 
-    setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterSexo(null); setFilterAtributos([]); setFilterLote(null); setSelectedIds([]);
+    setBusqueda(''); setFiltroTipoEvento(''); setFilterCategoria(null); setFilterSexo(null); setFilterAtributos([]); setFilterLote(null); setSelectedIds([]); setOrdenEdad(null);
     
     fetchAnimales(); fetchPotreros(); fetchParcelas(); fetchLotes(); fetchEventosLotesGlobal(); fetchAgenda();
     if (activeSection === 'inicio' || activeSection === 'actividad') fetchActividadGlobal();
@@ -421,9 +442,11 @@ export default function App() {
   }, [graficoAnimalId]);
 
 
-  const setSorting = (field: keyof Animal) => {
+  const setSorting = (field: string) => {
     const reversed = field === sortBy ? !reverseSortDirection : false;
-    setReverseSortDirection(reversed); setSortBy(field);
+    setReverseSortDirection(reversed); 
+    setSortBy(field);
+    setOrdenEdad(null); // Resetea el orden de edad si tocan otra columna
   };
 
   const animalesFiltrados = animales.filter(animal => {
@@ -445,9 +468,21 @@ export default function App() {
     return matchBusqueda && matchCategoria && matchSexo && matchLote && matchAtributos;
   }).sort((a, b) => {
     if (busqueda) { const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase(); const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase(); if (exactA && !exactB) return -1; if (!exactA && exactB) return 1; }
+    
+    // ORDENAMIENTO POR EDAD (Filtro especial)
+    if (ordenEdad) {
+        const diasA = calcularEdad(a.fecha_nacimiento, a.fecha_ingreso).dias;
+        const diasB = calcularEdad(b.fecha_nacimiento, b.fecha_ingreso).dias;
+        
+        if (diasA === -1 && diasB !== -1) return 1;
+        if (diasB === -1 && diasA !== -1) return -1;
+        
+        return ordenEdad === 'desc' ? diasB - diasA : diasA - diasB;
+    }
+
     if (sortBy) {
         if (sortBy === 'caravana') { const numA = parseInt(a.caravana.replace(/\D/g,'')) || 0; const numB = parseInt(b.caravana.replace(/\D/g,'')) || 0; if (numA !== numB) return reverseSortDirection ? numB - numA : numA - numB; }
-        const valA = a[sortBy]?.toString().toLowerCase() || ''; const valB = b[sortBy]?.toString().toLowerCase() || ''; return reverseSortDirection ? valB.localeCompare(valA) : valA.localeCompare(valB);
+        const valA = (a as any)[sortBy]?.toString().toLowerCase() || ''; const valB = (b as any)[sortBy]?.toString().toLowerCase() || ''; return reverseSortDirection ? valB.localeCompare(valA) : valA.localeCompare(valB);
     }
     return 0;
   });
@@ -494,7 +529,12 @@ export default function App() {
   async function guardarEventoMasivo() {
     if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
     if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
-    if (massActividad === 'VENTA' && !massPrecio) return alert("Falta el precio de venta");
+    
+    if (massActividad === 'VENTA') {
+        if (!massPrecioVenta) return alert("Falta especificar el monto de la venta.");
+        if (massModalidadVenta === 'KILO' && !massKilosTotales) return alert("Faltan los kilos totales.");
+    }
+    
     if (massActividad === 'MOVIMIENTO_POTRERO' && !massPotreroDestino) return alert("Falta el Potrero destino");
     if (massActividad === 'CAMBIO_LOTE' && !massLoteDestino) return alert("Falta el Lote (Grupo) destino");
     if (massActividad === 'SERVICIO' && massTipoServicio === 'TORO' && massTorosIds.length === 0) return alert("Seleccioná al menos un toro");
@@ -510,9 +550,32 @@ export default function App() {
     }
 
     if(!confirm(mensajeConfirmacion)) return; setLoading(true); const fechaStr = massFecha.toISOString();
-    let resultadoTxt = massActividad === 'OTRO' ? massDetalle || 'Realizado' : 'Realizado (Masivo)'; let datosExtra: any = {};
     
-    if (massActividad === 'VENTA') { resultadoTxt = 'VENDIDO'; datosExtra = { precio_kg: massPrecio, destino: massDestino || 'Venta Masiva' }; } 
+    let resultadoTxt = massActividad === 'OTRO' ? massDetalle || 'Realizado' : 'Realizado (Masivo)'; 
+    let datosExtra: any = {};
+    let totalIngreso = 0;
+    let gastosTotales = 0;
+    let precioPorAnimal = 0;
+    let gastoPorAnimal = 0;
+
+    if (massActividad === 'VENTA') { 
+        const precioNum = Number(massPrecioVenta);
+        if (massModalidadVenta === 'TOTAL') totalIngreso = precioNum;
+        else if (massModalidadVenta === 'CABEZA') totalIngreso = precioNum * idsParaProcesar.length;
+        else if (massModalidadVenta === 'KILO') totalIngreso = precioNum * Number(massKilosTotales);
+        
+        gastosTotales = Number(massGastosVenta) || 0;
+        precioPorAnimal = totalIngreso / idsParaProcesar.length;
+        gastoPorAnimal = gastosTotales / idsParaProcesar.length;
+
+        resultadoTxt = 'VENDIDO'; 
+        datosExtra = { 
+            destino: massDestino || 'Venta Masiva', 
+            modalidad: massModalidadVenta, 
+            ingreso_total: totalIngreso, 
+            precio_unitario_estimado: Math.round(precioPorAnimal) 
+        }; 
+    } 
     else if (massActividad === 'CAPADO') { resultadoTxt = 'Realizado'; } 
     else if (massActividad === 'MOVIMIENTO_POTRERO') { 
         const pNom = getNombrePotrero(massPotreroDestino!); 
@@ -528,12 +591,31 @@ export default function App() {
         resultadoTxt = 'Tratamiento aplicado';
     }
 
-    const inserts = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, costo: Number(massCostoUnitario), establecimiento_id: campoId }));
+    const inserts = idsParaProcesar.map(animalId => ({ 
+        animal_id: animalId, 
+        fecha_evento: fechaStr, 
+        tipo: massActividad, 
+        resultado: resultadoTxt, 
+        detalle: massDetalle, 
+        datos_extra: datosExtra, 
+        costo: massActividad === 'VENTA' ? gastoPorAnimal : Number(massCostoUnitario), 
+        establecimiento_id: campoId 
+    }));
+    
     const { error } = await supabase.from('eventos').insert(inserts);
 
     if (!error) {
         if (massActividad === 'VENTA') {
-            await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta Masiva: ${massDestino || '-'} ($${massPrecio})` }).in('id', idsParaProcesar);
+            await supabase.from('caja').insert({
+                establecimiento_id: campoId,
+                fecha: massFecha.toISOString().split('T')[0],
+                tipo: 'INGRESO',
+                categoria: 'Hacienda (Venta/Compra)',
+                detalle: `Venta de ${idsParaProcesar.length} animales - ${massDestino || 'Masiva'}`,
+                monto: totalIngreso
+            });
+
+            await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${massDestino || '-'} (Aprox $${Math.round(precioPorAnimal)})` }).in('id', idsParaProcesar);
             for (const id of idsParaProcesar) { const anim = animales.find(a => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
         }
         if (massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', idsParaProcesar);
@@ -578,7 +660,7 @@ export default function App() {
 
     setLoading(false);
     if (error) { alert("Error: " + error.message); } else {
-        alert("¡Carga masiva exitosa!"); setMassDetalle(''); setMassPrecio(''); setMassDestino(''); setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario(''); setMassTorosIds([]); setMassMesesGestacion(null); setSelectedIds([]);
+        alert("¡Carga masiva exitosa!"); setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino(''); setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario(''); setMassTorosIds([]); setMassMesesGestacion(null); setSelectedIds([]);
         fetchAnimales(); setActiveSection('actividad');
     }
   }
@@ -1567,7 +1649,22 @@ export default function App() {
                             <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'TRATAMIENTO', 'OTRO']} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
                             <TextInput label="Fecha" type="date" value={getLocalDateForInput(massFecha)} onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
                         </Group>
-                        {massActividad === 'VENTA' && ( <Group grow mt="sm"><TextInput label="Precio Promedio (Kg/Total)" placeholder="Ej: 2200" value={massPrecio} onChange={(e) => setMassPrecio(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/><TextInput label="Destino" placeholder="Ej: Frigorifico" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} /></Group> )}
+                        {massActividad === 'VENTA' && ( 
+                            <Paper withBorder p="sm" mt="sm" bg="gray.0">
+                                <Text size="sm" fw={700} mb="xs">Detalles de la Venta</Text>
+                                <Group grow align="flex-start">
+                                    <Select label="Modalidad" data={[{value: 'TOTAL', label: 'Monto Total'}, {value: 'CABEZA', label: 'Por Cabeza'}, {value: 'KILO', label: 'Al Peso (Por Kg)'}]} value={massModalidadVenta} onChange={(v) => setMassModalidadVenta(v || 'TOTAL')} allowDeselect={false} />
+                                    <TextInput label={massModalidadVenta === 'KILO' ? 'Precio por Kg ($)' : massModalidadVenta === 'CABEZA' ? 'Precio por Animal ($)' : 'Monto Total ($)'} placeholder="Ej: 1500000" type="number" leftSection={<IconCurrencyDollar size={16}/>} value={massPrecioVenta} onChange={(e) => setMassPrecioVenta(e.target.value)} />
+                                    {massModalidadVenta === 'KILO' && (
+                                        <TextInput label="Kilos Totales" placeholder="Ej: 4500" type="number" value={massKilosTotales} onChange={(e) => setMassKilosTotales(e.target.value)} />
+                                    )}
+                                </Group>
+                                <Group grow mt="sm">
+                                    <TextInput label="Destino / Comprador" placeholder="Ej: Frigorífico Rioplatense" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} />
+                                    <TextInput label="Gastos Totales de Venta ($)" placeholder="Flete, comisión, etc." type="number" leftSection={<IconCurrencyDollar size={16}/>} value={massGastosVenta} onChange={(e) => setMassGastosVenta(e.target.value)} />
+                                </Group>
+                            </Paper> 
+                        )}
                         {massActividad === 'MOVIMIENTO_POTRERO' && ( 
                             <Group grow mt="sm" align="flex-start">
                                 <Select label="Potrero de Destino" placeholder="Seleccionar Potrero" data={potreros.map(p => ({ value: p.id, label: p.nombre }))} value={massPotreroDestino} onChange={(val) => { setMassPotreroDestino(val); setMassParcelaDestino(null); }} leftSection={<IconMapPin size={16}/>} /> 
@@ -1584,7 +1681,12 @@ export default function App() {
                             </Group>
                         )}
                         {massActividad === 'SERVICIO' && ( <Group grow mt="sm"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={massTipoServicio} onChange={setMassTipoServicio} />{massTipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={massTorosIds} onChange={setMassTorosIds} searchable /> )}</Group> )}
-                        <Group grow mt="sm"><TextInput label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/><TextInput label="Costo Unitario ($)" placeholder="Opcional" type="number" value={massCostoUnitario} onChange={(e) => setMassCostoUnitario(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/></Group>
+                        <Group grow mt="sm">
+                            <TextInput label="Detalle / Observaciones" placeholder="Ej: Aftosa + Carbunclo" value={massDetalle} onChange={(e) => setMassDetalle(e.target.value)}/>
+                            {massActividad !== 'VENTA' && (
+                                <TextInput label="Costo Unitario ($)" placeholder="Opcional" type="number" value={massCostoUnitario} onChange={(e) => setMassCostoUnitario(e.target.value)} leftSection={<IconCurrencyDollar size={16}/>}/>
+                            )}
+                        </Group>
                     </Paper>
                     <Text fw={700} size="lg" mb="sm">2. Seleccionar Animales</Text>
                     <Group mb="md">
@@ -1637,12 +1739,50 @@ export default function App() {
                     </Group>
                   </Group>
                   <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
-                      <Group grow align="flex-end">
-                          <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-                          <Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                          <MultiSelect label="Estado / Sexo / Condición / Marca" placeholder="Ej: Macho, Enferma, Destacado..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
-                          <Select label="Filtrar por Lote" placeholder="Todos" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
-                      </Group>
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+                          <Group grow style={{ flex: 1 }}>
+                              <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+                              <Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
+                              <MultiSelect label="Estado / Sexo / Condición / Marca" placeholder="Ej: Macho, Enferma, Destacado..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
+                              <Select label="Filtrar por Lote" placeholder="Todos" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
+                          </Group>
+                          
+                          <Menu shadow="md" width={220} position="bottom-end">
+                              <Menu.Target>
+                                  <Tooltip label="Ordenar por Edad">
+                                      <ActionIcon size={36} variant={ordenEdad ? "filled" : "default"} color={ordenEdad ? "blue" : "gray"} aria-label="Ordenar" mb={2}>
+                                          <IconSortAscending style={{ width: '60%', height: '60%' }} stroke={1.5} />
+                                      </ActionIcon>
+                                  </Tooltip>
+                              </Menu.Target>
+
+                              <Menu.Dropdown>
+                                  <Menu.Label>Ordenar cronológicamente</Menu.Label>
+                                  <Menu.Item 
+                                      leftSection={<IconSortDescending size={14} />} 
+                                      onClick={() => { setOrdenEdad('desc'); setSortBy(null); }}
+                                      bg={ordenEdad === 'desc' ? 'blue.0' : undefined}
+                                  >
+                                      Más viejos primero
+                                  </Menu.Item>
+                                  <Menu.Item 
+                                      leftSection={<IconSortAscending size={14} />} 
+                                      onClick={() => { setOrdenEdad('asc'); setSortBy(null); }}
+                                      bg={ordenEdad === 'asc' ? 'blue.0' : undefined}
+                                  >
+                                      Más jóvenes primero
+                                  </Menu.Item>
+                                  {ordenEdad && (
+                                      <>
+                                          <Menu.Divider />
+                                          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => setOrdenEdad(null)}>
+                                              Quitar orden
+                                          </Menu.Item>
+                                      </>
+                                  )}
+                              </Menu.Dropdown>
+                          </Menu>
+                      </div>
                   </Paper>
                   <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                     <Table striped highlightOnHover>
@@ -1683,6 +1823,10 @@ export default function App() {
                     </Table>
                   </Paper>
                 </>
+              )}
+
+              {activeSection === 'economia' && campoId && (
+                  <Economia campoId={campoId} />
               )}
 
               {activeSection === 'agricultura' && ( 
@@ -1810,9 +1954,6 @@ export default function App() {
               )}
               
               {activeSection === 'actividad' && ( <> <Group mb="md"><TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /><Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO', 'TRATAMIENTO', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'OTRO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable /></Group><Paper radius="md" withBorder><Table><Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th><Table.Th>Costo</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{eventosFiltrados.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700}>{ev.animales?.caravana || '-'}</Text></Table.Td><Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && (<Text size="xs" c="dimmed">Toro/s: {ev.datos_extra.toros_caravanas}</Text>)}{ev.datos_extra && ev.datos_extra.potrero_destino && (<Text size="xs" c="dimmed">Destino: {ev.datos_extra.potrero_destino} {ev.datos_extra.parcela_destino ? `(${ev.datos_extra.parcela_destino})` : ''}</Text>)}{ev.datos_extra && ev.datos_extra.lote_destino && (<Text size="xs" c="dimmed">Grupo: {ev.datos_extra.lote_destino}</Text>)}</Table.Td><Table.Td><Text size="sm" c="dimmed">${ev.costo || 0}</Text></Table.Td></Table.Tr>))}</Table.Tbody></Table></Paper> </> )}
-              {activeSection === 'economia' && campoId && (
-                  <Economia campoId={campoId} />
-              )}
             </AppShell.Main>
           </AppShell>
         )}
@@ -1879,7 +2020,7 @@ export default function App() {
            <Tabs.Panel value="datos">
               <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={abrirGraficoPeso}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>
               <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} />
-              <Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
+              <Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
               
               <Group grow mb="sm">
                   <Select label="Potrero (Ubicación)" placeholder="Sin asignar" data={potreros.map(p => ({value: p.id, label: p.nombre}))} value={editPotreroId} onChange={(val) => { setEditPotreroId(val); setEditParcelaId(null); }} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} />
