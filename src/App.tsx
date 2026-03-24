@@ -156,7 +156,7 @@ export default function App() {
   const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
   const [filterLote, setFilterLote] = useState<string | null>(null); 
   const [filtroTipoEvento, setFiltroTipoEvento] = useState<string | null>(''); 
-  const [ordenEdad, setOrdenEdad] = useState<string | null>(null); // Filtro especial para edad
+  const [ordenEdad, setOrdenEdad] = useState<string | null>(null); 
   const [sortBy, setSortBy] = useState<string | null>(null); 
   const [reverseSortDirection, setReverseSortDirection] = useState(false);
   
@@ -175,6 +175,8 @@ export default function App() {
   const [categoria, setCategoria] = useState<string | null>('Vaca');
   const [sexo, setSexo] = useState<string | null>('H');
   const [sexoBloqueado, setSexoBloqueado] = useState(true);
+  const [origenModal, setOrigenModal] = useState<string | null>('PROPIO');
+  const [precioCompra, setPrecioCompra] = useState<string | number>('');
   
   const [nombrePotrero, setNombrePotrero] = useState('');
   const [hasPotrero, setHasPotrero] = useState<string | number>('');
@@ -680,7 +682,7 @@ export default function App() {
   async function fetchPotreros() { if (!campoId) return; const { data } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setPotreros(data || []); }
   async function fetchParcelas() { if (!campoId) return; const { data } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setParcelas(data || []); }
   async function fetchLotes() { if (!campoId) return; const { data } = await supabase.from('lotes').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setLotes(data || []); }
-  async function fetchActividadGlobal() { if (!campoId) return; const { data } = await supabase.from('eventos').select('*, animales!inner(caravana)').eq('establecimiento_id', campoId).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }).limit(50); setEventosGlobales(data as any || []); }
+  async function fetchActividadGlobal() { if (!campoId) return; const { data } = await supabase.from('eventos').select('*, animales!inner(caravana)').eq('establecimiento_id', campoId).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }); setEventosGlobales(data as any || []); }
   async function fetchEventosLotesGlobal() { if (!campoId) return; const { data } = await supabase.from('lotes_eventos').select('*').eq('establecimiento_id', campoId).order('fecha', { ascending: false }); setEventosLotesGlobal(data || []); }
 
   // --- GESTIÓN DE ESTABLECIMIENTOS Y LOTES ---
@@ -879,16 +881,49 @@ export default function App() {
   // --- ACCIONES VACA INDIVIDUAL ---
   async function guardarAnimal(cerrarModal: boolean = true) {
     if (!caravana || !campoId) return;
+    if (origenModal === 'COMPRADO' && !precioCompra) return alert("Ingresá el precio de compra.");
+    
     const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravana.toLowerCase() && a.estado !== 'ELIMINADO');
     if (yaExiste) return alert("❌ ERROR: Ya existe un animal con esa caravana.");
-    setLoading(true); const hoy = new Date().toISOString().split('T')[0];
-    const { error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: 'PROPIO', fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId }]);
-    setLoading(false); 
-    if (!error) { 
+    
+    setLoading(true); 
+    const hoy = new Date().toISOString().split('T')[0];
+    
+    const { data: newAnimalData, error } = await supabase.from('animales').insert([{ 
+        caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: origenModal, 
+        fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId 
+    }]).select();
+    
+    if (!error && newAnimalData && newAnimalData.length > 0) {
+        if (origenModal === 'COMPRADO' && precioCompra) {
+            await supabase.from('caja').insert({
+                establecimiento_id: campoId,
+                fecha: hoy,
+                tipo: 'EGRESO',
+                categoria: 'Hacienda (Venta/Compra)',
+                detalle: `Compra animal caravana: ${caravana}`,
+                monto: Number(precioCompra)
+            });
+            
+            await supabase.from('eventos').insert({
+                animal_id: newAnimalData[0].id,
+                fecha_evento: new Date().toISOString(),
+                tipo: 'COMPRA',
+                resultado: 'Animal Comprado',
+                detalle: `Costo: $${precioCompra}`,
+                establecimiento_id: campoId
+            });
+        }
+        
         setCaravana(''); 
+        setPrecioCompra('');
+        setOrigenModal('PROPIO');
         fetchAnimales(); 
         if (cerrarModal) closeModalAlta(); 
+    } else if (error) {
+        alert("Error: " + error.message);
     }
+    setLoading(false); 
   }
 
   async function abrirFichaVaca(animal: Animal) {
@@ -1710,7 +1745,9 @@ export default function App() {
                                     <Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}>
                                         <Table.Td><Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} /></Table.Td>
                                         <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
-                                        <Table.Td>{animal.categoria}</Table.Td>
+                                        <Table.Td>
+                                            <Text fw={500}>{animal.categoria}</Text>
+                                        </Table.Td>
                                         <Table.Td>
                                             <Group gap="xs">{animal.categoria === 'Ternero' && (<Badge size="sm" color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light">{animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}{animal.categoria === 'Ternero' && animal.castrado ? (<Badge size="sm" color="cyan">CAPADO</Badge>) : (animal.categoria !== 'Ternero' && <Badge size="sm" color={getEstadoColor(animal.estado)}>{animal.estado}</Badge>)}{renderCondicionBadges(animal.condicion)}</Group>
                                         </Table.Td>
@@ -1735,7 +1772,7 @@ export default function App() {
                     </Group>
                     <Group gap="sm" mr="md">
                         <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel}>Excel</Button>
-                        {activeSection === 'hacienda' && ( <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180}>Nuevo Animal</Button> )}
+                        {activeSection === 'hacienda' && ( <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={() => { setCaravana(''); setOrigenModal('PROPIO'); setPrecioCompra(''); openModalAlta(); }} w={180}>Nuevo Animal</Button> )}
                     </Group>
                   </Group>
                   <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
@@ -1743,7 +1780,7 @@ export default function App() {
                           <Group grow style={{ flex: 1 }}>
                               <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                               <Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                              <MultiSelect label="Estado / Sexo / Condición / Marca" placeholder="Ej: Macho, Enferma, Destacado..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
+                              <MultiSelect label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
                               <Select label="Filtrar por Lote" placeholder="Todos" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
                           </Group>
                           
@@ -1801,7 +1838,9 @@ export default function App() {
                       <Table.Tbody>{animalesFiltrados.map((vaca) => (
                         <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }} bg={vaca.condicion && vaca.condicion.includes('ENFERMA') ? 'red.0' : undefined}>
                           <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
-                          <Table.Td>{vaca.categoria}</Table.Td>
+                          <Table.Td>
+                            <Text fw={500}>{vaca.categoria}</Text>
+                          </Table.Td>
                           <Table.Td>
                             {activeSection === 'bajas' ? (<Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>) : (<Group gap="xs">{vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}{vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : (vaca.categoria !== 'Ternero' && <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>)}{renderCondicionBadges(vaca.condicion)}</Group>)}
                           </Table.Td>
@@ -1964,8 +2003,16 @@ export default function App() {
              activeSection === 'lotes' ? ( <><TextInput label="Nombre del Lote (Grupo)" placeholder="Ej: Recría 2026" value={nuevoLoteNombre} onChange={(e) => setNuevoLoteNombre(e.target.value)} /><Button onClick={crearLoteGrupo} loading={loading} color="grape" fullWidth mt="md">Crear Lote</Button></> ) :
              ( <>
                 <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
-                <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
-                <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
+                <Group grow>
+                    <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
+                    <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
+                </Group>
+                <Group grow mt="sm">
+                    <Select label="Origen" data={['PROPIO', 'COMPRADO']} value={origenModal} onChange={setOrigenModal} allowDeselect={false} />
+                    {origenModal === 'COMPRADO' && (
+                        <TextInput label="Precio de Compra ($)" type="number" placeholder="Ej: 800000" leftSection={<IconCurrencyDollar size={16}/>} value={precioCompra} onChange={(e) => setPrecioCompra(e.target.value)} />
+                    )}
+                </Group>
                 <Group grow mt="md">
                     <Button onClick={() => guardarAnimal(false)} loading={loading} color="teal" variant="outline">Guardar y agregar otro</Button>
                     <Button onClick={() => guardarAnimal(true)} loading={loading} color="teal">Guardar y cerrar</Button>

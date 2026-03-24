@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconRobot, IconSearch, IconFilter, IconCalendar } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar } from '@tabler/icons-react';
 import { supabase } from './supabase';
 
 interface EconomiaProps {
@@ -50,7 +50,7 @@ export default function Economia({ campoId }: EconomiaProps) {
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
 
   const categorias = [
-    'Hacienda (Venta/Compra)', 'Alimentación / Nutrición', 'Sanidad Veterinaria', 
+    'Alimentación / Nutrición', 'Sanidad Veterinaria', 
     'Agricultura / Semillas', 'Maquinaria / Combustible', 'Infraestructura / Alambrados', 
     'Sueldos / Honorarios', 'Impuestos / Servicios', 'Otros'
   ];
@@ -336,16 +336,20 @@ export default function Economia({ campoId }: EconomiaProps) {
                   movimientosFiltrados.map(mov => (
                     <Table.Tr key={`${mov.id}-${mov.esManual ? 'man' : 'auto'}`}>
                       <Table.Td fw={500}><Text size="sm">{formatDate(mov.fecha)}</Text></Table.Td>
+                      
+                      {/* ACÁ ESTÁ EL CAMBIO DE LA CATEGORÍA */}
                       <Table.Td>
                           <Group gap="xs" wrap="nowrap">
-                              {!mov.esManual && (
-                                  <Tooltip label="Gasto cargado automáticamente desde el campo" withArrow>
-                                      <ThemeIcon size="xs" radius="xl" color="gray" variant="light"><IconRobot size={10}/></ThemeIcon>
+                              <Badge color={mov.tipo === 'INGRESO' ? 'teal' : 'gray'} variant="light">{mov.categoria}</Badge>
+                              {mov.esManual && (
+                                  <Tooltip label="Cargado manualmente desde la caja" withArrow>
+                                      <Badge size="xs" color="blue" variant="filled">MANUAL</Badge>
                                   </Tooltip>
                               )}
-                              <Badge color={mov.tipo === 'INGRESO' ? 'teal' : 'gray'} variant="light">{mov.categoria}</Badge>
                           </Group>
                       </Table.Td>
+                      {/* FIN DEL CAMBIO */}
+
                       <Table.Td><Text size="sm">{mov.detalle}</Text></Table.Td>
                       <Table.Td ta="right" c="teal" fw={700}>{mov.tipo === 'INGRESO' ? `$${mov.monto.toLocaleString('es-AR')}` : '-'}</Table.Td>
                       <Table.Td ta="right" c="red" fw={700}>{mov.tipo === 'EGRESO' ? `$${mov.monto.toLocaleString('es-AR')}` : '-'}</Table.Td>
