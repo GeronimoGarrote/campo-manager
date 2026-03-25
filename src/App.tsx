@@ -177,6 +177,8 @@ export default function App() {
   const [sexoBloqueado, setSexoBloqueado] = useState(true);
   const [origenModal, setOrigenModal] = useState<string | null>('PROPIO');
   const [precioCompra, setPrecioCompra] = useState<string | number>('');
+  const [nuevoEstadoReproductivo, setNuevoEstadoReproductivo] = useState<string | null>('VACÍA');
+  const [nuevoMesesGestacion, setNuevoMesesGestacion] = useState<string | null>(null);
   
   const [nombrePotrero, setNombrePotrero] = useState('');
   const [hasPotrero, setHasPotrero] = useState<string | number>('');
@@ -888,13 +890,22 @@ export default function App() {
     
     setLoading(true); 
     const hoy = new Date().toISOString().split('T')[0];
+
+    // Lógica para saber qué estado ponerle al nacer/entrar
+    let estadoInicial = 'ACTIVO';
+    if (['Vaca', 'Vaquillona'].includes(categoria || '')) {
+        estadoInicial = nuevoEstadoReproductivo || 'VACÍA';
+    }
     
     const { data: newAnimalData, error } = await supabase.from('animales').insert([{ 
-        caravana, categoria, sexo, estado: 'ACTIVO', condicion: 'SANA', origen: origenModal, 
+        caravana, categoria, sexo, estado: estadoInicial, condicion: 'SANA', origen: origenModal, 
         fecha_nacimiento: hoy, fecha_ingreso: hoy, establecimiento_id: campoId 
     }]).select();
     
     if (!error && newAnimalData && newAnimalData.length > 0) {
+        const animalId = newAnimalData[0].id;
+
+        // Si es comprado, clava el gasto en la caja
         if (origenModal === 'COMPRADO' && precioCompra) {
             await supabase.from('caja').insert({
                 establecimiento_id: campoId,
@@ -906,7 +917,7 @@ export default function App() {
             });
             
             await supabase.from('eventos').insert({
-                animal_id: newAnimalData[0].id,
+                animal_id: animalId,
                 fecha_evento: new Date().toISOString(),
                 tipo: 'COMPRA',
                 resultado: 'Animal Comprado',
@@ -914,10 +925,31 @@ export default function App() {
                 establecimiento_id: campoId
             });
         }
+
+        // Si entró preñada, le clavamos el parto estimado en la agenda
+        if (estadoInicial === 'PREÑADA' && nuevoMesesGestacion) {
+            const diasGestacionActual = parseFloat(nuevoMesesGestacion) * 30.4;
+            const diasFaltantes = Math.round(283 - diasGestacionActual);
+            const fechaParto = new Date();
+            fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
+            const fechaPartoStr = fechaParto.toISOString().split('T')[0];
+
+            await supabase.from('agenda').insert({
+                establecimiento_id: campoId,
+                fecha_programada: fechaPartoStr,
+                titulo: `Parto: ${caravana}`,
+                descripcion: `Parto estimado al ingresar animal (${nuevoMesesGestacion} meses de gestación).`,
+                tipo: 'PARTO_ESTIMADO',
+                animal_id: animalId
+            });
+            fetchAgenda();
+        }
         
         setCaravana(''); 
         setPrecioCompra('');
         setOrigenModal('PROPIO');
+        setNuevoEstadoReproductivo('VACÍA');
+        setNuevoMesesGestacion(null);
         fetchAnimales(); 
         if (cerrarModal) closeModalAlta(); 
     } else if (error) {
@@ -1772,7 +1804,7 @@ export default function App() {
                     </Group>
                     <Group gap="sm" mr="md">
                         <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel}>Excel</Button>
-                        {activeSection === 'hacienda' && ( <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={() => { setCaravana(''); setOrigenModal('PROPIO'); setPrecioCompra(''); openModalAlta(); }} w={180}>Nuevo Animal</Button> )}
+                        <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={() => { setCaravana(''); setOrigenModal('PROPIO'); setPrecioCompra(''); setNuevoEstadoReproductivo('VACÍA'); setNuevoMesesGestacion(null); openModalAlta(); }} w={180}>Nuevo Animal</Button>
                     </Group>
                   </Group>
                   <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
@@ -1780,7 +1812,7 @@ export default function App() {
                           <Group grow style={{ flex: 1 }}>
                               <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                               <Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                              <MultiSelect label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
+                              <MultiSelect label="Estado / Sexo / Condición / Marca" placeholder="Ej: Macho, Enferma, Destacado..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
                               <Select label="Filtrar por Lote" placeholder="Todos" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
                           </Group>
                           
@@ -2003,17 +2035,29 @@ export default function App() {
              activeSection === 'lotes' ? ( <><TextInput label="Nombre del Lote (Grupo)" placeholder="Ej: Recría 2026" value={nuevoLoteNombre} onChange={(e) => setNuevoLoteNombre(e.target.value)} /><Button onClick={crearLoteGrupo} loading={loading} color="grape" fullWidth mt="md">Crear Lote</Button></> ) :
              ( <>
                 <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
-                <Group grow>
+                <Group grow mt="sm">
                     <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} />
                     <Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} />
                 </Group>
-                <Group grow mt="sm">
+                
+                {/* Lógica dinámica si es Vaca o Vaquillona */}
+                {['Vaca', 'Vaquillona'].includes(categoria || '') && (
+                    <Group grow mt="sm" align="flex-start">
+                        <Select label="Estado Reproductivo" data={['VACÍA', 'PREÑADA']} value={nuevoEstadoReproductivo} onChange={setNuevoEstadoReproductivo} allowDeselect={false} />
+                        {nuevoEstadoReproductivo === 'PREÑADA' && (
+                            <Select label="Gestación Estimada" placeholder="Opcional" data={opcionesGestacion} value={nuevoMesesGestacion} onChange={setNuevoMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>}/>
+                        )}
+                    </Group>
+                )}
+
+                <Group grow mt="sm" align="flex-start">
                     <Select label="Origen" data={['PROPIO', 'COMPRADO']} value={origenModal} onChange={setOrigenModal} allowDeselect={false} />
                     {origenModal === 'COMPRADO' && (
                         <TextInput label="Precio de Compra ($)" type="number" placeholder="Ej: 800000" leftSection={<IconCurrencyDollar size={16}/>} value={precioCompra} onChange={(e) => setPrecioCompra(e.target.value)} />
                     )}
                 </Group>
-                <Group grow mt="md">
+                
+                <Group grow mt="xl">
                     <Button onClick={() => guardarAnimal(false)} loading={loading} color="teal" variant="outline">Guardar y agregar otro</Button>
                     <Button onClick={() => guardarAnimal(true)} loading={loading} color="teal">Guardar y cerrar</Button>
                 </Group>
