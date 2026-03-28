@@ -1,16 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton } from '@mantine/core';
+import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton, Menu } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar } from '@tabler/icons-react';
-import { supabase } from './supabase';
+import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar, IconTruckDelivery, IconCheck } from '@tabler/icons-react';
+import { supabase } from '../supabase';
+
+interface Establecimiento { id: string; nombre: string; renspa?: string; }
 
 interface EconomiaProps {
   campoId: string;
+  establecimientos?: Establecimiento[]; 
 }
 
 interface Movimiento {
   id: string;
   fecha: string;
+  timestamp: string;
   tipo: 'INGRESO' | 'EGRESO';
   categoria: string;
   detalle: string;
@@ -30,7 +34,7 @@ const getHoyIso = () => {
   return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; 
 };
 
-export default function Economia({ campoId }: EconomiaProps) {
+export default function Economia({ campoId, establecimientos = [] }: EconomiaProps) {
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDatos, setLoadingDatos] = useState(true);
@@ -42,6 +46,8 @@ export default function Economia({ campoId }: EconomiaProps) {
   const [categoriaInput, setCategoriaInput] = useState<string | null>('Infraestructura / Alambrados');
   const [detalleInput, setDetalleInput] = useState('');
   const [montoInput, setMontoInput] = useState<number | ''>('');
+  
+  const [campoDestinoInsumo, setCampoDestinoInsumo] = useState<string | null>(null);
 
   // Filtros State
   const [filtroFecha, setFiltroFecha] = useState<string | null>('este_mes');
@@ -52,7 +58,7 @@ export default function Economia({ campoId }: EconomiaProps) {
   const categorias = [
     'Alimentación / Nutrición', 'Sanidad Veterinaria', 
     'Agricultura / Semillas', 'Maquinaria / Combustible', 'Infraestructura / Alambrados', 
-    'Sueldos / Honorarios', 'Impuestos / Servicios', 'Otros'
+    'Sueldos / Honorarios', 'Impuestos / Servicios', 'Traslado Insumo', 'Otros'
   ];
 
   useEffect(() => {
@@ -64,9 +70,9 @@ export default function Economia({ campoId }: EconomiaProps) {
     setLoadingDatos(true);
 
     const pCaja = supabase.from('caja').select('*').eq('establecimiento_id', campoId);
-    const pEventos = supabase.from('eventos').select('id, fecha_evento, tipo, detalle, resultado, costo, animales(caravana)').eq('establecimiento_id', campoId).gt('costo', 0);
-    const pLabores = supabase.from('labores').select('id, fecha, actividad, cultivo, detalle, costo').eq('establecimiento_id', campoId).gt('costo', 0);
-    const pLotes = supabase.from('lotes_eventos').select('id, fecha, tipo, detalle, costo').eq('establecimiento_id', campoId).gt('costo', 0);
+    const pEventos = supabase.from('eventos').select('id, fecha_evento, tipo, detalle, resultado, costo, created_at, animales(caravana)').eq('establecimiento_id', campoId).gt('costo', 0);
+    const pLabores = supabase.from('labores').select('id, fecha, actividad, cultivo, detalle, costo, created_at').eq('establecimiento_id', campoId).gt('costo', 0);
+    const pLotes = supabase.from('lotes_eventos').select('id, fecha, tipo, detalle, costo, created_at').eq('establecimiento_id', campoId).gt('costo', 0);
 
     const [resCaja, resEventos, resLabores, resLotes] = await Promise.all([pCaja, pEventos, pLabores, pLotes]);
 
@@ -74,7 +80,9 @@ export default function Economia({ campoId }: EconomiaProps) {
 
     if (resCaja.data) {
       todos = [...todos, ...resCaja.data.map(m => ({
-        id: m.id, fecha: m.fecha, tipo: m.tipo, categoria: m.categoria, detalle: m.detalle, monto: m.monto, esManual: true
+        id: m.id, fecha: m.fecha, timestamp: m.created_at || m.fecha, tipo: m.tipo, categoria: m.categoria, detalle: m.detalle, monto: m.monto, 
+        // Es manual si NO es (Venta/Compra) y NO es un (Traslado recibido de otro campo)
+        esManual: m.categoria !== 'Hacienda (Venta/Compra)' && !(m.categoria === 'Traslado Insumo' && m.tipo === 'INGRESO')
       }))];
     }
 
@@ -82,6 +90,7 @@ export default function Economia({ campoId }: EconomiaProps) {
       todos = [...todos, ...resEventos.data.map((e: any) => ({
         id: e.id, 
         fecha: e.fecha_evento.split('T')[0], 
+        timestamp: e.created_at || e.fecha_evento,
         tipo: 'EGRESO' as const, 
         categoria: 'Sanidad Veterinaria', 
         detalle: `Vaca ${e.animales?.caravana || '?'}: ${e.tipo} ${e.detalle ? `- ${e.detalle}` : ''}`.trim(), 
@@ -94,6 +103,7 @@ export default function Economia({ campoId }: EconomiaProps) {
       todos = [...todos, ...resLabores.data.map((l: any) => ({
         id: l.id, 
         fecha: l.fecha.split('T')[0], 
+        timestamp: l.created_at || l.fecha,
         tipo: 'EGRESO' as const, 
         categoria: 'Agricultura / Semillas', 
         detalle: `Lote Agrícola: ${l.actividad} ${l.cultivo ? '('+l.cultivo+')' : ''}`.trim(), 
@@ -106,6 +116,7 @@ export default function Economia({ campoId }: EconomiaProps) {
       todos = [...todos, ...resLotes.data.map((le: any) => ({
         id: le.id, 
         fecha: le.fecha.split('T')[0], 
+        timestamp: le.created_at || le.fecha,
         tipo: 'EGRESO' as const, 
         categoria: 'Alimentación / Nutrición', 
         detalle: `Grupo/Lote: ${le.tipo} ${le.detalle ? `- ${le.detalle}` : ''}`.trim(), 
@@ -114,32 +125,27 @@ export default function Economia({ campoId }: EconomiaProps) {
       }))];
     }
 
-    todos.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    // Ordenamiento preciso por timestamp real (fecha + hora de la base de datos)
+    todos.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     setMovimientos(todos);
     setLoadingDatos(false);
   }
 
-  // --- MOTOR DE FILTROS ---
   const movimientosFiltrados = useMemo(() => {
     const hoy = new Date();
     const currentMonth = hoy.getMonth();
     const currentYear = hoy.getFullYear();
 
     return movimientos.filter(mov => {
-      // 1. Filtro de Búsqueda (Texto)
       const matchBusqueda = mov.detalle.toLowerCase().includes(busqueda.toLowerCase()) || 
                             mov.categoria.toLowerCase().includes(busqueda.toLowerCase());
       
-      // 2. Filtro de Tipo (Ingreso/Egreso)
       const matchTipo = filtroTipo ? mov.tipo === filtroTipo : true;
-      
-      // 3. Filtro de Categoría
       const matchCategoria = filtroCategoria ? mov.categoria === filtroCategoria : true;
 
-      // 4. Filtro Maestro de Fecha
       let matchFecha = true;
       if (filtroFecha !== 'siempre') {
-        const fechaMov = new Date(mov.fecha + 'T12:00:00'); // Evita desfase horario
+        const fechaMov = new Date(mov.fecha + 'T12:00:00'); 
         const m = fechaMov.getMonth();
         const y = fechaMov.getFullYear();
 
@@ -162,7 +168,6 @@ export default function Economia({ campoId }: EconomiaProps) {
     });
   }, [movimientos, busqueda, filtroTipo, filtroCategoria, filtroFecha]);
 
-  // Cálculos reactivos basados en lo que está filtrado
   const totalIngresos = movimientosFiltrados.filter(m => m.tipo === 'INGRESO').reduce((acc, curr) => acc + curr.monto, 0);
   const totalEgresos = movimientosFiltrados.filter(m => m.tipo === 'EGRESO').reduce((acc, curr) => acc + curr.monto, 0);
   const saldoNeto = totalIngresos - totalEgresos;
@@ -180,30 +185,54 @@ export default function Economia({ campoId }: EconomiaProps) {
       return alert("Completá todos los campos para registrar el movimiento en caja.");
     }
     
-    setLoading(true);
-    const { error } = await supabase.from('caja').insert([{
-      establecimiento_id: campoId,
-      fecha: fechaInput,
-      tipo: tipoInput,
-      categoria: categoriaInput,
-      detalle: detalleInput,
-      monto: Number(montoInput)
-    }]);
-    setLoading(false);
-
-    if (!error) {
-      setDetalleInput('');
-      setMontoInput('');
-      close();
-      fetchTodosLosMovimientos();
-    } else {
-      alert("Error guardando el movimiento: " + error.message);
+    if (tipoInput === 'TRASLADO' && !campoDestinoInsumo) {
+        return alert("Seleccioná el establecimiento de destino para el traslado.");
     }
+
+    setLoading(true);
+
+    if (tipoInput === 'TRASLADO') {
+        const nombreDestino = establecimientos.find(e => e.id === campoDestinoInsumo)?.nombre || 'Otro Campo';
+        const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Origen';
+
+        const egresoOrigen = { establecimiento_id: campoId, fecha: fechaInput, tipo: 'EGRESO', categoria: 'Traslado Insumo', detalle: `A campo ${nombreDestino}: ${detalleInput}`, monto: Number(montoInput) };
+        const ingresoDestino = { establecimiento_id: campoDestinoInsumo, fecha: fechaInput, tipo: 'INGRESO', categoria: 'Traslado Insumo', detalle: `Desde campo ${nombreOrigen}: ${detalleInput}`, monto: Number(montoInput) };
+        
+        await supabase.from('caja').insert([egresoOrigen, ingresoDestino]);
+    } else {
+        const { error } = await supabase.from('caja').insert([{ establecimiento_id: campoId, fecha: fechaInput, tipo: tipoInput, categoria: categoriaInput, detalle: detalleInput, monto: Number(montoInput) }]);
+        if (error) alert("Error guardando el movimiento: " + error.message);
+    }
+    
+    setLoading(false);
+    setDetalleInput('');
+    setMontoInput('');
+    setCampoDestinoInsumo(null);
+    close();
+    fetchTodosLosMovimientos();
   }
 
-  async function borrarMovimientoManual(id: string) {
+  async function borrarMovimientoManual(mov: Movimiento) {
     if (!confirm("¿Borrar este movimiento manual de la caja?")) return;
-    await supabase.from('caja').delete().eq('id', id);
+    
+    if (mov.categoria === 'Traslado Insumo' && mov.tipo === 'EGRESO') {
+        // Borramos el de origen
+        await supabase.from('caja').delete().eq('id', mov.id);
+        
+        // Tratamos de buscar y borrar el de destino usando el texto del detalle que el usuario escribió al final
+        const baseDetalle = mov.detalle.split(': ')[1] || '';
+        if (baseDetalle) {
+            await supabase.from('caja').delete()
+                .eq('categoria', 'Traslado Insumo')
+                .eq('tipo', 'INGRESO')
+                .eq('fecha', mov.fecha)
+                .eq('monto', mov.monto)
+                .like('detalle', `%${baseDetalle}`);
+        }
+    } else {
+        await supabase.from('caja').delete().eq('id', mov.id);
+    }
+    
     fetchTodosLosMovimientos();
   }
 
@@ -226,9 +255,15 @@ export default function Economia({ campoId }: EconomiaProps) {
             leftSection={<IconCalendar size={16}/>}
             variant="filled"
           />
-          <Button leftSection={<IconPlus size={20} />} color="green" onClick={open}>
-            Nuevo Movimiento
-          </Button>
+          <Menu shadow="md" width={240}>
+            <Menu.Target>
+              <Button leftSection={<IconPlus size={20} />} color="green">Nuevo Movimiento</Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconReceipt size={14} />} onClick={() => { setTipoInput('EGRESO'); setCategoriaInput('Infraestructura / Alambrados'); open(); }}>Ingreso/Egreso Estándar</Menu.Item>
+              <Menu.Item leftSection={<IconTruckDelivery size={14} />} onClick={() => { setTipoInput('TRASLADO'); setCategoriaInput('Traslado Insumo'); open(); }}>Traslado a Otro Campo</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
       </Group>
 
@@ -336,8 +371,6 @@ export default function Economia({ campoId }: EconomiaProps) {
                   movimientosFiltrados.map(mov => (
                     <Table.Tr key={`${mov.id}-${mov.esManual ? 'man' : 'auto'}`}>
                       <Table.Td fw={500}><Text size="sm">{formatDate(mov.fecha)}</Text></Table.Td>
-                      
-                      {/* ACÁ ESTÁ EL CAMBIO DE LA CATEGORÍA */}
                       <Table.Td>
                           <Group gap="xs" wrap="nowrap">
                               <Badge color={mov.tipo === 'INGRESO' ? 'teal' : 'gray'} variant="light">{mov.categoria}</Badge>
@@ -348,14 +381,12 @@ export default function Economia({ campoId }: EconomiaProps) {
                               )}
                           </Group>
                       </Table.Td>
-                      {/* FIN DEL CAMBIO */}
-
                       <Table.Td><Text size="sm">{mov.detalle}</Text></Table.Td>
                       <Table.Td ta="right" c="teal" fw={700}>{mov.tipo === 'INGRESO' ? `$${mov.monto.toLocaleString('es-AR')}` : '-'}</Table.Td>
                       <Table.Td ta="right" c="red" fw={700}>{mov.tipo === 'EGRESO' ? `$${mov.monto.toLocaleString('es-AR')}` : '-'}</Table.Td>
                       <Table.Td align="right">
                         {mov.esManual ? (
-                            <ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarMovimientoManual(mov.id)}>
+                            <ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarMovimientoManual(mov)}>
                                 <IconTrash size={16} />
                             </ActionIcon>
                         ) : (
@@ -373,24 +404,39 @@ export default function Economia({ campoId }: EconomiaProps) {
       </Paper>
 
       {/* MODAL NUEVO MOVIMIENTO */}
-      <Modal opened={opened} onClose={close} title={<Text fw={700} size="lg">Registrar en Caja</Text>} centered>
+      <Modal opened={opened} onClose={close} title={<Text fw={700} size="lg">{tipoInput === 'TRASLADO' ? 'Traslado a Otro Campo' : 'Registrar en Caja'}</Text>} centered zIndex={2000}>
         <Stack>
           <Group grow>
-            <Select label="Tipo" data={['INGRESO', 'EGRESO']} value={tipoInput} onChange={setTipoInput} allowDeselect={false} />
             <TextInput label="Fecha" type="date" value={fechaInput} onChange={(e) => setFechaInput(e.target.value)} />
+            {tipoInput !== 'TRASLADO' && (
+                <Select label="Tipo" data={['INGRESO', 'EGRESO']} value={tipoInput} onChange={setTipoInput} allowDeselect={false} comboboxProps={{ withinPortal: true, zIndex: 10000 }} />
+            )}
           </Group>
-          <Select label="Categoría" data={categorias} value={categoriaInput} onChange={setCategoriaInput} searchable />
-          <TextInput label="Detalle / Concepto" placeholder="Ej: Compra de 10 rollos alfalfa" value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} />
+          
+          {tipoInput === 'TRASLADO' ? (
+              <Select 
+                label="Campo Destino" 
+                placeholder="Seleccionar establecimiento" 
+                data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} 
+                value={campoDestinoInsumo} 
+                onChange={setCampoDestinoInsumo} 
+                comboboxProps={{ withinPortal: true, zIndex: 10000 }} 
+              />
+          ) : (
+              <Select label="Categoría" data={categorias} value={categoriaInput} onChange={setCategoriaInput} searchable comboboxProps={{ withinPortal: true, zIndex: 10000 }} />
+          )}
+
+          <TextInput label={tipoInput === 'TRASLADO' ? "Insumos a trasladar" : "Detalle / Concepto"} placeholder={tipoInput === 'TRASLADO' ? "Ej: 2 Rollos de Alfalfa" : "Ej: Compra de vacunas"} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} />
           <NumberInput 
-            label="Monto ($)" 
+            label="Valor Equivalente ($)" 
             placeholder="0.00" 
             value={montoInput} 
             onChange={(val) => setMontoInput(val === '' ? '' : Number(val))} 
             hideControls 
             leftSection={<IconCurrencyDollar size={16} />} 
           />
-          <Button mt="md" color="green" onClick={guardarMovimiento} loading={loading}>
-            Guardar Movimiento
+          <Button mt="md" color={tipoInput === 'TRASLADO' ? "blue" : "green"} onClick={guardarMovimiento} loading={loading} leftSection={tipoInput === 'TRASLADO' ? <IconTruckDelivery size={18} /> : <IconCheck size={18} />}>
+            {tipoInput === 'TRASLADO' ? 'Ejecutar Traslado Contable' : 'Guardar Movimiento'}
           </Button>
         </Stack>
       </Modal>
