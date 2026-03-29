@@ -1,13 +1,14 @@
 import { useEffect, useState, useMemo } from 'react';
-import { MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, SimpleGrid, Card, Modal, Alert, UnstyledButton, Center, MultiSelect, Switch, RingProgress, Stack, ThemeIcon, PasswordInput, Container, Indicator, Popover, Grid, Table } from '@mantine/core';
+import { MantineProvider, Table, SimpleGrid, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, Modal, Alert, UnstyledButton, MultiSelect, Switch, Stack, ThemeIcon, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconHeartbeat, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconMapPin, IconTrendingUp, IconChartDots, IconTag, IconCalendarEvent, IconBell, IconInfoCircle } from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconHeartbeat, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTrendingUp, IconChartDots, IconTag, IconCalendarEvent, IconBell, IconInfoCircle } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
 
-// --- IMPORTACIÓN DE MÓDULOS (VISTAS) ---
+import Login from './views/Login';
+import Inicio from './views/Inicio';
 import Economia from './views/Economia';
 import Masivos from './views/Masivos';
 import Agenda from './views/Agenda';
@@ -16,16 +17,13 @@ import Agricultura from './views/Agricultura';
 import Hacienda from './views/Hacienda';
 import Actividad from './views/Actividad';
 
-// --- TIPOS ---
 interface Establecimiento { id: string; nombre: string; renspa?: string; }
 interface Animal { id: string; caravana: string; categoria: string; sexo: string; estado: string; condicion: string; origen: string; detalle_baja?: string; detalles?: string; destacado?: boolean; fecha_nacimiento?: string; fecha_ingreso?: string; madre_id?: string; castrado?: boolean; establecimiento_id: string; potrero_id?: string; parcela_id?: string; lote_id?: string; toros_servicio_ids?: string[]; }
 interface Evento { id: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; costo?: number; datos_extra?: any; animales?: { caravana: string } }
 
-// --- HELPERS ---confirmarBaja
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
-const diasDiferencia = (fechaFuturaStr: string) => { const hoy = new Date(); hoy.setHours(0,0,0,0); const fechaParto = new Date(fechaFuturaStr); fechaParto.setHours(0,0,0,0); const diffTime = fechaParto.getTime() - hoy.getTime(); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); return diffDays; };
 
 const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -47,18 +45,6 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const getIconoEvento = (tipo: string) => {
-    switch(tipo) {
-        case 'PESAJE': return <ThemeIcon color="blue" size="md" variant="light" radius="xl"><IconChartDots size={14}/></ThemeIcon>;
-        case 'VACUNACION': case 'SANIDAD': case 'TRATAMIENTO': case 'ENFERMEDAD': case 'LESION': case 'CURACION': return <ThemeIcon color="red" size="md" variant="light" radius="xl"><IconHeartbeat size={14}/></ThemeIcon>;
-        case 'TACTO': case 'SERVICIO': case 'PARTO': return <ThemeIcon color="pink" size="md" variant="light" radius="xl"><IconBabyCarriage size={14}/></ThemeIcon>;
-        case 'MOVIMIENTO_POTRERO': case 'CAMBIO_LOTE': return <ThemeIcon color="orange" size="md" variant="light" radius="xl"><IconMapPin size={14}/></ThemeIcon>;
-        case 'VENTA': return <ThemeIcon color="green" size="md" variant="light" radius="xl"><IconCurrencyDollar size={14}/></ThemeIcon>;
-        case 'BAJA': case 'MUERTO': case 'BORRADO': return <ThemeIcon color="dark" size="md" variant="light" radius="xl"><IconSkull size={14}/></ThemeIcon>;
-        default: return <ThemeIcon color="gray" size="md" variant="light" radius="xl"><IconActivity size={14}/></ThemeIcon>;
-    }
-};
-
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState('');
@@ -76,7 +62,6 @@ export default function App() {
   const [nuevoCampoNombre, setNuevoCampoNombre] = useState('');
   const [nuevoCampoRenspa, setNuevoCampoRenspa] = useState('');
 
-  // --- DATOS GLOBALES ---
   const [animales, setAnimales] = useState<Animal[]>([]);
   const [potreros, setPotreros] = useState<any[]>([]);
   const [parcelas, setParcelas] = useState<any[]>([]); 
@@ -84,9 +69,7 @@ export default function App() {
   const [eventosGlobales, setEventosGlobales] = useState<Evento[]>([]);
   const [eventosLotesGlobal, setEventosLotesGlobal] = useState<any[]>([]);
   const [agenda, setAgenda] = useState<any[]>([]);
-  const [chartHover, setChartHover] = useState<{ label: string, value: number | string } | null>(null);
 
-  // Forms Individuales 
   const [modalAltaOpen, { open: openModalAlta, close: closeModalAlta }] = useDisclosure(false);
   const [caravana, setCaravana] = useState('');
   const [categoria, setCategoria] = useState<string | null>('Vaca');
@@ -98,7 +81,6 @@ export default function App() {
   const [nuevoMesesGestacion, setNuevoMesesGestacion] = useState<string | null>(null);
   const [edadEstimada, setEdadEstimada] = useState<string | null>(null);
   
-  // Vaca UI 
   const [modalVacaOpen, { open: openModalVaca, close: closeModalVaca }] = useDisclosure(false);
   const [animalSelId, setAnimalSelId] = useState<string | null>(null);
   const [fichaAnterior, setFichaAnterior] = useState<Animal | null>(null); 
@@ -112,18 +94,15 @@ export default function App() {
   const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string, estado: string }[]>([]); 
   const [nombresTorosCartel, setNombresTorosCartel] = useState<string | null>(null);
   
-  // Grafico Peso Individual
   const [modalGraficoOpen, { open: openModalGrafico, close: closeModalGrafico }] = useDisclosure(false);
   const [graficoAnimalId, setGraficoAnimalId] = useState<string | null>(null);
   const [datosGrafico, setDatosGrafico] = useState<any[]>([]);
   const [statsGrafico, setStatsGrafico] = useState({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
   const [loadingGrafico, setLoadingGrafico] = useState(false);
 
-  // Opciones Constantes
   const opcionesGestacion = [ { value: '0.5', label: '15 días (0.5 mes)' }, { value: '1', label: '1 mes' }, { value: '1.5', label: '1 mes y medio' }, { value: '2', label: '2 meses' }, { value: '2.5', label: '2 meses y medio' }, { value: '3', label: '3 meses' }, { value: '3.5', label: '3 meses y medio' }, { value: '4', label: '4 meses' }, { value: '4.5', label: '4 meses y medio' }, { value: '5', label: '5 meses' }, { value: '5.5', label: '5 meses y medio' }, { value: '6', label: '6 meses' }, { value: '6.5', label: '6 meses y medio' }, { value: '7', label: '7 meses' }, { value: '7.5', label: '7 meses y medio' }, { value: '8', label: '8 meses' }, { value: '8.5', label: '8 meses y medio' }, { value: '9', label: '9 meses (A parir)' } ];
   const opcionesEdadEstimada = [ { value: '0', label: 'Recién nacido (0 meses)' }, { value: '3', label: '3 meses' }, { value: '6', label: '6 meses (Destete)' }, { value: '9', label: '9 meses' }, { value: '12', label: '1 año' }, { value: '18', label: '1.5 años' }, { value: '24', label: '2 años' }, { value: '36', label: '3 años' }, { value: '48', label: '4 años' }, { value: '60', label: '5 años' }, { value: '72', label: '6 años' }, { value: '84', label: '7 años' }, { value: '96', label: '8 años' }, { value: '108', label: '9+ años' } ];
 
-  // Inputs Eventos Individuales
   const [fechaEvento, setFechaEvento] = useState<Date | null>(new Date());
   const [tipoEventoInput, setTipoEventoInput] = useState<string | null>('PESAJE');
   const [resultadoInput, setResultadoInput] = useState('');
@@ -138,7 +117,6 @@ export default function App() {
   const [pesoNacimiento, setPesoNacimiento] = useState(''); 
   const [adpvCalculado, setAdpvCalculado] = useState<string | null>(null);
 
-  // Edicion Animal
   const [editCaravana, setEditCaravana] = useState('');
   const [editCategoria, setEditCategoria] = useState<string | null>('');
   const [editSexo, setEditSexo] = useState<string | null>('');
@@ -154,7 +132,6 @@ export default function App() {
   const [modoBaja, setModoBaja] = useState<string | null>(null);
   const [bajaMotivo, setBajaMotivo] = useState('');
   
-  // Nuevos estados para Venta Individual
   const [bajaModalidadVenta, setBajaModalidadVenta] = useState<string>('TOTAL');
   const [bajaPrecio, setBajaPrecio] = useState<string | number>('');
   const [bajaKilosTotales, setBajaKilosTotales] = useState('');
@@ -166,7 +143,6 @@ export default function App() {
   const [editingEventRes, setEditingEventRes] = useState('');
   const [editingEventDet, setEditingEventDet] = useState('');
 
-  // --- INIT AUTH & DATA ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if (session) loadCampos(); });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); if (session) loadCampos(); else { setEstablecimientos([]); setCampoId(null); } });
@@ -203,13 +179,8 @@ export default function App() {
     if (['Vaca', 'Vaquillona'].includes(categoria || '')) { setSexo('H'); setSexoBloqueado(true); } else if (['Toro', 'Novillo'].includes(categoria || '')) { setSexo('M'); setSexoBloqueado(true); } else { setSexoBloqueado(false); }
   }, [categoria]);
 
-  // --- FETCHERS GLOBALES ---
   async function loadCampos() { const { data } = await supabase.from('establecimientos').select('*').order('created_at'); if (data && data.length > 0) { setEstablecimientos(data); const guardado = localStorage.getItem('campoId'); if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado); else if (!campoId) setCampoId(data[0].id); } }
-  async function fetchAnimales() {
-    if (!campoId) return;
-    let query = supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); 
-    const { data } = await query; setAnimales(data || []);
-  }
+  async function fetchAnimales() { if (!campoId) return; let query = supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); const { data } = await query; setAnimales(data || []); }
   async function fetchPotreros() { if (!campoId) return; const { data } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setPotreros(data || []); }
   async function fetchParcelas() { if (!campoId) return; const { data } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setParcelas(data || []); }
   async function fetchLotes() { if (!campoId) return; const { data } = await supabase.from('lotes').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setLotes(data || []); }
@@ -221,7 +192,6 @@ export default function App() {
   async function borrarCampo(id: string) { if (!confirm("⚠️ ¿BORRAR ESTABLECIMIENTO COMPLETO?")) return; const { error } = await supabase.from('establecimientos').delete().eq('id', id); if (error) alert("Error al borrar."); else { if (id === campoId) { const restantes = establecimientos.filter(e => e.id !== id); if (restantes.length > 0) setCampoId(restantes[0].id); else window.location.reload(); } loadCampos(); } }
   async function editarCampo(id: string, nombreActual: string, renspaActual?: string) { const nuevoNombre = prompt("Nuevo nombre del establecimiento:", nombreActual); if (nuevoNombre === null) return; const nuevoRenspa = prompt("Número de RENSPA:", renspaActual || ''); if (nuevoRenspa === null) return; await supabase.from('establecimientos').update({ nombre: nuevoNombre, renspa: nuevoRenspa }).eq('id', id); loadCampos(); }
 
-  // --- FUNCIONES SINGULARES VACA ---
   async function recargarFicha(id: string) { const { data } = await supabase.from('eventos').select('*').eq('animal_id', id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }); if (data) setEventosFicha(data); }
   async function actualizarCartelToros(idAnimal: string) { setNombresTorosCartel(null); const { data } = await supabase.from('animales').select('toros_servicio_ids').eq('id', idAnimal).single(); if (data && data.toros_servicio_ids && data.toros_servicio_ids.length > 0) { const nombres = animales.filter(a => data.toros_servicio_ids!.includes(a.id)).map(a => a.caravana).join(' - '); setNombresTorosCartel(nombres || null); } else { setNombresTorosCartel(null); } }
   async function borrarEvento(id: string) { if(!confirm("¿Borrar evento?")) return; await supabase.from('eventos').delete().eq('id', id); if(animalSelId) recargarFicha(animalSelId); fetchActividadGlobal(); }
@@ -257,7 +227,6 @@ export default function App() {
     if (!caravana || !campoId) return;
     if (origenModal === 'COMPRADO' && !precioCompra) return alert("Ingresá el precio de compra.");
     
-    // LÓGICA ACTUALIZADA: PERMITE CARAVANA REPETIDA SI EL ANTERIOR ESTÁ VENDIDO O MUERTO
     const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravana.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
     if (yaExiste) return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana.");
     
@@ -322,7 +291,6 @@ export default function App() {
     } 
     else if (tipoEventoInput === 'PARTO') {
       if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
-      // LÓGICA ACTUALIZADA PARA PERMITIR REPETIR CARAVANA SI EL ANTERIOR MURIÓ O SE VENDIÓ
       const yaExiste = animales.some(a => a.caravana.toLowerCase() === nuevoTerneroCaravana.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
       if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana."); }
       if (pesoNacimiento) {
@@ -399,7 +367,6 @@ export default function App() {
     closeModalVaca(); fetchAnimales();
   }
 
-  // --- LÓGICA REESCRITA PARA BAJA, VENTA A CAJA Y TRASLADO CON (T) ---
   async function confirmarBaja() { 
       if (!animalSelId || !animalSel || !modoBaja || !campoId) return; 
       
@@ -427,7 +394,6 @@ export default function App() {
           await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, establecimiento_id: campoId });
           await supabase.from('eventos').insert({ animal_id: animalSelId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Origen: ${nombreOrigen}`, establecimiento_id: bajaMotivo });
           
-          // MOVER LAS TAREAS PENDIENTES AL NUEVO CAMPO
           await supabase.from('agenda').update({ establecimiento_id: bajaMotivo }).eq('animal_id', animalSelId).eq('completado', false);
           
       } else if (modoBaja === 'VENDIDO') {
@@ -441,15 +407,11 @@ export default function App() {
           await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${bajaMotivo || '-'} ($${totalIngreso})` }).eq('id', animalSelId);
           await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
           
-          // BORRAR TAREAS PENDIENTES (Ya no es nuestro)
           await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
-          
           if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
       } else {
           await supabase.from('animales').update({ estado: 'MUERTO', detalle_baja: `Causa: ${bajaMotivo}` }).eq('id', animalSelId); 
           await supabase.from('eventos').insert([{ animal_id: animalSelId, tipo: 'BAJA', resultado: 'MUERTO', detalle: `Causa: ${bajaMotivo}`, datos_extra: { causa: bajaMotivo }, establecimiento_id: campoId }]); 
-          
-          // BORRAR TAREAS PENDIENTES (Se murió)
           await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
       }
       
@@ -457,10 +419,9 @@ export default function App() {
       closeModalVaca(); fetchAnimales(); fetchActividadGlobal(); fetchAgenda();
   }
 
- async function restaurarAnimal() { 
+  async function restaurarAnimal() { 
       if (!animalSelId || !animalSel || !confirm("¿Restaurar a Hacienda Activa?")) return; 
       
-      // Si el animal estaba vendido, vamos a la caja y borramos el ingreso de plata
       if (animalSel.estado === 'VENDIDO') {
           await supabase.from('caja').delete()
               .eq('establecimiento_id', campoId)
@@ -470,25 +431,9 @@ export default function App() {
 
       await supabase.from('animales').update({ estado: 'ACTIVO', detalle_baja: null }).eq('id', animalSelId); 
       await supabase.from('eventos').insert([{ animal_id: animalSelId, tipo: 'RESTAURACION', resultado: 'Reingreso', detalle: 'Restaurado', establecimiento_id: campoId! }]); 
-      
-      closeModalVaca(); 
-      fetchAnimales(); 
+      closeModalVaca(); fetchAnimales(); 
   }
-  // Variables KPIs para el Dashboard
-  const haciendaActiva = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
-  const stats = {
-    total: haciendaActiva.length,
-    vacas: haciendaActiva.filter(a => a.categoria === 'Vaca').length,
-    vaquillonas: haciendaActiva.filter(a => a.categoria === 'Vaquillona').length,
-    prenadas: haciendaActiva.filter(a => a.estado === 'PREÑADA').length,
-    enfermos: haciendaActiva.filter(a => a.condicion && a.condicion.includes('ENFERMA')).length,
-    terneros: haciendaActiva.filter(a => a.categoria === 'Ternero').length,
-    ternerosM: haciendaActiva.filter(a => a.categoria === 'Ternero' && a.sexo === 'M').length,
-    ternerosH: haciendaActiva.filter(a => a.categoria === 'Ternero' && a.sexo === 'H').length,
-    novillos: haciendaActiva.filter(a => a.categoria === 'Novillo').length,
-    toros: haciendaActiva.filter(a => a.categoria === 'Toro').length,
-  };
-  const totalVientres = stats.vacas + stats.vaquillonas; const prenadaPct = totalVientres > 0 ? Math.round((stats.prenadas / totalVientres) * 100) : 0;
+
   const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO';
 
   const opcionesDisponibles = (() => { 
@@ -504,26 +449,13 @@ export default function App() {
   const tareasPendientesUrgentes = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
   const tareasParaHoy = agenda.filter(t => !t.completado && t.fecha_programada === hoyFormateado);
   const tareasAtrasadas = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
-  const partosProximos = agenda.filter(tarea => 
-      tarea.tipo === 'PARTO_ESTIMADO' && 
-      !tarea.completado && 
-      tarea.fecha_programada >= hoyFormateado && 
-      animales.some(a => a.id === tarea.animal_id) // <-- Esta es la magia antighosting
-  ).sort((a, b) => a.fecha_programada.localeCompare(b.fecha_programada));
+
   const torosDisponibles = animales.filter(a => a.categoria === 'Toro' && a.estado !== 'MUERTO' && a.estado !== 'VENDIDO');
 
   return (
     <MantineProvider>
         {!session ? (
-          <Container size={420} my={40}>
-            <Title ta="center" order={1} mb="xl" c="teal">RodeoControl</Title>
-            <Paper withBorder shadow="md" p={30} mt={30} radius="md">
-              <Text size="sm" fw={500} ta="center" mb="lg">Iniciá sesión para administrar tu campo</Text>
-              <TextInput label="Email" placeholder="tucorreo@ejemplo.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
-              <PasswordInput label="Contraseña" placeholder="Tu contraseña" required mt="md" value={password} onChange={(e) => setPassword(e.target.value)} />
-              <Button fullWidth mt="xl" onClick={handleLogin} loading={authLoading} color="teal">Ingresar</Button>
-            </Paper>
-          </Container>
+            <Login email={email} setEmail={setEmail} password={password} setPassword={setPassword} handleLogin={handleLogin} authLoading={authLoading} />
         ) : (
           <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
             <AppShell.Header>
@@ -562,20 +494,16 @@ export default function App() {
             <AppShell.Navbar p="md" style={{ display: 'flex', flexDirection: 'column' }}>
               <ScrollArea style={{ flex: 1 }} offsetScrollbars>
                   <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md" style={{ borderRadius: 8 }}/>
-                  
                   <Text size="xs" fw={700} c="dimmed" mb="sm" mt="md">GANADERÍA</Text>
                   <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Lotes y Nutrición" leftSection={<IconTag size={20}/>} active={activeSection === 'lotes' || activeSection === 'lote_detalle'} onClick={() => { setActiveSection('lotes'); toggle(); }} color="grape" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Agenda / Tareas" leftSection={<IconCalendarEvent size={20}/>} active={activeSection === 'agenda'} onClick={() => { setActiveSection('agenda'); toggle(); }} color="orange" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" style={{ borderRadius: 8 }}/>
                   <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" style={{ borderRadius: 8 }}/>
-                  
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
                   <NavLink label="Potreros y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura' || activeSection === 'potrero_detalle'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }}/>
-                  
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">ADMINISTRACIÓN</Text>
                   <NavLink label="Caja / Economía" leftSection={<IconCurrencyDollar size={20}/>} active={activeSection === 'economia'} onClick={() => { setActiveSection('economia'); toggle(); }} color="green" variant="filled" style={{ borderRadius: 8 }}/>
-                  
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
                   <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }}/>
               </ScrollArea>
@@ -591,97 +519,7 @@ export default function App() {
             </AppShell.Navbar>
 
             <AppShell.Main bg="gray.0">
-              
-              {/* --- VISTA: INICIO / DASHBOARD --- */}
-              {activeSection === 'inicio' && (
-                <>
-                  <Title order={2} mb="lg">Resumen General</Title>
-                  <Grid gutter="lg">
-                    <Grid.Col span={{ base: 12, md: 7 }}>
-                      <SimpleGrid cols={{ base: 1, sm: 3 }} mb="lg">
-                        <Card shadow="sm" radius="md" p="md" withBorder>
-                          <Group wrap="nowrap" gap="xs">
-                            <RingProgress size={54} thickness={5} sections={[{ value: prenadaPct, color: 'teal' }]} label={<Center><Text size="xs" fw={700}>{prenadaPct}%</Text></Center>} />
-                            <div><Text size="xs" c="dimmed" fw={700} lh={1.2} mb={2}>PREÑEZ (VIENTRES)</Text><Text fw={700} size="lg" c="teal" lh={1}>{stats.prenadas} / {totalVientres}</Text></div>
-                          </Group>
-                        </Card>
-                        <Card shadow="sm" radius="md" p="md" withBorder>
-                          <Group wrap="nowrap" gap="sm"><ThemeIcon size="xl" radius="md" color="teal"><IconBabyCarriage/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700} lh={1.2} mb={2}>TERNEROS</Text><Text fw={700} size="lg" lh={1}>{stats.terneros}</Text><Text size="xs" c="dimmed" lh={1}>({stats.ternerosM} M / {stats.ternerosH} H)</Text></div></Group>
-                        </Card>
-                        <Card shadow="sm" radius="md" p="md" withBorder>
-                          <Group wrap="nowrap" gap="sm"><ThemeIcon size="xl" radius="md" color={stats.enfermos > 0 ? 'red' : 'gray'}><IconHeartbeat/></ThemeIcon><div><Text size="xs" c="dimmed" fw={700} lh={1.2} mb={2}>ENFERMOS</Text><Text fw={700} size="lg" c={stats.enfermos > 0 ? 'red' : 'dimmed'} lh={1}>{stats.enfermos}</Text></div></Group>
-                        </Card>
-                      </SimpleGrid>
-
-                      <Card shadow="sm" radius="md" p="md" withBorder>
-                          <Group gap="xs" mb="sm">
-                              <ThemeIcon size="lg" radius="md" color={partosProximos.length > 0 ? "teal" : "orange"}>{partosProximos.length > 0 ? <IconBabyCarriage size={20} /> : <IconCalendarEvent size={20} />}</ThemeIcon>
-                              <Text fw={700} size="xl">{partosProximos.length > 0 ? "Próximos Partos" : "Tareas para Hoy"}</Text>
-                              {partosProximos.length > 0 && <Badge color="teal" variant="light">{partosProximos.length} en espera</Badge>}
-                              {partosProximos.length === 0 && tareasParaHoy.length > 0 && <Badge color="orange" variant="light">{tareasParaHoy.length} pendientes</Badge>}
-                          </Group>
-                          <ScrollArea h={583} offsetScrollbars>
-                              {partosProximos.length > 0 ? (
-                                  <Table striped stickyHeader>
-                                      <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Fecha Est.</Table.Th><Table.Th>Vaca</Table.Th></Table.Tr></Table.Thead>
-                                      <Table.Tbody>
-                                          {partosProximos.map(parto => {
-                                              const vacaVal = animales.find(a => a.id === parto.animal_id);
-                                              const diasFaltan = diasDiferencia(parto.fecha_programada); const colorBadge = diasFaltan < 7 ? 'red' : diasFaltan < 15 ? 'orange' : 'teal';
-                                              return (<Table.Tr key={parto.id}><Table.Td><Group gap="xs"><Text size="sm" fw={700} c={colorBadge}>{formatDate(parto.fecha_programada)}</Text><Badge size="xs" color={colorBadge} variant="light">{diasFaltan} días</Badge></Group></Table.Td><Table.Td><Text fw={700} size="sm">{vacaVal?.caravana || '?'}</Text></Table.Td></Table.Tr>);
-                                          })}
-                                      </Table.Tbody>
-                                  </Table>
-                              ) : tareasParaHoy.length > 0 ? (
-                                  <Stack gap="xs" p="xs" mt="sm">
-                                      {tareasParaHoy.map(tarea => (
-                                          <Paper key={tarea.id} p="md" withBorder shadow="sm" radius="md" style={{ borderLeft: `4px solid #fd7e14` }}><Group justify="space-between" align="center" wrap="nowrap"><div style={{ flex: 1 }}><Text fw={700} size="md" c="dark">{tarea.titulo}</Text></div></Group></Paper>
-                                      ))}
-                                  </Stack>
-                              ) : (
-                                  <Center h="100%" style={{ display: 'flex', flexDirection: 'column', paddingTop: '2rem' }}><ThemeIcon size={80} radius="100%" variant="light" color="gray" mb="md"><IconCheck size={40} /></ThemeIcon><Text c="dimmed" size="lg" fw={700}>¡Todo al día!</Text></Center>
-                              )}
-                          </ScrollArea>
-                      </Card>
-                    </Grid.Col>
-
-                    <Grid.Col span={{ base: 12, md: 5 }}>
-                      <Card shadow="sm" radius="md" p="md" withBorder mb="lg">
-                          <Text fw={700} mb="sm">Distribución del Rodeo</Text>
-                          <Center>
-                              <RingProgress size={200} thickness={18} label={<Center><Stack gap={0} align="center"><Text size="xs" c="dimmed" fw={700}>{chartHover ? chartHover.label : 'TOTAL'}</Text><Text fw={700} size="xl">{chartHover ? chartHover.value : stats.total}</Text></Stack></Center>}
-                                  sections={[
-                                      { value: (stats.vacas / stats.total) * 100, color: 'blue', onMouseEnter: () => setChartHover({label: 'VACAS', value: stats.vacas}), onMouseLeave: () => setChartHover(null) },
-                                      { value: (stats.vaquillonas / stats.total) * 100, color: 'pink', onMouseEnter: () => setChartHover({label: 'VAQUILLONAS', value: stats.vaquillonas}), onMouseLeave: () => setChartHover(null) },
-                                      { value: (stats.terneros / stats.total) * 100, color: 'teal', onMouseEnter: () => setChartHover({label: 'TERNEROS', value: stats.terneros}), onMouseLeave: () => setChartHover(null) },
-                                      { value: (stats.novillos / stats.total) * 100, color: 'orange', onMouseEnter: () => setChartHover({label: 'NOVILLOS', value: stats.novillos}), onMouseLeave: () => setChartHover(null) },
-                                      { value: (stats.toros / stats.total) * 100, color: 'grape', onMouseEnter: () => setChartHover({label: 'TOROS', value: stats.toros}), onMouseLeave: () => setChartHover(null) }
-                                  ]}
-                              />
-                          </Center>
-                          <Group justify="center" gap="xs" mt="sm"><Group gap={4}><Badge size="xs" circle color="blue"/><Text size="xs">Vacas</Text></Group><Group gap={4}><Badge size="xs" circle color="pink"/><Text size="xs">Vaq.</Text></Group><Group gap={4}><Badge size="xs" circle color="teal"/><Text size="xs">Terneros</Text></Group><Group gap={4}><Badge size="xs" circle color="orange"/><Text size="xs">Novillos</Text></Group><Group gap={4}><Badge size="xs" circle color="grape"/><Text size="xs">Toros</Text></Group></Group>
-                      </Card>
-
-                      <Card shadow="sm" radius="md" p="md" withBorder>
-                          <Group gap="xs" mb="sm"><ThemeIcon size="lg" radius="md" color="blue"><IconActivity size={20} /></ThemeIcon><Text fw={700} size="lg">Últimos Movimientos</Text></Group>
-                          <ScrollArea h={320} offsetScrollbars>
-                              <Stack gap="xs" mt="xs">
-                                  {eventosGlobales.slice(0, 15).map(ev => (
-                                      <Group key={ev.id} wrap="nowrap" align="flex-start" gap="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}>
-                                          {getIconoEvento(ev.tipo)}
-                                          <div style={{ flex: 1 }}><Group justify="space-between" mb={2}><Text size="sm" fw={700}>{ev.tipo} <Text span c="dimmed" fw={400}>• {ev.animales?.caravana || 'Lote'}</Text></Text><Text size="xs" c="dimmed">{formatDate(ev.fecha_evento)}</Text></Group><Text size="xs" c="dimmed" lineClamp={1}>{ev.resultado} {ev.detalle ? `- ${ev.detalle}` : ''}</Text></div>
-                                      </Group>
-                                  ))}
-                              </Stack>
-                          </ScrollArea>
-                          <Button variant="light" fullWidth mt="md" onClick={() => setActiveSection('actividad')}>Ver Todo</Button>
-                      </Card>
-                    </Grid.Col>
-                  </Grid>
-                </>
-              )}
-
-              {/* --- ENRUTAMIENTO HACIA LOS MÓDULOS --- */}
+              {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} />}
               {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchAnimales} fetchEventosLotesGlobal={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca}/>}
               {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} />}
@@ -693,7 +531,6 @@ export default function App() {
           </AppShell>
         )}
 
-      {/* --- MODALES GLOBALES --- */}
       <Modal opened={modalAltaOpen} onClose={closeModalAlta} title={<Text fw={700} size="lg">Alta de Nuevo Animal</Text>} centered>
          <Stack>
             <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
@@ -733,7 +570,6 @@ export default function App() {
           ) : (<Alert color="blue" title="Sin datos">Este animal no tiene registros de peso.</Alert>)}
       </Modal>
 
-      {/* EL GRAN MODAL DE LA VACA */}
       <Modal opened={modalVacaOpen} onClose={handleCloseModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
          <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal"><Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
            <Tabs.Panel value="historia">
@@ -809,7 +645,6 @@ export default function App() {
            </Tabs.Panel>
          </Tabs>
       </Modal>
-
     </MantineProvider>
   );
 }
