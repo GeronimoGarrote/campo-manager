@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Table, SimpleGrid, MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, Modal, Alert, UnstyledButton, MultiSelect, Switch, Stack, ThemeIcon, Indicator, Popover } from '@mantine/core';
+import { SimpleGrid, Table, MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, Modal, Alert, UnstyledButton, MultiSelect, Switch, Stack, ThemeIcon, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconHeartbeat, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTrendingUp, IconChartDots, IconTag, IconCalendarEvent, IconBell, IconInfoCircle, IconTruckDelivery } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -141,8 +141,11 @@ export default function App() {
   const [bajaPrecio, setBajaPrecio] = useState<string | number>('');
   const [bajaKilosTotales, setBajaKilosTotales] = useState('');
   const [bajaGastosVenta, setBajaGastosVenta] = useState('');
+  
   const [esVentaRed, setEsVentaRed] = useState(false);
   const [renspaDestino, setRenspaDestino] = useState('');
+  const [esTrasladoRed, setEsTrasladoRed] = useState(false);
+  const [renspaTrasladoDestino, setRenspaTrasladoDestino] = useState('');
 
   const [modalEditEventOpen, { open: openModalEditEvent, close: closeModalEditEvent }] = useDisclosure(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -197,7 +200,6 @@ export default function App() {
   
   async function fetchTransferencias() {
       if (!campoId) return;
-      // Simplificado: ahora solo trae la data pura, porque la DB ya tiene el origen_nombre
       const { data: transData } = await supabase.from('transferencias').select('*').eq('campo_destino_id', campoId).eq('estado', 'PENDIENTE');
       setTransferencias(transData || []);
   }
@@ -290,7 +292,7 @@ export default function App() {
     }
 
     setEventosFicha([]); setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null); setBajaPrecio(''); setBajaMotivo(''); setBajaKilosTotales(''); setBajaGastosVenta(''); setUltimoPeso('Calculando...'); setPesoNacimiento(''); setCostoEvento('');
-    setEsVentaRed(false); setRenspaDestino('');
+    setEsVentaRed(false); setRenspaDestino(''); setEsTrasladoRed(false); setRenspaTrasladoDestino('');
     if(!modalVacaOpen) openModalVaca(); recargarFicha(animal.id);
     const { data: pesoData } = await supabase.from('eventos').select('resultado').eq('animal_id', animal.id).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: false }).limit(1);
     if (pesoData && pesoData.length > 0) setUltimoPeso(pesoData[0].resultado); else setUltimoPeso('-');
@@ -426,26 +428,56 @@ export default function App() {
           if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) return alert("Faltan los kilos totales");
       }
       if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); 
-      if (modoBaja === 'TRASLADO' && !bajaMotivo) return alert("Seleccioná el establecimiento de destino"); 
+      
       if (!confirm(`¿Confirmar ${modoBaja === 'TRASLADO' ? 'traslado' : 'salida'}?`)) return; 
       
       setLoading(true);
       const fechaStr = new Date().toISOString();
 
       if (modoBaja === 'TRASLADO') {
-          const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre;
-          const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
-          
-          const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO']);
-          const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
-          let nuevaCaravana = animalSel.caravana;
-          if (destCaravanas.includes(nuevaCaravana.toLowerCase())) { nuevaCaravana = `${nuevaCaravana} (T)`; }
+          if (esTrasladoRed) {
+              if (!renspaTrasladoDestino) { setLoading(false); return alert("Ingresá el RENSPA destino."); }
+              
+              const { data, error: rpcErr } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaTrasladoDestino.trim() }).single();
+              const dest = data as any;
+              
+              if (rpcErr || !dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
+              if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
 
-          await supabase.from('animales').update({ establecimiento_id: bajaMotivo, potrero_id: null, parcela_id: null, lote_id: null, caravana: nuevaCaravana, toros_servicio_ids: null }).eq('id', animalSelId);
-          await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, establecimiento_id: campoId });
-          await supabase.from('eventos').insert({ animal_id: animalSelId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Origen: ${nombreOrigen}`, establecimiento_id: bajaMotivo });
-          
-          await supabase.from('agenda').update({ establecimiento_id: bajaMotivo }).eq('animal_id', animalSelId).eq('completado', false);
+              const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Campo Desconocido';
+              
+              const { error: errTransf } = await supabase.from('transferencias').insert({
+                  campo_origen_id: campoId,
+                  campo_destino_id: dest.id,
+                  animales_ids: [animalSelId],
+                  precio_total: 0,
+                  detalles: `Traslado animal ${animalSel.caravana}`,
+                  origen_nombre: nombreOrigen,
+                  estado: 'PENDIENTE'
+              });
+              
+              if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
+
+              await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, establecimiento_id: campoId, costo: 0 });
+              await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
+              if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
+          } else {
+              if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el establecimiento de destino"); }
+              const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre;
+              const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
+              
+              const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE']);
+              const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
+              let nuevaCaravana = animalSel.caravana;
+              if (destCaravanas.includes(nuevaCaravana.toLowerCase())) { nuevaCaravana = `${nuevaCaravana} (T)`; }
+
+              await supabase.from('animales').update({ establecimiento_id: bajaMotivo, potrero_id: null, parcela_id: null, lote_id: null, caravana: nuevaCaravana, toros_servicio_ids: null }).eq('id', animalSelId);
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, establecimiento_id: campoId });
+              await supabase.from('eventos').insert({ animal_id: animalSelId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Origen: ${nombreOrigen}`, establecimiento_id: bajaMotivo });
+              
+              await supabase.from('agenda').update({ establecimiento_id: bajaMotivo }).eq('animal_id', animalSelId).eq('completado', false);
+          }
           
       } else if (modoBaja === 'VENDIDO') {
           const precioNum = Number(bajaPrecio);
@@ -457,10 +489,10 @@ export default function App() {
           if (esVentaRed) {
               if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA del comprador."); }
               
-              const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
+              const { data, error: rpcErr } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
               const dest = data as any;
               
-              if (!dest) { setLoading(false); return alert("No se encontró ningún campo con ese RENSPA en RodeoControl."); }
+              if (rpcErr || !dest) { setLoading(false); return alert("No se encontró ningún campo con ese RENSPA en RodeoControl."); }
               if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
 
               const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Campo Desconocido';
@@ -471,7 +503,8 @@ export default function App() {
                   animales_ids: [animalSelId],
                   precio_total: totalIngreso,
                   detalles: `Venta animal ${animalSel.caravana}`,
-                  origen_nombre: nombreOrigen
+                  origen_nombre: nombreOrigen,
+                  estado: 'PENDIENTE'
               });
               
               if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
@@ -482,6 +515,7 @@ export default function App() {
               await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
               if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
           } else {
+              if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
               await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso });
               await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${bajaMotivo || '-'} ($${totalIngreso})`, toros_servicio_ids: null }).eq('id', animalSelId);
               await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
@@ -490,56 +524,49 @@ export default function App() {
               if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
           }
       } else {
+          if (!bajaMotivo) { setLoading(false); return alert("Ingresá la causa de muerte"); }
           await supabase.from('animales').update({ estado: 'MUERTO', detalle_baja: `Causa: ${bajaMotivo}`, toros_servicio_ids: null }).eq('id', animalSelId); 
           await supabase.from('eventos').insert([{ animal_id: animalSelId, tipo: 'BAJA', resultado: 'MUERTO', detalle: `Causa: ${bajaMotivo}`, datos_extra: { causa: bajaMotivo }, establecimiento_id: campoId }]); 
           await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
       }
       
-      setLoading(false); setBajaKilosTotales(''); setBajaGastosVenta(''); setBajaModalidadVenta('TOTAL'); setEsVentaRed(false); setRenspaDestino('');
+      setLoading(false); setBajaKilosTotales(''); setBajaGastosVenta(''); setBajaModalidadVenta('TOTAL'); setEsVentaRed(false); setRenspaDestino(''); setEsTrasladoRed(false); setRenspaTrasladoDestino('');
       closeModalVaca(); fetchAnimales(); fetchActividadGlobal(); fetchAgenda();
   }
 
   async function aceptarTransferencia() {
       if (!transfActiva || !campoId) return;
       setLoading(true);
-      const ids = transfActiva.animales_ids;
-      const precio = transfActiva.precio_total;
-      const fechaStr = new Date().toISOString();
-
-      const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', campoId).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO']);
-      const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
-
-      const { data: incomingAnimals } = await supabase.from('animales').select('id, caravana').in('id', ids);
-
-      for (const anim of incomingAnimals || []) {
-          let c = anim.caravana;
-          if (destCaravanas.includes(c.toLowerCase())) c = `${c} (T)`;
-          await supabase.from('animales').update({ establecimiento_id: campoId, estado: 'ACTIVO', potrero_id: transfPotreroId, detalle_baja: null, caravana: c }).eq('id', anim.id);
-      }
-
-      await supabase.from('eventos').update({ establecimiento_id: campoId }).in('animal_id', ids).neq('tipo', 'VENTA');
-      await supabase.from('agenda').update({ establecimiento_id: campoId }).in('animal_id', ids);
-
-      const eventosIngreso = ids.map((id: string) => ({ animal_id: id, tipo: 'COMPRA', resultado: 'Ingreso por Red', detalle: `Proveniente de: ${transfActiva.origen_nombre}`, establecimiento_id: campoId, fecha_evento: fechaStr }));
-      await supabase.from('eventos').insert(eventosIngreso);
-
-      await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Compra Red (${ids.length} animales) a ${transfActiva.origen_nombre}`, monto: precio });
-      await supabase.from('caja').insert({ establecimiento_id: transfActiva.campo_origen_id, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Cobro Red (${ids.length} animales) de ${establecimientos.find(e => e.id === campoId)?.nombre}`, monto: precio });
-
-      await supabase.from('transferencias').update({ estado: 'ACEPTADA' }).eq('id', transfActiva.id);
       
-      setLoading(false); closeModalTransf(); setTransfActiva(null); fetchTransferencias(); fetchAnimales(); fetchActividadGlobal();
+      const { error } = await supabase.rpc('aceptar_transferencia', {
+          p_transfer_id: transfActiva.id,
+          p_campo_destino: campoId,
+          p_potrero_destino: transfPotreroId || null
+      });
+
+      if (error) {
+          alert("Error al procesar el ingreso: " + error.message);
+      } else {
+          closeModalTransf(); setTransfActiva(null); 
+          fetchTransferencias(); fetchAnimales(); fetchActividadGlobal();
+      }
+      setLoading(false);
   }
 
   async function rechazarTransferencia() {
       if (!transfActiva || !confirm("¿Rechazar transferencia? Los animales volverán al campo de origen.")) return;
       setLoading(true);
-      await supabase.from('transferencias').update({ estado: 'RECHAZADA' }).eq('id', transfActiva.id);
-      await supabase.from('animales').update({ estado: 'ACTIVO', detalle_baja: null }).in('id', transfActiva.animales_ids);
       
-      await supabase.from('eventos').delete().in('animal_id', transfActiva.animales_ids).eq('tipo', 'VENTA');
+      const { error } = await supabase.rpc('rechazar_transferencia', { 
+          p_transfer_id: transfActiva.id 
+      });
 
-      setLoading(false); closeModalTransf(); setTransfActiva(null); fetchTransferencias();
+      if (error) {
+          alert("Error al rechazar: " + error.message);
+      } else {
+          closeModalTransf(); setTransfActiva(null); fetchTransferencias(); fetchAnimales(); fetchActividadGlobal();
+      }
+      setLoading(false);
   }
 
   async function restaurarAnimal() { 
@@ -790,7 +817,7 @@ export default function App() {
                                           <Text size="sm" fw={600} c="blue.9">Vender a usuario de RodeoControl</Text>
                                           <Switch checked={esVentaRed} onChange={(e) => setEsVentaRed(e.currentTarget.checked)} color="blue" />
                                       </Group>
-                                      {esVentaRed && ( <TextInput label="RENSPA del Comprador" placeholder="Ej: 01.002.0.00000/00" value={renspaDestino} onChange={(e) => setRenspaDestino(e.target.value)} required /> )}
+                                      {esVentaRed && ( <TextInput label="RENSPA del Comprador" placeholder="Ej: 01.002.0.00000/00" required value={renspaDestino} onChange={(e) => setRenspaDestino(e.target.value)} /> )}
                                       
                                       <Group grow align="flex-start">
                                           <Select label="Modalidad" data={[{value: 'TOTAL', label: 'Monto Total'}, {value: 'KILO', label: 'Al Peso (Por Kg)'}]} value={bajaModalidadVenta} onChange={(v) => setBajaModalidadVenta(v || 'TOTAL')} allowDeselect={false} comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
@@ -806,7 +833,19 @@ export default function App() {
                                   </Stack> 
                               )}
                               {modoBaja === 'MUERTO' && ( <TextInput label="Causa" placeholder="Ej: Accidente" value={bajaMotivo} onChange={(e) => setBajaMotivo(e.target.value)} mb="sm"/> )}
-                              {modoBaja === 'TRASLADO' && ( <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: true, zIndex: 999999 }} /> )}
+                              {modoBaja === 'TRASLADO' && ( 
+                                  <Stack gap="xs" mb="sm">
+                                      <Group justify="space-between" p="xs" bg="blue.0" style={{ borderRadius: 8, border: '1px solid #74c0fc' }}>
+                                          <Text size="sm" fw={600} c="blue.9">Trasladar a usuario de RodeoControl</Text>
+                                          <Switch checked={esTrasladoRed} onChange={(e) => setEsTrasladoRed(e.currentTarget.checked)} color="blue" />
+                                      </Group>
+                                      {esTrasladoRed ? (
+                                          <TextInput label="RENSPA del Destino" placeholder="Ej: 01.002.0.00000/00" required value={renspaTrasladoDestino} onChange={(e) => setRenspaTrasladoDestino(e.target.value)} />
+                                      ) : (
+                                          <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
+                                      )}
+                                  </Stack> 
+                              )}
                               <Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'} onClick={confirmarBaja} loading={loading}>Confirmar Acción</Button>
                           </Paper> 
                       )}
