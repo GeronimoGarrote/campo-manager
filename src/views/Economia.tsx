@@ -31,7 +31,7 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   const [filtroTipo, setFiltroTipo] = useState<string | null>(null);
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
 
-  const categorias = ['Alimentación / Nutrición', 'Sanidad Veterinaria', 'Agricultura / Semillas', 'Maquinaria / Combustible', 'Infraestructura / Alambrados', 'Sueldos / Honorarios', 'Impuestos / Servicios', 'Traslado Insumo', 'Otros'];
+  const categorias = ['Alquileres', 'Alimentación / Nutrición', 'Sanidad Veterinaria', 'Agricultura / Semillas', 'Maquinaria / Combustible', 'Infraestructura / Alambrados', 'Sueldos / Honorarios', 'Impuestos / Servicios', 'Traslado Insumo', 'Otros'];
 
   useEffect(() => { fetchTodosLosMovimientos(); }, [campoId]);
 
