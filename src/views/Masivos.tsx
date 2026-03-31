@@ -155,17 +155,20 @@ export default function Masivos({
             if (!renspaDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
             
             const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestinoMasiva.trim() }).single();
-            const dest = data as any; // BYPASS DE TYPESCRIPT
+            const dest = data as any;
             
             if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
             if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+
+            const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre || 'Campo Desconocido';
 
             const { error: errTransf } = await supabase.from('transferencias').insert({
                 campo_origen_id: campoId,
                 campo_destino_id: dest.id,
                 animales_ids: idsParaProcesar,
                 precio_total: totalIngreso,
-                detalles: `Venta masiva de ${idsParaProcesar.length} animales`
+                detalles: `Venta masiva de ${idsParaProcesar.length} animales`,
+                origen_nombre: nombreOrigen
             });
             errorGlobal = errTransf;
             
@@ -181,17 +184,20 @@ export default function Masivos({
             if (!renspaTrasladoDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
             
             const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaTrasladoDestinoMasiva.trim() }).single();
-            const dest = data as any; // BYPASS DE TYPESCRIPT
+            const dest = data as any;
             
             if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
             if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+
+            const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre || 'Campo Desconocido';
 
             const { error: errTransf } = await supabase.from('transferencias').insert({
                 campo_origen_id: campoId,
                 campo_destino_id: dest.id,
                 animales_ids: idsParaProcesar,
                 precio_total: 0,
-                detalles: `Traslado masivo de ${idsParaProcesar.length} animales`
+                detalles: `Traslado masivo de ${idsParaProcesar.length} animales`,
+                origen_nombre: nombreOrigen
             });
             errorGlobal = errTransf;
             
@@ -264,7 +270,7 @@ export default function Masivos({
 
         setLoading(false);
         if (errorGlobal) { 
-            alert("Error: " + errorGlobal.message); 
+            alert("Error al transferir: " + errorGlobal.message); 
         } else {
             alert("¡Carga masiva exitosa!"); 
             setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino(''); 

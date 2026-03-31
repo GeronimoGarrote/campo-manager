@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { SimpleGrid, Table, MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, Modal, Alert, UnstyledButton, MultiSelect, Switch, Stack, ThemeIcon, Indicator, Popover } from '@mantine/core';
+import { Table, SimpleGrid, MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, Modal, Alert, UnstyledButton, MultiSelect, Switch, Stack, ThemeIcon, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconHeartbeat, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTrendingUp, IconChartDots, IconTag, IconCalendarEvent, IconBell, IconInfoCircle, IconTruckDelivery } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -197,12 +197,9 @@ export default function App() {
   
   async function fetchTransferencias() {
       if (!campoId) return;
+      // Simplificado: ahora solo trae la data pura, porque la DB ya tiene el origen_nombre
       const { data: transData } = await supabase.from('transferencias').select('*').eq('campo_destino_id', campoId).eq('estado', 'PENDIENTE');
-      if (transData && transData.length > 0) {
-          const { data: estData } = await supabase.from('establecimientos').select('id, nombre');
-          const mapped = transData.map(t => ({ ...t, origen_nombre: estData?.find(e => e.id === t.campo_origen_id)?.nombre || 'Campo Desconocido' }));
-          setTransferencias(mapped);
-      } else { setTransferencias([]); }
+      setTransferencias(transData || []);
   }
 
   async function crearCampo() { if (!nuevoCampoNombre) return; const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]); if (error) alert("Error: " + error.message); else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } }
@@ -458,27 +455,33 @@ export default function App() {
           const gastosTotales = Number(bajaGastosVenta) || 0;
 
           if (esVentaRed) {
-    if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA del comprador."); }
-    
-    const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
-    const dest = data as any; // BYPASS DE TYPESCRIPT
+              if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA del comprador."); }
+              
+              const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
+              const dest = data as any;
+              
+              if (!dest) { setLoading(false); return alert("No se encontró ningún campo con ese RENSPA en RodeoControl."); }
+              if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
 
-    if (!dest) { setLoading(false); return alert("No se encontró ningún campo con ese RENSPA en RodeoControl."); }
-    if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+              const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Campo Desconocido';
 
-    await supabase.from('transferencias').insert({
-        campo_origen_id: campoId,
-        campo_destino_id: dest.id,
-        animales_ids: [animalSelId],
-        precio_total: totalIngreso,
-        detalles: `Venta animal ${animalSel.caravana}`
-    });
-    await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
-    
-    await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
-    await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
-    if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
-} else {
+              const { error: errTransf } = await supabase.from('transferencias').insert({
+                  campo_origen_id: campoId,
+                  campo_destino_id: dest.id,
+                  animales_ids: [animalSelId],
+                  precio_total: totalIngreso,
+                  detalles: `Venta animal ${animalSel.caravana}`,
+                  origen_nombre: nombreOrigen
+              });
+              
+              if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
+
+              await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
+              
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
+              await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
+              if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
+          } else {
               await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso });
               await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${bajaMotivo || '-'} ($${totalIngreso})`, toros_servicio_ids: null }).eq('id', animalSelId);
               await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
