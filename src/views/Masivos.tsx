@@ -7,8 +7,15 @@ import { supabase } from '../supabase';
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 
 export default function Masivos({ 
-    campoId, animales, potreros, parcelas, lotes, establecimientos, 
-    fetchAnimales, fetchActividadGlobal, setActiveSection 
+    campoId, 
+    animales = [], 
+    potreros = [], 
+    parcelas = [], 
+    lotes = [], 
+    establecimientos = [], 
+    fetchAnimales, 
+    fetchActividadGlobal, 
+    setActiveSection 
 }: any) {
     const [loading, setLoading] = useState(false);
     
@@ -168,7 +175,8 @@ export default function Masivos({
                 animales_ids: idsParaProcesar,
                 precio_total: totalIngreso,
                 detalles: `Venta masiva de ${idsParaProcesar.length} animales`,
-                origen_nombre: nombreOrigen
+                origen_nombre: nombreOrigen,
+                estado: 'PENDIENTE'
             });
             errorGlobal = errTransf;
             
@@ -177,7 +185,19 @@ export default function Masivos({
                 await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
                 for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
                 
-                const insertsVenta = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastoPorAnimal }));
+                const insertsVenta = idsParaProcesar.map(animalId => {
+                    const anim = animales.find((a: any) => a.id === animalId);
+                    return { 
+                        animal_id: animalId, 
+                        fecha_evento: fechaStr, 
+                        tipo: 'VENTA', 
+                        resultado: 'VENDIDO', 
+                        detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, 
+                        datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: anim?.caravana }, 
+                        establecimiento_id: campoId, 
+                        costo: precioPorAnimal 
+                    }
+                });
                 await supabase.from('eventos').insert(insertsVenta);
             }
         } else if (massActividad === 'TRASLADO' && esTrasladoRedMasiva) {
@@ -197,7 +217,8 @@ export default function Masivos({
                 animales_ids: idsParaProcesar,
                 precio_total: 0,
                 detalles: `Traslado masivo de ${idsParaProcesar.length} animales`,
-                origen_nombre: nombreOrigen
+                origen_nombre: nombreOrigen,
+                estado: 'PENDIENTE'
             });
             errorGlobal = errTransf;
             
@@ -206,11 +227,35 @@ export default function Masivos({
                 await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
                 for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
                 
-                const insertsSalida = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, establecimiento_id: campoId, costo: 0 }));
+                const insertsSalida = idsParaProcesar.map(animalId => {
+                    const anim = animales.find((a: any) => a.id === animalId);
+                    return { 
+                        animal_id: animalId, 
+                        fecha_evento: fechaStr, 
+                        tipo: 'TRASLADO_SALIDA', 
+                        resultado: 'TRASLADO EN RED', 
+                        detalle: `Destino: ${dest.nombre}`, 
+                        datos_extra: { caravana_origen: anim?.caravana },
+                        establecimiento_id: campoId, 
+                        costo: 0 
+                    }
+                });
                 await supabase.from('eventos').insert(insertsSalida);
             }
         } else {
-            const inserts = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, costo: massActividad === 'VENTA' ? gastoPorAnimal : Number(massCostoUnitario), establecimiento_id: campoId }));
+            const inserts = idsParaProcesar.map(animalId => {
+                const anim = animales.find((a: any) => a.id === animalId);
+                return { 
+                    animal_id: animalId, 
+                    fecha_evento: fechaStr, 
+                    tipo: massActividad, 
+                    resultado: resultadoTxt, 
+                    detalle: massDetalle, 
+                    datos_extra: { ...datosExtra, caravana_origen: anim?.caravana }, 
+                    costo: massActividad === 'VENTA' ? gastoPorAnimal : Number(massCostoUnitario), 
+                    establecimiento_id: campoId 
+                }
+            });
             const { error } = await supabase.from('eventos').insert(inserts);
             errorGlobal = error;
 
@@ -260,7 +305,18 @@ export default function Masivos({
                         await supabase.from('animales').update({ establecimiento_id: massEstablecimientoDestino, potrero_id: null, parcela_id: null, lote_id: null, caravana: c, toros_servicio_ids: null }).eq('id', id); 
                     }
                     const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre;
-                    const insertsIngreso = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId }, establecimiento_id: massEstablecimientoDestino }));
+                    const insertsIngreso = idsParaProcesar.map(animalId => {
+                        const anim = animales.find((a: any) => a.id === animalId);
+                        return { 
+                            animal_id: animalId, 
+                            fecha_evento: fechaStr, 
+                            tipo: 'TRASLADO_INGRESO', 
+                            resultado: 'INGRESO POR TRASLADO', 
+                            detalle: `Proveniente de: ${nombreOrigen}`, 
+                            datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId, caravana_origen: anim?.caravana }, 
+                            establecimiento_id: massEstablecimientoDestino 
+                        }
+                    });
                     await supabase.from('eventos').insert(insertsIngreso);
                     
                     await supabase.from('agenda').update({ establecimiento_id: massEstablecimientoDestino }).in('animal_id', idsParaProcesar).eq('completado', false);
@@ -305,7 +361,7 @@ export default function Masivos({
                         <Text size="sm" fw={700} mb="xs">Detalles de la Venta</Text>
                         <Group grow align="flex-start">
                             <Select label="Modalidad" data={[{value: 'TOTAL', label: 'Monto Total'}, {value: 'CABEZA', label: 'Por Cabeza'}, {value: 'KILO', label: 'Al Peso (Por Kg)'}]} value={massModalidadVenta} onChange={(v) => setMassModalidadVenta(v || 'TOTAL')} allowDeselect={false} />
-                            <TextInput label={massModalidadVenta === 'KILO' ? 'Precio por Kg ($)' : massModalidadVenta === 'CABEZA' ? 'Precio por Animal ($)' : 'Monto Total ($)'} placeholder="Ej: 1500000" type="number" leftSection={<IconCurrencyDollar size={16}/>} value={massPrecioVenta} onChange={(e) => setMassPrecioVenta(e.target.value)} />
+                            <TextInput label={massModalidadVenta === 'KILO' ? 'Precio por Kg ($)' : massModalidadVenta === 'CABEZA' ? 'Precio por Animal ($)' : 'Monto Total ($)'} placeholder="Ej: 1500000" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={massPrecioVenta} onChange={(e) => setMassPrecioVenta(e.target.value)} />
                             {massModalidadVenta === 'KILO' && <TextInput label="Kilos Totales" placeholder="Ej: 4500" type="number" value={massKilosTotales} onChange={(e) => setMassKilosTotales(e.target.value)} />}
                         </Group>
                         <Group grow mt="sm">

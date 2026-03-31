@@ -74,6 +74,9 @@ export default function App() {
   const [modalTransfOpen, { open: openModalTransf, close: closeModalTransf }] = useDisclosure(false);
   const [transfActiva, setTransfActiva] = useState<any>(null);
   const [transfPotreroId, setTransfPotreroId] = useState<string | null>(null);
+  
+  const [animalesEntrantes, setAnimalesEntrantes] = useState<any[]>([]);
+  const [nuevasCaravanasMap, setNuevasCaravanasMap] = useState<Record<string, string>>({});
 
   const [modalAltaOpen, { open: openModalAlta, close: closeModalAlta }] = useDisclosure(false);
   const [caravana, setCaravana] = useState('');
@@ -194,7 +197,33 @@ export default function App() {
   async function fetchPotreros() { if (!campoId) return; const { data } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setPotreros(data || []); }
   async function fetchParcelas() { if (!campoId) return; const { data } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setParcelas(data || []); }
   async function fetchLotes() { if (!campoId) return; const { data } = await supabase.from('lotes').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setLotes(data || []); }
-  async function fetchActividadGlobal() { if (!campoId) return; const { data } = await supabase.from('eventos').select('*, animales!inner(caravana)').eq('establecimiento_id', campoId).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }); setEventosGlobales(data as any || []); }
+  
+  async function fetchActividadGlobal() { 
+      if (!campoId) return; 
+      const { data } = await supabase.from('eventos')
+        .select('*, animales(caravana)')
+        .eq('establecimiento_id', campoId)
+        .order('fecha_evento', { ascending: false })
+        .order('created_at', { ascending: false }); 
+      
+      let eventos = data || [];
+      const perdidos = eventos.filter((e: any) => !e.animales).map((e: any) => e.animal_id);
+      
+      if (perdidos.length > 0) {
+          const { data: nombres } = await supabase.rpc('obtener_caravanas_perdidas', { ids: perdidos });
+          eventos = eventos.map((ev: any) => {
+              if (!ev.animales) {
+                  const match = nombres?.find((n: any) => n.id === ev.animal_id);
+                  // La magia está acá: Toma la caravana original del momento de la venta si existe
+                  const caravanaFija = ev.datos_extra?.caravana_origen || (match ? match.caravana : 'Baja');
+                  return { ...ev, animales: { caravana: caravanaFija } };
+              }
+              return ev;
+          });
+      }
+      setEventosGlobales(eventos as any); 
+  }
+
   async function fetchEventosLotesGlobal() { if (!campoId) return; const { data } = await supabase.from('lotes_eventos').select('*').eq('establecimiento_id', campoId).order('fecha', { ascending: false }); setEventosLotesGlobal(data || []); }
   async function fetchAgenda() { if(!campoId) return; const { data } = await supabase.from('agenda').select('*').eq('establecimiento_id', campoId).order('fecha_programada', { ascending: true }); if (data) setAgenda(data); }
   
@@ -202,6 +231,18 @@ export default function App() {
       if (!campoId) return;
       const { data: transData } = await supabase.from('transferencias').select('*').eq('campo_destino_id', campoId).eq('estado', 'PENDIENTE');
       setTransferencias(transData || []);
+  }
+
+  async function abrirModalTransferencia(transf: any) {
+      setTransfActiva(transf);
+      setNuevasCaravanasMap({});
+      setAnimalesEntrantes([]);
+      openModalTransf();
+      setBellOpened(false);
+      setLoading(true);
+      const { data } = await supabase.rpc('obtener_animales_transferencia', { p_ids: transf.animales_ids });
+      if (data) setAnimalesEntrantes(data);
+      setLoading(false);
   }
 
   async function crearCampo() { if (!nuevoCampoNombre) return; const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]); if (error) alert("Error: " + error.message); else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } }
@@ -256,7 +297,7 @@ export default function App() {
         const animalId = newAnimalData[0].id;
         if (origenModal === 'COMPRADO' && precioCompra) {
             await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: hoy, tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Compra animal caravana: ${caravana}`, monto: Number(precioCompra) });
-            await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'COMPRA', resultado: 'Animal Comprado', detalle: `Costo: $${precioCompra}`, establecimiento_id: campoId });
+            await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'COMPRA', resultado: 'Animal Comprado', detalle: `Costo: $${precioCompra}`, establecimiento_id: campoId, costo: Number(precioCompra) });
         }
         if (estadoInicial === 'PREÑADA' && nuevoMesesGestacion) {
             const diasGestacionActual = parseFloat(nuevoMesesGestacion) * 30.4; const diasFaltantes = Math.round(283 - diasGestacionActual); const fechaParto = new Date(); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
@@ -459,7 +500,7 @@ export default function App() {
               if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
 
               await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
-              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, establecimiento_id: campoId, costo: 0 });
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, datos_extra: { caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: 0 });
               await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
               if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
           } else {
@@ -473,7 +514,7 @@ export default function App() {
               if (destCaravanas.includes(nuevaCaravana.toLowerCase())) { nuevaCaravana = `${nuevaCaravana} (T)`; }
 
               await supabase.from('animales').update({ establecimiento_id: bajaMotivo, potrero_id: null, parcela_id: null, lote_id: null, caravana: nuevaCaravana, toros_servicio_ids: null }).eq('id', animalSelId);
-              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, establecimiento_id: campoId });
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, datos_extra: { caravana_origen: animalSel.caravana }, establecimiento_id: campoId });
               await supabase.from('eventos').insert({ animal_id: animalSelId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Origen: ${nombreOrigen}`, establecimiento_id: bajaMotivo });
               
               await supabase.from('agenda').update({ establecimiento_id: bajaMotivo }).eq('animal_id', animalSelId).eq('completado', false);
@@ -511,14 +552,14 @@ export default function App() {
 
               await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
               
-              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
               await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
               if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
           } else {
               if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
               await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso });
               await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${bajaMotivo || '-'} ($${totalIngreso})`, toros_servicio_ids: null }).eq('id', animalSelId);
-              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
+              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
               
               await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
               if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
@@ -536,18 +577,31 @@ export default function App() {
 
   async function aceptarTransferencia() {
       if (!transfActiva || !campoId) return;
+      
+      const hayErrores = animalesEntrantes.some(a => {
+          const val = nuevasCaravanasMap[a.id] ?? a.caravana;
+          return animales.some(localA => localA.caravana.toLowerCase() === val.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(localA.estado));
+      });
+      if (hayErrores) return alert("Por favor corregí las caravanas duplicadas antes de aceptar.");
+
       setLoading(true);
       
+      const payloadCaravanas = animalesEntrantes.map(a => ({
+          id: a.id,
+          caravana: nuevasCaravanasMap[a.id] !== undefined ? nuevasCaravanasMap[a.id] : a.caravana
+      }));
+
       const { error } = await supabase.rpc('aceptar_transferencia', {
           p_transfer_id: transfActiva.id,
           p_campo_destino: campoId,
-          p_potrero_destino: transfPotreroId || null
+          p_potrero_destino: transfPotreroId || null,
+          p_nuevas_caravanas: payloadCaravanas
       });
 
       if (error) {
           alert("Error al procesar el ingreso: " + error.message);
       } else {
-          closeModalTransf(); setTransfActiva(null); 
+          closeModalTransf(); setTransfActiva(null); setAnimalesEntrantes([]); setNuevasCaravanasMap({});
           fetchTransferencias(); fetchAnimales(); fetchActividadGlobal();
       }
       setLoading(false);
@@ -564,7 +618,8 @@ export default function App() {
       if (error) {
           alert("Error al rechazar: " + error.message);
       } else {
-          closeModalTransf(); setTransfActiva(null); fetchTransferencias(); fetchAnimales(); fetchActividadGlobal();
+          closeModalTransf(); setTransfActiva(null); setAnimalesEntrantes([]); setNuevasCaravanasMap({});
+          fetchTransferencias(); fetchAnimales(); fetchActividadGlobal();
       }
       setLoading(false);
   }
@@ -629,7 +684,7 @@ export default function App() {
                                 {transferencias.length > 0 && (
                                     <Alert color="blue" mb="sm" title="¡Hacienda Entrante!" p="xs">
                                         Tenés {transferencias.length} transferencia(s) pendiente(s).
-                                        <Button size="xs" mt="xs" fullWidth color="blue" onClick={() => { setTransfActiva(transferencias[0]); openModalTransf(); setBellOpened(false); }}>Revisar Ingresos</Button>
+                                        <Button size="xs" mt="xs" fullWidth color="blue" onClick={() => abrirModalTransferencia(transferencias[0])}>Revisar Ingresos</Button>
                                     </Alert>
                                 )}
                                 {tareasParaHoy.length === 0 && transferencias.length === 0 ? (<Text size="sm" c="dimmed">No hay notificaciones para hoy.</Text>) : (<Text size="sm" c="dark">Tenés <Text span fw={700} c="teal">{tareasParaHoy.length}</Text> tarea(s) para hoy.</Text>)}
@@ -672,7 +727,7 @@ export default function App() {
             <AppShell.Main bg="gray.0">
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} />}
-              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchAnimales} fetchEventosLotesGlobal={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca}/>}
+              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca}/>}
               {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales}/>}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} />}
@@ -682,13 +737,45 @@ export default function App() {
           </AppShell>
         )}
 
-      <Modal opened={modalTransfOpen} onClose={closeModalTransf} title={<Text fw={700} size="lg">Hacienda Entrante por Red</Text>} centered>
+      <Modal opened={modalTransfOpen} onClose={closeModalTransf} title={<Text fw={700} size="lg">Hacienda Entrante por Red</Text>} centered size="xl">
           {transfActiva && (
               <Stack>
                   <Alert color="blue" icon={<IconTruckDelivery size={16}/>}>
                       Estás recibiendo <Text span fw={700}>{transfActiva.animales_ids.length} animal(es)</Text> de <Text span fw={700}>{transfActiva.origen_nombre}</Text>.<br/>
                       Monto a descontar de caja: <Text span fw={700} c="green">${transfActiva.precio_total}</Text>
                   </Alert>
+                  
+                  {loading ? ( <Text c="dimmed" ta="center" py="xl">Cargando animales...</Text> ) : (
+                      <ScrollArea h={300} type="always" offsetScrollbars>
+                          <Table striped>
+                              <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'white' }}>
+                                  <Table.Tr><Table.Th>Caravana Origen</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Asignar Nueva Caravana (Opcional)</Table.Th></Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                  {animalesEntrantes.map(a => {
+                                      const nuevaCarav = nuevasCaravanasMap[a.id] ?? a.caravana;
+                                      const existe = animales.some(localA => localA.caravana.toLowerCase() === nuevaCarav.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(localA.estado));
+                                      
+                                      return (
+                                          <Table.Tr key={a.id}>
+                                              <Table.Td><Badge color="gray">{a.caravana}</Badge></Table.Td>
+                                              <Table.Td>{a.categoria}</Table.Td>
+                                              <Table.Td>
+                                                  <TextInput 
+                                                      size="xs" 
+                                                      value={nuevasCaravanasMap[a.id] !== undefined ? nuevasCaravanasMap[a.id] : a.caravana} 
+                                                      onChange={(e) => setNuevasCaravanasMap({...nuevasCaravanasMap, [a.id]: e.target.value})}
+                                                      error={existe ? "Ya existe en tu campo" : null}
+                                                  />
+                                              </Table.Td>
+                                          </Table.Tr>
+                                      )
+                                  })}
+                              </Table.Tbody>
+                          </Table>
+                      </ScrollArea>
+                  )}
+
                   <Select label="Asignar a Potrero" placeholder="Opcional" data={potreros.map(p => ({value: p.id, label: p.nombre}))} value={transfPotreroId} onChange={setTransfPotreroId} clearable />
                   <Group grow mt="md">
                       <Button color="red" variant="outline" onClick={rechazarTransferencia}>Rechazar</Button>

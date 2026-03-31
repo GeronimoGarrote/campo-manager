@@ -38,7 +38,13 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   async function fetchTodosLosMovimientos() {
     if (!campoId) return; setLoadingDatos(true);
     const pCaja = supabase.from('caja').select('*').eq('establecimiento_id', campoId);
-    const pEventos = supabase.from('eventos').select('id, fecha_evento, tipo, detalle, resultado, costo, created_at, animales(caravana)').eq('establecimiento_id', campoId).gt('costo', 0);
+    
+    // MAGIA DE ECONOMÍA: Excluimos las transacciones de ventas/compras para no duplicarlas como gastos médicos
+    const pEventos = supabase.from('eventos').select('id, fecha_evento, tipo, detalle, resultado, costo, created_at, animales(caravana)')
+        .eq('establecimiento_id', campoId)
+        .gt('costo', 0)
+        .not('tipo', 'in', '("VENTA","COMPRA","TRASLADO_SALIDA","TRASLADO_INGRESO")');
+        
     const pLabores = supabase.from('labores').select('id, fecha, actividad, cultivo, detalle, costo, created_at').eq('establecimiento_id', campoId).gt('costo', 0);
     const pLotes = supabase.from('lotes_eventos').select('id, fecha, tipo, detalle, costo, created_at').eq('establecimiento_id', campoId).gt('costo', 0);
 
