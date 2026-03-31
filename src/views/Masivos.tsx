@@ -153,7 +153,10 @@ export default function Masivos({
 
         if (massActividad === 'VENTA' && esVentaRedMasiva) {
             if (!renspaDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
-            const { data: dest } = await supabase.from('establecimientos').select('id, nombre').eq('renspa', renspaDestinoMasiva).single();
+            
+            const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestinoMasiva.trim() }).single();
+            const dest = data as any; // BYPASS DE TYPESCRIPT
+            
             if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
             if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
 
@@ -176,7 +179,10 @@ export default function Masivos({
             }
         } else if (massActividad === 'TRASLADO' && esTrasladoRedMasiva) {
             if (!renspaTrasladoDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
-            const { data: dest } = await supabase.from('establecimientos').select('id, nombre').eq('renspa', renspaTrasladoDestinoMasiva).single();
+            
+            const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaTrasladoDestinoMasiva.trim() }).single();
+            const dest = data as any; // BYPASS DE TYPESCRIPT
+            
             if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
             if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
 

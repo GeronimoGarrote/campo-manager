@@ -458,24 +458,27 @@ export default function App() {
           const gastosTotales = Number(bajaGastosVenta) || 0;
 
           if (esVentaRed) {
-              if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA del comprador."); }
-              const { data: dest } = await supabase.from('establecimientos').select('id, nombre').eq('renspa', renspaDestino).single();
-              if (!dest) { setLoading(false); return alert("No se encontró ningún campo con ese RENSPA en RodeoControl."); }
-              if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+    if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA del comprador."); }
+    
+    const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
+    const dest = data as any; // BYPASS DE TYPESCRIPT
 
-              await supabase.from('transferencias').insert({
-                  campo_origen_id: campoId,
-                  campo_destino_id: dest.id,
-                  animales_ids: [animalSelId],
-                  precio_total: totalIngreso,
-                  detalles: `Venta animal ${animalSel.caravana}`
-              });
-              await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
-              
-              await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
-              await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
-              if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
-          } else {
+    if (!dest) { setLoading(false); return alert("No se encontró ningún campo con ese RENSPA en RodeoControl."); }
+    if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+
+    await supabase.from('transferencias').insert({
+        campo_origen_id: campoId,
+        campo_destino_id: dest.id,
+        animales_ids: [animalSelId],
+        precio_total: totalIngreso,
+        detalles: `Venta animal ${animalSel.caravana}`
+    });
+    await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSelId);
+    
+    await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
+    await supabase.from('agenda').delete().eq('animal_id', animalSelId).eq('completado', false);
+    if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSelId);
+} else {
               await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso });
               await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${bajaMotivo || '-'} ($${totalIngreso})`, toros_servicio_ids: null }).eq('id', animalSelId);
               await supabase.from('eventos').insert({ animal_id: animalSelId, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastosTotales });
