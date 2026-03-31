@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton, Menu } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar, IconTruckDelivery, IconCheck } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar, IconTruckDelivery, IconCheck, IconEye, IconEyeOff } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 interface Establecimiento { id: string; nombre: string; renspa?: string; }
@@ -15,6 +15,7 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDatos, setLoadingDatos] = useState(true);
+  const [saldosOcultos, setSaldosOcultos] = useState(false);
   
   const [opened, { open, close }] = useDisclosure(false);
   const [fechaInput, setFechaInput] = useState<string>(getHoyIso());
@@ -122,7 +123,12 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   return (
     <>
       <Group justify="space-between" mb="lg">
-        <Title order={2}>Caja y Finanzas</Title>
+        <Group align="center">
+          <Title order={2}>Caja y Finanzas</Title>
+          <ActionIcon variant="subtle" color="gray" onClick={() => setSaldosOcultos(!saldosOcultos)} title={saldosOcultos ? "Mostrar saldos" : "Ocultar saldos"}>
+            {saldosOcultos ? <IconEyeOff size={20} /> : <IconEye size={20} />}
+          </ActionIcon>
+        </Group>
         <Group>
           <Select value={filtroFecha} onChange={setFiltroFecha} data={[ { value: 'este_mes', label: 'Este Mes' }, { value: 'mes_pasado', label: 'Mes Pasado' }, { value: 'ultimos_3', label: 'Últimos 3 Meses' }, { value: 'este_ano', label: 'Este Año' }, { value: 'siempre', label: 'Histórico (Todo)' } ]} allowDeselect={false} leftSection={<IconCalendar size={16}/>} variant="filled" />
           <Menu shadow="md" width={240}>
@@ -136,9 +142,33 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} mb="xl">
-        <Card shadow="sm" radius="md" p="md" withBorder><Group wrap="nowrap" gap="sm"><ThemeIcon size="xl" radius="md" color="teal" variant="light"><IconTrendingUp /></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>INGRESOS TOTALES</Text><Text fw={700} size="xl" c="teal">${totalIngresos.toLocaleString('es-AR')}</Text></div></Group></Card>
-        <Card shadow="sm" radius="md" p="md" withBorder><Group wrap="nowrap" gap="sm"><ThemeIcon size="xl" radius="md" color="red" variant="light"><IconTrendingDown /></ThemeIcon><div><Text size="xs" c="dimmed" fw={700}>EGRESOS (GASTOS)</Text><Text fw={700} size="xl" c="red">${totalEgresos.toLocaleString('es-AR')}</Text></div></Group></Card>
-        <Card shadow="sm" radius="md" p="md" withBorder bg={saldoNeto > 0 ? 'green.0' : saldoNeto < 0 ? 'red.0' : 'gray.0'}><Group wrap="nowrap" gap="sm"><ThemeIcon size="xl" radius="md" color={saldoNeto > 0 ? 'green' : saldoNeto < 0 ? 'red' : 'gray'}><IconCurrencyDollar /></ThemeIcon><div><Text size="xs" fw={700} c={saldoNeto > 0 ? 'green.9' : saldoNeto < 0 ? 'red.9' : 'gray.7'}>BALANCE DEL PERÍODO</Text><Text fw={900} size="xl" c={saldoNeto > 0 ? 'green.9' : saldoNeto < 0 ? 'red.9' : 'gray.7'}>${saldoNeto.toLocaleString('es-AR')}</Text></div></Group></Card>
+        <Card shadow="sm" radius="md" p="md" withBorder>
+          <Group wrap="nowrap" gap="sm">
+            <ThemeIcon size="xl" radius="md" color="teal" variant="light"><IconTrendingUp /></ThemeIcon>
+            <div>
+              <Text size="xs" c="dimmed" fw={700}>INGRESOS TOTALES</Text>
+              <Text fw={700} size="xl" c="teal">{saldosOcultos ? '***' : `$${totalIngresos.toLocaleString('es-AR')}`}</Text>
+            </div>
+          </Group>
+        </Card>
+        <Card shadow="sm" radius="md" p="md" withBorder>
+          <Group wrap="nowrap" gap="sm">
+            <ThemeIcon size="xl" radius="md" color="red" variant="light"><IconTrendingDown /></ThemeIcon>
+            <div>
+              <Text size="xs" c="dimmed" fw={700}>EGRESOS (GASTOS)</Text>
+              <Text fw={700} size="xl" c="red">{saldosOcultos ? '***' : `$${totalEgresos.toLocaleString('es-AR')}`}</Text>
+            </div>
+          </Group>
+        </Card>
+        <Card shadow="sm" radius="md" p="md" withBorder bg={saldoNeto > 0 ? 'green.0' : saldoNeto < 0 ? 'red.0' : 'gray.0'}>
+          <Group wrap="nowrap" gap="sm">
+            <ThemeIcon size="xl" radius="md" color={saldoNeto > 0 ? 'green' : saldoNeto < 0 ? 'red' : 'gray'}><IconCurrencyDollar /></ThemeIcon>
+            <div>
+              <Text size="xs" fw={700} c={saldoNeto > 0 ? 'green.9' : saldoNeto < 0 ? 'red.9' : 'gray.7'}>BALANCE DEL PERÍODO</Text>
+              <Text fw={900} size="xl" c={saldoNeto > 0 ? 'green.9' : saldoNeto < 0 ? 'red.9' : 'gray.7'}>{saldosOcultos ? '***' : `$${saldoNeto.toLocaleString('es-AR')}`}</Text>
+            </div>
+          </Group>
+        </Card>
       </SimpleGrid>
 
       <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">

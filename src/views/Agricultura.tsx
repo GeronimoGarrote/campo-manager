@@ -5,6 +5,7 @@ import { IconPlus, IconTractor, IconEdit, IconArrowLeft, IconLeaf, IconMapPin, I
 import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
+const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 
 export default function Agricultura({ 
     campoId, potreros, parcelas, animales, 
@@ -22,6 +23,7 @@ export default function Agricultura({
 
     // Ficha Potrero - Estados
     const [laboresFicha, setLaboresFicha] = useState<any[]>([]);
+    const [fechaLabor, setFechaLabor] = useState(getHoyIso());
     const [actividadPotrero, setActividadPotrero] = useState<string | null>('FUMIGADA');
     const [cultivoInput, setCultivoInput] = useState('');
     const [detalleLabor, setDetalleLabor] = useState('');
@@ -65,7 +67,7 @@ export default function Agricultura({
     // --- FUNCIONES LABORES ---
     async function guardarLabor() { 
         if (!potreroSel || !actividadPotrero || !campoId) return; 
-        const { error } = await supabase.from('labores').insert([{ potrero_id: potreroSel.id, actividad: actividadPotrero, cultivo: cultivoInput, detalle: detalleLabor, costo: Number(costoLabor), establecimiento_id: campoId }]); 
+        const { error } = await supabase.from('labores').insert([{ potrero_id: potreroSel.id, fecha: fechaLabor, actividad: actividadPotrero, cultivo: cultivoInput, detalle: detalleLabor, costo: Number(costoLabor), establecimiento_id: campoId }]); 
         if (!error) { 
             if (actividadPotrero === 'SIEMBRA') { 
                 await supabase.from('potreros').update({ estado: 'SEMBRADO', cultivo_actual: cultivoInput }).eq('id', potreroSel.id); 
@@ -129,14 +131,18 @@ export default function Agricultura({
                         <Tabs.Panel value="labores">
                             <Paper withBorder p="md" bg="lime.0" mb="lg" radius="md">
                                 <Text size="sm" fw={700} mb="xs" c="lime.9">Registrar Nueva Labor</Text>
+                                
                                 <Group grow mb="sm">
                                     <Select data={['SIEMBRA', 'FUMIGADA', 'COSECHA', 'FERTILIZACION', 'DESMALEZADA', 'OTRO']} value={actividadPotrero} onChange={setActividadPotrero}/>
                                     <TextInput placeholder="Cultivo / Producto" value={cultivoInput} onChange={(e) => setCultivoInput(e.target.value)} />
                                 </Group>
-                                <Group grow mb="sm">
-                                    <TextInput placeholder="Costo Total ($)" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={costoLabor} onChange={(e) => setCostoLabor(e.target.value)}/>
-                                    <TextInput placeholder="Detalle / Observaciones..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} />
+                                
+                                <Group mb="sm" align="flex-start" style={{ display: 'flex', width: '100%' }}>
+                                    <TextInput placeholder="Costo Total ($)" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={costoLabor} onChange={(e) => setCostoLabor(e.target.value)} style={{ flex: 1 }}/>
+                                    <TextInput placeholder="Detalle / Observaciones..." value={detalleLabor} onChange={(e) => setDetalleLabor(e.target.value)} style={{ flex: 2 }}/>
+                                    <TextInput type="date" value={fechaLabor} onChange={(e) => setFechaLabor(e.target.value)} style={{ flex: 1 }}/>
                                 </Group>
+
                                 <Button onClick={guardarLabor} color="lime" variant="filled" leftSection={<IconCheck size={16}/>}>Guardar Labor</Button>
                             </Paper>
 

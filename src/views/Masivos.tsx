@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect } from '@mantine/core';
+import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch } from '@mantine/core';
 import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
@@ -37,6 +37,12 @@ export default function Masivos({
     const [massTipoServicio, setMassTipoServicio] = useState<string | null>('TORO');
     const [massTorosIds, setMassTorosIds] = useState<string[]>([]);
     const [massEstablecimientoDestino, setMassEstablecimientoDestino] = useState<string | null>(null);
+    
+    // Estados Red
+    const [esVentaRedMasiva, setEsVentaRedMasiva] = useState(false);
+    const [renspaDestinoMasiva, setRenspaDestinoMasiva] = useState('');
+    const [esTrasladoRedMasiva, setEsTrasladoRedMasiva] = useState(false);
+    const [renspaTrasladoDestinoMasiva, setRenspaTrasladoDestinoMasiva] = useState('');
 
     const opcionesGestacion = [
         { value: '0.5', label: '15 días (0.5 mes)' }, { value: '1', label: '1 mes' }, { value: '1.5', label: '1 mes y medio' },
@@ -54,7 +60,7 @@ export default function Masivos({
         const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
         const matchSexo = filterSexo ? animal.sexo === filterSexo : true; 
         const matchLote = filterLote ? animal.lote_id === filterLote : true; 
-        return matchBusqueda && matchCategoria && matchSexo && matchLote && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO';
+        return matchBusqueda && matchCategoria && matchSexo && matchLote && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && animal.estado !== 'EN TRÁNSITO';
     });
 
     const toggleSeleccion = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -88,8 +94,12 @@ export default function Masivos({
         if (massActividad === 'MOVIMIENTO_POTRERO' && !massPotreroDestino) return alert("Falta el Potrero destino");
         if (massActividad === 'CAMBIO_LOTE' && !massLoteDestino) return alert("Falta el Lote (Grupo) destino");
         if (massActividad === 'SERVICIO' && massTipoServicio === 'TORO' && massTorosIds.length === 0) return alert("Seleccioná al menos un toro");
-        if (massActividad === 'TRASLADO' && !massEstablecimientoDestino) return alert("Falta el establecimiento de destino");
-        if (massActividad === 'TRASLADO' && massEstablecimientoDestino === campoId) return alert("El establecimiento de destino no puede ser el mismo que el actual");
+        
+        if (massActividad === 'TRASLADO') {
+            if (esTrasladoRedMasiva && !renspaTrasladoDestinoMasiva) return alert("Falta el RENSPA de destino");
+            if (!esTrasladoRedMasiva && !massEstablecimientoDestino) return alert("Falta el establecimiento de destino");
+            if (!esTrasladoRedMasiva && massEstablecimientoDestino === campoId) return alert("El establecimiento de destino no puede ser el mismo que el actual");
+        }
         
         let idsParaProcesar = [...selectedIds]; let mensajeConfirmacion = `¿Confirmar ${massActividad} para ${selectedIds.length} animales?`;
 
@@ -118,9 +128,10 @@ export default function Masivos({
             gastoPorAnimal = gastosTotales / idsParaProcesar.length;
 
             resultadoTxt = 'VENDIDO'; 
-            datosExtra = { destino: massDestino || 'Venta Masiva', modalidad: massModalidadVenta, ingreso_total: totalIngreso, precio_unitario_estimado: Math.round(precioPorAnimal) }; 
+            datosExtra = { destino: esVentaRedMasiva ? 'Usuario RodeoControl' : (massDestino || 'Venta Masiva'), modalidad: massModalidadVenta, ingreso_total: totalIngreso, precio_unitario_estimado: Math.round(precioPorAnimal) }; 
         } 
         else if (massActividad === 'CAPADO') { resultadoTxt = 'Realizado'; } 
+        else if (massActividad === 'DESTETE') { resultadoTxt = 'DESTETADO'; }
         else if (massActividad === 'MOVIMIENTO_POTRERO') { 
             const pNom = potreros.find((p: any) => p.id === massPotreroDestino)?.nombre; 
             const parcNom = parcelas.find((p: any) => p.id === massParcelaDestino)?.nombre;
@@ -131,65 +142,130 @@ export default function Masivos({
         else if (massActividad === 'SERVICIO') {
             if (massTipoServicio === 'TORO') { const nombres = animales.filter((a: any) => massTorosIds.includes(a.id)).map((a: any) => a.caravana).join(', '); resultadoTxt = `Con: ${nombres}`; datosExtra = { toros_caravanas: nombres }; } else { resultadoTxt = 'IA'; }
         } else if (massActividad === 'TRASLADO') {
-            const nombreDestino = establecimientos.find((e: any) => e.id === massEstablecimientoDestino)?.nombre;
-            resultadoTxt = 'TRASLADO SALIDA';
-            datosExtra = { establecimiento_destino: nombreDestino, establecimiento_destino_id: massEstablecimientoDestino };
+            if (!esTrasladoRedMasiva) {
+                const nombreDestino = establecimientos.find((e: any) => e.id === massEstablecimientoDestino)?.nombre;
+                resultadoTxt = 'TRASLADO SALIDA';
+                datosExtra = { establecimiento_destino: nombreDestino, establecimiento_destino_id: massEstablecimientoDestino };
+            }
         }
 
-        const inserts = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, costo: massActividad === 'VENTA' ? gastoPorAnimal : Number(massCostoUnitario), establecimiento_id: campoId }));
-        const { error } = await supabase.from('eventos').insert(inserts);
+        let errorGlobal = null;
 
-        if (!error) {
-            if (massActividad === 'VENTA') {
-                await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: massFecha.toISOString().split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta de ${idsParaProcesar.length} animales - ${massDestino || 'Masiva'}`, monto: totalIngreso });
-                await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${massDestino || '-'} (Aprox $${Math.round(precioPorAnimal)})` }).in('id', idsParaProcesar);
-                await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false); // Limpiar agenda
+        if (massActividad === 'VENTA' && esVentaRedMasiva) {
+            if (!renspaDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
+            const { data: dest } = await supabase.from('establecimientos').select('id, nombre').eq('renspa', renspaDestinoMasiva).single();
+            if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
+            if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+
+            const { error: errTransf } = await supabase.from('transferencias').insert({
+                campo_origen_id: campoId,
+                campo_destino_id: dest.id,
+                animales_ids: idsParaProcesar,
+                precio_total: totalIngreso,
+                detalles: `Venta masiva de ${idsParaProcesar.length} animales`
+            });
+            errorGlobal = errTransf;
+            
+            if (!errorGlobal) {
+                await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).in('id', idsParaProcesar);
+                await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
                 for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
-            }
-            if (massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', idsParaProcesar);
-            if (massActividad === 'MOVIMIENTO_POTRERO') await supabase.from('animales').update({ potrero_id: massPotreroDestino, parcela_id: massParcelaDestino }).in('id', idsParaProcesar);
-            if (massActividad === 'CAMBIO_LOTE') await supabase.from('animales').update({ lote_id: massLoteDestino }).in('id', idsParaProcesar);
-            if (massActividad === 'TACTO') {
-                await supabase.from('animales').update({ estado: massTactoResultado }).in('id', idsParaProcesar);
-                if (massTactoResultado === 'PREÑADA' && massMesesGestacion) {
-                    const diasFaltantes = Math.round(283 - (parseFloat(massMesesGestacion) * 30.4));
-                    const fechaParto = new Date(massFecha); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
-                    const agendaInserts = idsParaProcesar.map(animalId => ({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${animales.find((a: any) => a.id === animalId)?.caravana || 'Desconocida'}`, descripcion: `Parto estimado calculado por tacto masivo.`, tipo: 'PARTO_ESTIMADO', animal_id: animalId }));
-                    await supabase.from('agenda').insert(agendaInserts);
-                }
-            }
-            if (massActividad === 'SERVICIO') {
-                const vacasToUpdate = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Vaca', 'Vaquillona'].includes(a.categoria)).map((a: any) => a.id);
-                const torosToUpdate = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Toro').map((a: any) => a.id);
-                if (vacasToUpdate.length > 0 && massTipoServicio === 'TORO') await supabase.from('animales').update({ toros_servicio_ids: massTorosIds }).in('id', vacasToUpdate);
-                if (torosToUpdate.length > 0) await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', torosToUpdate);
-                if (massTipoServicio === 'TORO' && massTorosIds.length > 0) {
-                    const torosEvents = massTorosIds.map(toroId => ({ animal_id: toroId, fecha_evento: fechaStr, tipo: 'SERVICIO', resultado: 'En servicio', detalle: 'Asignado a rodeo (Masivo)', establecimiento_id: campoId }));
-                    await supabase.from('eventos').insert(torosEvents); await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', massTorosIds);
-                }
-            }
-            if (massActividad === 'TRASLADO') {
-                const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', massEstablecimientoDestino).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO']);
-                const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
                 
-                for (const id of idsParaProcesar) { 
-                    const anim = animales.find((a: any) => a.id === id); 
-                    let c = anim?.caravana || '';
-                    if (anim && destCaravanas.includes(anim.caravana.toLowerCase())) c = `${anim.caravana} (T)`;
-                    await supabase.from('animales').update({ establecimiento_id: massEstablecimientoDestino, potrero_id: null, parcela_id: null, lote_id: null, caravana: c }).eq('id', id); 
-                }
-                const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre;
-                const insertsIngreso = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId }, establecimiento_id: massEstablecimientoDestino }));
-                await supabase.from('eventos').insert(insertsIngreso);
+                const insertsVenta = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales }, establecimiento_id: campoId, costo: gastoPorAnimal }));
+                await supabase.from('eventos').insert(insertsVenta);
+            }
+        } else if (massActividad === 'TRASLADO' && esTrasladoRedMasiva) {
+            if (!renspaTrasladoDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
+            const { data: dest } = await supabase.from('establecimientos').select('id, nombre').eq('renspa', renspaTrasladoDestinoMasiva).single();
+            if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
+            if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+
+            const { error: errTransf } = await supabase.from('transferencias').insert({
+                campo_origen_id: campoId,
+                campo_destino_id: dest.id,
+                animales_ids: idsParaProcesar,
+                precio_total: 0,
+                detalles: `Traslado masivo de ${idsParaProcesar.length} animales`
+            });
+            errorGlobal = errTransf;
+            
+            if (!errorGlobal) {
+                await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).in('id', idsParaProcesar);
+                await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
+                for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
                 
-                // Mover agenda masiva
-                await supabase.from('agenda').update({ establecimiento_id: massEstablecimientoDestino }).in('animal_id', idsParaProcesar).eq('completado', false);
+                const insertsSalida = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, establecimiento_id: campoId, costo: 0 }));
+                await supabase.from('eventos').insert(insertsSalida);
+            }
+        } else {
+            const inserts = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: massActividad, resultado: resultadoTxt, detalle: massDetalle, datos_extra: datosExtra, costo: massActividad === 'VENTA' ? gastoPorAnimal : Number(massCostoUnitario), establecimiento_id: campoId }));
+            const { error } = await supabase.from('eventos').insert(inserts);
+            errorGlobal = error;
+
+            if (!errorGlobal) {
+                if (massActividad === 'VENTA') {
+                    await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: massFecha.toISOString().split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta de ${idsParaProcesar.length} animales - ${massDestino || 'Masiva'}`, monto: totalIngreso });
+                    await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${massDestino || '-'} (Aprox $${Math.round(precioPorAnimal)})`, toros_servicio_ids: null }).in('id', idsParaProcesar);
+                    await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
+                    for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
+                }
+                if (massActividad === 'CAPADO') await supabase.from('animales').update({ castrado: true }).in('id', idsParaProcesar);
+                if (massActividad === 'MOVIMIENTO_POTRERO') await supabase.from('animales').update({ potrero_id: massPotreroDestino, parcela_id: massParcelaDestino }).in('id', idsParaProcesar);
+                if (massActividad === 'CAMBIO_LOTE') await supabase.from('animales').update({ lote_id: massLoteDestino }).in('id', idsParaProcesar);
+                if (massActividad === 'DESTETE') {
+                    const vacasIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Vaca', 'Vaquillona'].includes(a.categoria)).map((a: any) => a.id);
+                    const ternerosIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero').map((a: any) => a.id);
+                    if (vacasIds.length > 0) await supabase.from('animales').update({ estado: 'VACÍA' }).in('id', vacasIds);
+                    if (ternerosIds.length > 0) await supabase.from('animales').update({ estado: 'ACTIVO' }).in('id', ternerosIds);
+                }
+                if (massActividad === 'TACTO') {
+                    await supabase.from('animales').update({ estado: massTactoResultado }).in('id', idsParaProcesar);
+                    if (massTactoResultado === 'PREÑADA' && massMesesGestacion) {
+                        const diasFaltantes = Math.round(283 - (parseFloat(massMesesGestacion) * 30.4));
+                        const fechaParto = new Date(massFecha); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
+                        const agendaInserts = idsParaProcesar.map(animalId => ({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${animales.find((a: any) => a.id === animalId)?.caravana || 'Desconocida'}`, descripcion: `Parto estimado calculado por tacto masivo.`, tipo: 'PARTO_ESTIMADO', animal_id: animalId }));
+                        await supabase.from('agenda').insert(agendaInserts);
+                    }
+                }
+                if (massActividad === 'SERVICIO') {
+                    const vacasToUpdate = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Vaca', 'Vaquillona'].includes(a.categoria)).map((a: any) => a.id);
+                    const torosToUpdate = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Toro').map((a: any) => a.id);
+                    if (vacasToUpdate.length > 0 && massTipoServicio === 'TORO') await supabase.from('animales').update({ toros_servicio_ids: massTorosIds }).in('id', vacasToUpdate);
+                    if (torosToUpdate.length > 0) await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', torosToUpdate);
+                    if (massTipoServicio === 'TORO' && massTorosIds.length > 0) {
+                        const torosEvents = massTorosIds.map(toroId => ({ animal_id: toroId, fecha_evento: fechaStr, tipo: 'SERVICIO', resultado: 'En servicio', detalle: 'Asignado a rodeo (Masivo)', establecimiento_id: campoId }));
+                        await supabase.from('eventos').insert(torosEvents); await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', massTorosIds);
+                    }
+                }
+                if (massActividad === 'TRASLADO') {
+                    const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', massEstablecimientoDestino).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE']);
+                    const destCaravanas = destAnimals?.map((a: any) => a.caravana.toLowerCase()) || [];
+                    
+                    for (const id of idsParaProcesar) { 
+                        const anim = animales.find((a: any) => a.id === id); 
+                        let c = anim?.caravana || '';
+                        if (anim && destCaravanas.includes(anim.caravana.toLowerCase())) c = `${anim.caravana} (T)`;
+                        await supabase.from('animales').update({ establecimiento_id: massEstablecimientoDestino, potrero_id: null, parcela_id: null, lote_id: null, caravana: c, toros_servicio_ids: null }).eq('id', id); 
+                    }
+                    const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre;
+                    const insertsIngreso = idsParaProcesar.map(animalId => ({ animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId }, establecimiento_id: massEstablecimientoDestino }));
+                    await supabase.from('eventos').insert(insertsIngreso);
+                    
+                    await supabase.from('agenda').update({ establecimiento_id: massEstablecimientoDestino }).in('animal_id', idsParaProcesar).eq('completado', false);
+                }
             }
         }
 
         setLoading(false);
-        if (error) { alert("Error: " + error.message); } else {
-            alert("¡Carga masiva exitosa!"); setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino(''); setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario(''); setMassTorosIds([]); setMassMesesGestacion(null); setMassEstablecimientoDestino(null); setSelectedIds([]);
+        if (errorGlobal) { 
+            alert("Error: " + errorGlobal.message); 
+        } else {
+            alert("¡Carga masiva exitosa!"); 
+            setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino(''); 
+            setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario(''); 
+            setMassTorosIds([]); setMassMesesGestacion(null); setMassEstablecimientoDestino(null); setSelectedIds([]);
+            setEsVentaRedMasiva(false); setRenspaDestinoMasiva('');
+            setEsTrasladoRedMasiva(false); setRenspaTrasladoDestinoMasiva('');
             fetchAnimales(); fetchActividadGlobal(); setActiveSection('actividad');
         }
     }
@@ -203,12 +279,17 @@ export default function Masivos({
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
                 <Group grow align="flex-start">
-                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'TRATAMIENTO', 'TRASLADO', 'OTRO']} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
+                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'TRATAMIENTO', 'TRASLADO', 'OTRO']} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
                     <TextInput label="Fecha" type="date" value={getLocalDateForInput(massFecha)} onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
                 </Group>
                 
                 {massActividad === 'VENTA' && ( 
                     <Paper withBorder p="sm" mt="sm" bg="gray.0">
+                        <Group justify="space-between" mb="md" p="xs" bg="blue.0" style={{ borderRadius: 8, border: '1px solid #74c0fc' }}>
+                            <Text size="sm" fw={600} c="blue.9">Vender y transferir a otro usuario de RodeoControl</Text>
+                            <Switch checked={esVentaRedMasiva} onChange={(e) => setEsVentaRedMasiva(e.currentTarget.checked)} color="blue" />
+                        </Group>
+
                         <Text size="sm" fw={700} mb="xs">Detalles de la Venta</Text>
                         <Group grow align="flex-start">
                             <Select label="Modalidad" data={[{value: 'TOTAL', label: 'Monto Total'}, {value: 'CABEZA', label: 'Por Cabeza'}, {value: 'KILO', label: 'Al Peso (Por Kg)'}]} value={massModalidadVenta} onChange={(v) => setMassModalidadVenta(v || 'TOTAL')} allowDeselect={false} />
@@ -216,7 +297,11 @@ export default function Masivos({
                             {massModalidadVenta === 'KILO' && <TextInput label="Kilos Totales" placeholder="Ej: 4500" type="number" value={massKilosTotales} onChange={(e) => setMassKilosTotales(e.target.value)} />}
                         </Group>
                         <Group grow mt="sm">
-                            <TextInput label="Destino / Comprador" placeholder="Ej: Frigorífico Rioplatense" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} />
+                            {esVentaRedMasiva ? (
+                                <TextInput label="RENSPA del Comprador" placeholder="Ej: 01.002.0.00000/00" required value={renspaDestinoMasiva} onChange={(e) => setRenspaDestinoMasiva(e.target.value)} />
+                            ) : (
+                                <TextInput label="Destino / Comprador" placeholder="Ej: Frigorífico Rioplatense" value={massDestino} onChange={(e) => setMassDestino(e.target.value)} />
+                            )}
                             <TextInput label="Gastos Totales de Venta ($)" placeholder="Flete, comisión, etc." type="number" leftSection={<IconCurrencyDollar size={16}/>} value={massGastosVenta} onChange={(e) => setMassGastosVenta(e.target.value)} />
                         </Group>
                     </Paper> 
@@ -235,8 +320,19 @@ export default function Masivos({
                     </Group>
                 )}
                 {massActividad === 'SERVICIO' && ( <Group grow mt="sm"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={massTipoServicio} onChange={setMassTipoServicio} />{massTipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map((t: any) => ({value: t.id, label: t.caravana}))} value={massTorosIds} onChange={setMassTorosIds} searchable /> )}</Group> )}
+                
                 {massActividad === 'TRASLADO' && (
-                    <Select label="Establecimiento de Destino" placeholder="Seleccionar nuevo campo" data={establecimientos.filter((e: any) => e.id !== campoId).map((e: any) => ({ value: e.id, label: e.nombre }))} value={massEstablecimientoDestino} onChange={setMassEstablecimientoDestino} leftSection={<IconMapPin size={16}/>} mt="sm" required/>
+                    <Paper withBorder p="sm" mt="sm" bg="gray.0">
+                        <Group justify="space-between" mb="md" p="xs" bg="blue.0" style={{ borderRadius: 8, border: '1px solid #74c0fc' }}>
+                            <Text size="sm" fw={600} c="blue.9">Trasladar a otro usuario de RodeoControl</Text>
+                            <Switch checked={esTrasladoRedMasiva} onChange={(e) => setEsTrasladoRedMasiva(e.currentTarget.checked)} color="blue" />
+                        </Group>
+                        {esTrasladoRedMasiva ? (
+                            <TextInput label="RENSPA del Destino" placeholder="Ej: 01.002.0.00000/00" required value={renspaTrasladoDestinoMasiva} onChange={(e) => setRenspaTrasladoDestinoMasiva(e.target.value)} />
+                        ) : (
+                            <Select label="Establecimiento de Destino" placeholder="Seleccionar nuevo campo (Propio)" data={establecimientos.filter((e: any) => e.id !== campoId).map((e: any) => ({ value: e.id, label: e.nombre }))} value={massEstablecimientoDestino} onChange={setMassEstablecimientoDestino} leftSection={<IconMapPin size={16}/>} required/>
+                        )}
+                    </Paper>
                 )}
                 
                 <Group grow mt="sm">
@@ -268,7 +364,7 @@ export default function Masivos({
                                 <Table.Td><Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} /></Table.Td>
                                 <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
                                 <Table.Td><Text fw={500}>{animal.categoria}</Text></Table.Td>
-                                <Table.Td><Badge size="sm" color={animal.estado === 'PREÑADA' ? 'teal' : animal.estado === 'VACÍA' ? 'yellow' : 'blue'}>{animal.estado}</Badge></Table.Td>
+                                <Table.Td><Badge size="sm" color={animal.estado === 'PREÑADA' ? 'teal' : animal.estado === 'VACÍA' ? 'yellow' : animal.estado === 'EN LACTANCIA' ? 'grape' : animal.estado === 'LACTANTE' ? 'cyan' : 'blue'}>{animal.estado}</Badge></Table.Td>
                                 <Table.Td>{getUbicacionCompleta(animal.potrero_id, animal.parcela_id)}</Table.Td>
                             </Table.Tr>
                         ))}
