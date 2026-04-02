@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react';
 import { SimpleGrid, Table, MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, Paper, TextInput, Select, Button, Badge, Tabs, Textarea, ActionIcon, ScrollArea, Modal, Alert, UnstyledButton, MultiSelect, Switch, Stack, ThemeIcon, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconCheck, IconLeaf, IconTractor, IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconHeartbeat, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTrendingUp, IconChartDots, IconTag, IconCalendarEvent, IconBell, IconInfoCircle, IconTruckDelivery } from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconCheck, IconTractor, IconCalendar, IconArrowBackUp, IconCurrencyDollar, IconSkull, IconHeartbeat, IconBabyCarriage, IconScissors, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTrendingUp, IconChartDots, IconTag, IconCalendarEvent, IconBell, IconInfoCircle, IconTruckDelivery } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
+import logoRodeo from './assets/logo.png'; 
 
 import Login from './views/Login';
 import Inicio from './views/Inicio';
@@ -662,7 +663,7 @@ export default function App() {
               <Group h="100%" px="md" justify="space-between">
                 <Group gap="sm" align="center" style={{ flex: 1 }}>
                     <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                    <IconLeaf color="teal" size={28} />
+                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 32, width: 'auto' }} />
                     <Title order={3} visibleFrom="xs">RodeoControl</Title>
                     {campoId && establecimientos.length > 0 && (
                         <Group gap="sm" align="center" visibleFrom="sm">

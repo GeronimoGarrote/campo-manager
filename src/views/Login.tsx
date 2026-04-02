@@ -1,12 +1,13 @@
 import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider } from '@mantine/core';
-import { IconLeaf, IconCheck, IconMail, IconBrandWhatsapp } from '@tabler/icons-react';
+import { IconCheck, IconMail, IconBrandWhatsapp } from '@tabler/icons-react';
+import logoRodeo from '../assets/logoblanco.png'; 
 
 export default function Login({ email, setEmail, password, setPassword, handleLogin, authLoading }: any) {
     return (
         <Box style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
             <Box visibleFrom="md" style={{ flex: 1, padding: '4rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: 'white', background: 'linear-gradient(135deg, #20c997 0%, #087f5b 50%, #042b1e 100%)' }}>
                 <div>
-                    <IconLeaf size={60} color="white" />
+                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 105, width: 'auto' }} />
                     <Title order={1} mt="xl" style={{ color: 'white', fontSize: '3.5rem', letterSpacing: '-1px' }}>RodeoControl</Title>
                     <Text size="xl" mt="md" fw={500} style={{ color: 'rgba(255,255,255,0.9)', maxWidth: 500 }}>
                         Gestión inteligente, trazabilidad absoluta y control total del rodeo para tus establecimientos ganaderos.
@@ -29,7 +30,7 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
             <Box style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
                 <Container size={420} w="100%" px={0}>
                     <Group justify="center" mb="md" hiddenFrom="md">
-                        <ThemeIcon size={60} radius="xl" color="teal" variant="light"><IconLeaf size={35} /></ThemeIcon>
+                        <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 48, width: 'auto' }} />
                     </Group>
                     <Title ta="center" order={2} hiddenFrom="md" c="teal" mb="xs">RodeoControl</Title>
                     
