@@ -24,6 +24,30 @@ function Th({ children, reversed, sorted, onSort }: any) {
     );
 }
 
+export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) => {
+    if (!estado) return null;
+    
+    if (estado === 'PREÑADA Y LACTANDO') {
+        // Al devolverlos en un Fragment (<>...</>), el <Group> de tu tabla los pone uno al lado del otro sin agrandar la fila
+        return (
+            <>
+                <Badge color="teal">PREÑADA</Badge>
+                <Badge color="grape">LACTANCIA</Badge>
+            </>
+        );
+    }
+    
+    let color = 'blue';
+    if (estado === 'PREÑADA') color = 'teal';
+    else if (estado === 'VACÍA') color = 'yellow';
+    else if (estado === 'EN LACTANCIA') color = 'grape';
+    else if (estado === 'LACTANTE') color = 'cyan';
+    else if (estado === 'EN SERVICIO') color = 'pink'; 
+    else if (estado === 'APARTADO') color = 'orange'; 
+    
+    return <Badge color={color}>{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
+};
+
 export default function Hacienda({
     animales, potreros, parcelas, lotes, activeSection, 
     abrirFichaVaca, openModalAlta, setAnimales
@@ -54,7 +78,14 @@ export default function Hacienda({
             let matchAtributos = true;
             if (filterAtributos.length > 0) {
                 const tagsDelAnimal: string[] = [];
-                tagsDelAnimal.push(animal.estado);
+                
+                // Agregado el filtro para que separe los estados
+                if (animal.estado === 'PREÑADA Y LACTANDO') {
+                    tagsDelAnimal.push('PREÑADA', 'EN LACTANCIA');
+                } else {
+                    tagsDelAnimal.push(animal.estado);
+                }
+
                 if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
                 if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
                 if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
@@ -77,16 +108,6 @@ export default function Hacienda({
             return 0;
         });
     }, [animales, busqueda, filterCategoria, filterAtributos, filterLote, ordenEdad, sortBy, reverseSortDirection, activeSection]);
-
-    const getEstadoColor = (estado: string) => { 
-        if (estado === 'PREÑADA') return 'teal'; 
-        if (estado === 'VACÍA') return 'yellow'; 
-        if (estado === 'EN LACTANCIA') return 'grape'; 
-        if (estado === 'LACTANTE') return 'cyan'; 
-        if (estado === 'EN SERVICIO') return 'pink'; 
-        if (estado === 'APARTADO') return 'orange'; 
-        return 'blue'; 
-    };
 
     const renderCondicionBadges = (condStr: string) => { if (!condStr || condStr === 'SANA') return null; return condStr.split(', ').map((c: any, i: number) => ( <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> )); };
     const getNombrePotrero = (id?: string) => { if(!id) return null; const p = potreros.find((pot: any) => pot.id === id); return p ? p.nombre : null; };
@@ -126,9 +147,9 @@ export default function Hacienda({
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
                     <Group grow style={{ flex: 1 }}>
                         <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-                        <Select label="Filtrar Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                        <MultiSelect label="Estado / Sexo / Condición" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
-                        <Select label="Filtrar por Lote" placeholder="Todos" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
+                        <Select label="Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
+                        <MultiSelect label="Estado" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
+                        <Select label="Lote" placeholder="Todos" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
                     </Group>
                     <Menu shadow="md" width={220} position="bottom-end">
                         <Menu.Target><Tooltip label="Ordenar por Edad"><ActionIcon size={36} variant={ordenEdad ? "filled" : "default"} color={ordenEdad ? "blue" : "gray"} aria-label="Ordenar" mb={2}><IconSortAscending style={{ width: '60%', height: '60%' }} stroke={1.5} /></ActionIcon></Tooltip></Menu.Target>
@@ -143,45 +164,47 @@ export default function Hacienda({
             </Paper>
 
             <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
-                <Table striped highlightOnHover>
-                    <Table.Thead bg="gray.1">
-                        <Table.Tr>
-                            <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
-                            <Table.Th>Categoría</Table.Th>
-                            <Table.Th>Estado / Condición</Table.Th>
-                            <Table.Th>Anotación</Table.Th>
-                            <Table.Th>Ubicación</Table.Th>
-                            <Table.Th>Lote</Table.Th>
-                            {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
-                            <Table.Th w={50}></Table.Th>
-                        </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                        {animalesFiltrados.map((vaca: any) => (
-                            <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }} bg={vaca.condicion && vaca.condicion.includes('ENFERMA') ? 'red.0' : undefined}>
-                                <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
-                                <Table.Td><Text fw={500}>{vaca.categoria}</Text></Table.Td>
-                                <Table.Td>
-                                    {activeSection === 'bajas' ? (
-                                        <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
-                                    ) : (
-                                        <Group gap="xs">
-                                            {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
-                                            {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
-                                            {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <Badge color={getEstadoColor(vaca.estado)}>{vaca.estado}</Badge>}
-                                            {renderCondicionBadges(vaca.condicion)}
-                                        </Group>
-                                    )}
-                                </Table.Td>
-                                <Table.Td style={{ maxWidth: 150 }}><Tooltip label={vaca.detalles} disabled={!vaca.detalles} multiline w={200} withArrow zIndex={3000}><Text size="sm" c="dimmed" truncate="end">{vaca.detalles || '-'}</Text></Tooltip></Table.Td>
-                                <Table.Td>{getUbicacionCompleta(vaca.potrero_id, vaca.parcela_id)}</Table.Td>
-                                <Table.Td>{vaca.lote_id ? <Badge variant="outline" color="grape" leftSection={<IconTag size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
-                                {activeSection === 'bajas' && <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>}
-                                <Table.Td onClick={(e) => { e.stopPropagation(); toggleDestacado(vaca.id, !!vaca.destacado); }} align="right"><ActionIcon variant="subtle" color="yellow">{vaca.destacado ? <IconStarFilled size={18} /> : <IconStar size={18} />}</ActionIcon></Table.Td>
+                <div style={{ overflowX: 'auto' }}>
+                    <Table striped highlightOnHover style={{ minWidth: 800 }}>
+                        <Table.Thead bg="gray.1">
+                            <Table.Tr>
+                                <Th sorted={sortBy === 'caravana'} reversed={reverseSortDirection} onSort={() => setSorting('caravana')}>Caravana</Th>
+                                <Table.Th>Categoría</Table.Th>
+                                <Table.Th>Estado / Condición</Table.Th>
+                                <Table.Th>Anotación</Table.Th>
+                                <Table.Th>Ubicación</Table.Th>
+                                <Table.Th>Lote</Table.Th>
+                                {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
+                                <Table.Th w={50}></Table.Th>
                             </Table.Tr>
-                        ))}
-                    </Table.Tbody>
-                </Table>
+                        </Table.Thead>
+                        <Table.Tbody>
+                            {animalesFiltrados.map((vaca: any) => (
+                                <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }} bg={vaca.condicion && vaca.condicion.includes('ENFERMA') ? 'red.0' : undefined}>
+                                    <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
+                                    <Table.Td><Text fw={500}>{vaca.categoria}</Text></Table.Td>
+                                    <Table.Td>
+                                        {activeSection === 'bajas' ? (
+                                            <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
+                                        ) : (
+                                            <Group gap="xs">
+                                                {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
+                                                {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
+                                                {renderCondicionBadges(vaca.condicion)}
+                                            </Group>
+                                        )}
+                                    </Table.Td>
+                                    <Table.Td style={{ maxWidth: 150 }}><Tooltip label={vaca.detalles} disabled={!vaca.detalles} multiline w={200} withArrow zIndex={3000}><Text size="sm" c="dimmed" truncate="end">{vaca.detalles || '-'}</Text></Tooltip></Table.Td>
+                                    <Table.Td>{getUbicacionCompleta(vaca.potrero_id, vaca.parcela_id)}</Table.Td>
+                                    <Table.Td>{vaca.lote_id ? <Badge variant="outline" color="grape" leftSection={<IconTag size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
+                                    {activeSection === 'bajas' && <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>}
+                                    <Table.Td onClick={(e) => { e.stopPropagation(); toggleDestacado(vaca.id, !!vaca.destacado); }} align="right"><ActionIcon variant="subtle" color="yellow">{vaca.destacado ? <IconStarFilled size={18} /> : <IconStar size={18} />}</ActionIcon></Table.Td>
+                                </Table.Tr>
+                            ))}
+                        </Table.Tbody>
+                    </Table>
+                </div>
             </Paper>
         </>
     )

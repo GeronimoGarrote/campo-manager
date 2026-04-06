@@ -87,6 +87,7 @@ export default function App() {
   const [origenModal, setOrigenModal] = useState<string | null>('PROPIO');
   const [precioCompra, setPrecioCompra] = useState<string | number>('');
   const [nuevoEstadoReproductivo, setNuevoEstadoReproductivo] = useState<string | null>('VACÍA');
+  const [nuevoLactancia, setNuevoLactancia] = useState(false); 
   const [nuevoMesesGestacion, setNuevoMesesGestacion] = useState<string | null>(null);
   const [edadEstimada, setEdadEstimada] = useState<string | null>(null);
   
@@ -130,6 +131,7 @@ export default function App() {
   const [editCategoria, setEditCategoria] = useState<string | null>('');
   const [editSexo, setEditSexo] = useState<string | null>('');
   const [editEstado, setEditEstado] = useState<string | null>('');
+  const [editLactancia, setEditLactancia] = useState(false); 
   const [editCondicion, setEditCondicion] = useState<string[]>([]); 
   const [editDetalles, setEditDetalles] = useState<string>('');
   const [editFechaNac, setEditFechaNac] = useState<string>('');
@@ -215,7 +217,6 @@ export default function App() {
           eventos = eventos.map((ev: any) => {
               if (!ev.animales) {
                   const match = nombres?.find((n: any) => n.id === ev.animal_id);
-                  // La magia está acá: Toma la caravana original del momento de la venta si existe
                   const caravanaFija = ev.datos_extra?.caravana_origen || (match ? match.caravana : 'Baja');
                   return { ...ev, animales: { caravana: caravanaFija } };
               }
@@ -290,7 +291,14 @@ export default function App() {
     
     setLoading(true); const hoy = new Date().toISOString().split('T')[0];
     let fechaNac = hoy; if (edadEstimada) { const d = new Date(); d.setMonth(d.getMonth() - parseInt(edadEstimada)); fechaNac = d.toISOString().split('T')[0]; }
-    let estadoInicial = 'ACTIVO'; if (['Vaca', 'Vaquillona'].includes(categoria || '')) { estadoInicial = nuevoEstadoReproductivo || 'VACÍA'; }
+    
+    let estadoInicial = 'ACTIVO'; 
+    if (['Vaca', 'Vaquillona'].includes(categoria || '')) { 
+        estadoInicial = nuevoEstadoReproductivo || 'VACÍA'; 
+        if (nuevoLactancia) {
+            estadoInicial = estadoInicial === 'PREÑADA' ? 'PREÑADA Y LACTANDO' : 'EN LACTANCIA';
+        }
+    }
     
     const { data: newAnimalData, error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: estadoInicial, condicion: 'SANA', origen: origenModal, fecha_nacimiento: fechaNac, fecha_ingreso: hoy, establecimiento_id: campoId }]).select();
     
@@ -300,19 +308,26 @@ export default function App() {
             await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: hoy, tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Compra animal caravana: ${caravana}`, monto: Number(precioCompra) });
             await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'COMPRA', resultado: 'Animal Comprado', detalle: `Costo: $${precioCompra}`, establecimiento_id: campoId, costo: Number(precioCompra) });
         }
-        if (estadoInicial === 'PREÑADA' && nuevoMesesGestacion) {
+        if ((estadoInicial === 'PREÑADA' || estadoInicial === 'PREÑADA Y LACTANDO') && nuevoMesesGestacion) {
             const diasGestacionActual = parseFloat(nuevoMesesGestacion) * 30.4; const diasFaltantes = Math.round(283 - diasGestacionActual); const fechaParto = new Date(); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
             await supabase.from('agenda').insert({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${caravana}`, descripcion: `Parto estimado al ingresar animal.`, tipo: 'PARTO_ESTIMADO', animal_id: animalId });
             fetchAgenda();
         }
-        setCaravana(''); setPrecioCompra(''); setOrigenModal('PROPIO'); setNuevoEstadoReproductivo('VACÍA'); setNuevoMesesGestacion(null); setEdadEstimada(null); fetchAnimales(); if (cerrarModal) closeModalAlta(); 
+        setCaravana(''); setPrecioCompra(''); setOrigenModal('PROPIO'); setNuevoEstadoReproductivo('VACÍA'); setNuevoMesesGestacion(null); setEdadEstimada(null); setNuevoLactancia(false); fetchAnimales(); if (cerrarModal) closeModalAlta(); 
     } else if (error) { alert("Error: " + error.message); }
     setLoading(false); 
   }
 
   async function abrirFichaVaca(animal: Animal) {
     setActiveTabVaca('historia'); setAnimalSelId(animal.id); 
-    setEditCaravana(animal.caravana); setEditCategoria(animal.categoria); setEditSexo(animal.sexo); setEditEstado(animal.estado); setEditCastrado(animal.castrado || false);
+    setEditCaravana(animal.caravana); setEditCategoria(animal.categoria); setEditSexo(animal.sexo); setEditCastrado(animal.castrado || false);
+    
+    let repro = 'ACTIVO';
+    if (animal.estado.includes('PREÑADA')) repro = 'PREÑADA';
+    else if (animal.estado.includes('VACÍA') || animal.estado === 'EN LACTANCIA') repro = 'VACÍA';
+    setEditEstado(repro);
+    setEditLactancia(animal.estado.includes('LACTANCIA'));
+
     const condArray = animal.condicion && animal.condicion !== 'SANA' ? animal.condicion.split(', ') : []; setEditCondicion(condArray); setEditDetalles(animal.detalles || '');
     setEditPotreroId(animal.potrero_id || null); setEditParcelaId(animal.parcela_id || null); setEditLoteId(animal.lote_id || null); setEditFechaNac(animal.fecha_nacimiento || ''); setEditFechaIngreso(animal.fecha_ingreso || '');
     
@@ -357,7 +372,13 @@ export default function App() {
     setLoading(true); let resultadoFinal = resultadoInput; let datosExtra = null; let nuevoEstado = ''; let nuevasCondiciones = [...editCondicion]; let esCastrado = editCastrado; let torosToUpdate: string[] = [];
     
     if (tipoEventoInput === 'TACTO') { 
-        resultadoFinal = tactoResultado || ''; if (tactoResultado === 'PREÑADA') nuevoEstado = 'PREÑADA'; if (tactoResultado === 'VACÍA') nuevoEstado = 'VACÍA'; 
+        resultadoFinal = tactoResultado || ''; 
+        if (tactoResultado === 'PREÑADA') {
+            nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'PREÑADA Y LACTANDO' : 'PREÑADA';
+        } else if (tactoResultado === 'VACÍA') {
+            nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'EN LACTANCIA' : 'VACÍA';
+        }
+        
         if (tactoResultado === 'PREÑADA' && mesesGestacion) {
             const diasGestacionActual = parseFloat(mesesGestacion) * 30.4; const diasFaltantes = Math.round(283 - diasGestacionActual); const fechaParto = new Date(fechaEvento); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
             await supabase.from('agenda').insert({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${animalSel.caravana}`, descripcion: `Parto estimado calculado por tacto (${mesesGestacion} meses).`, tipo: 'PARTO_ESTIMADO', animal_id: animalSel.id });
@@ -386,11 +407,15 @@ export default function App() {
         if (animalSel.categoria === 'Ternero') {
             nuevoEstado = 'ACTIVO';
             if (animalSel.madre_id) {
-                await supabase.from('animales').update({ estado: 'VACÍA' }).eq('id', animalSel.madre_id);
+                const { data: madreData } = await supabase.from('animales').select('estado').eq('id', animalSel.madre_id).single();
+                const estadoMadreOriginal = madreData?.estado || '';
+                const nuevoEstadoMadre = estadoMadreOriginal.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
+                
+                await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', animalSel.madre_id);
                 await supabase.from('eventos').insert({ animal_id: animalSel.madre_id, tipo: 'DESTETE', resultado: 'Cría destetada', detalle: `Ternero: ${animalSel.caravana}`, fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
             }
         } else if (['Vaca', 'Vaquillona'].includes(animalSel.categoria)) {
-            nuevoEstado = 'VACÍA';
+            nuevoEstado = animalSel.estado.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
             const { data: crias } = await supabase.from('animales').select('id, caravana').eq('madre_id', animalSel.id).eq('estado', 'LACTANTE');
             if (crias && crias.length > 0) {
                 const criasIds = crias.map((c: any) => c.id);
@@ -430,12 +455,20 @@ export default function App() {
         const torosEvents = torosToUpdate.map(toroId => ({ animal_id: toroId, fecha_evento: fechaEvento.toISOString(), tipo: 'SERVICIO', resultado: 'En servicio', detalle: `Asignado a vaca ${animalSel.caravana}`, establecimiento_id: campoId }));
         await supabase.from('eventos').insert(torosEvents);
     }
-    setEditCondicion(nuevasCondiciones); setEditCastrado(esCastrado); if(nuevoEstado) setEditEstado(nuevoEstado); setLoading(false);
+    setEditCondicion(nuevasCondiciones); setEditCastrado(esCastrado); if(nuevoEstado) setEditEstado(nuevoEstado.includes('PREÑADA') ? 'PREÑADA' : nuevoEstado.includes('VACÍA') || nuevoEstado.includes('LACTANCIA') ? 'VACÍA' : 'ACTIVO'); setEditLactancia(nuevoEstado.includes('LACTANCIA')); setLoading(false);
     if (!error) { recargarFicha(animalSel.id); if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setTorosIdsInput([]); setNuevoTerneroCaravana(''); setPesoNacimiento(''); setCostoEvento(''); setAdpvCalculado(null); setMesesGestacion(null); fetchAnimales(); actualizarCartelToros(animalSelId); }
   }
 
   async function actualizarAnimal() {
     if (!animalSelId || !animalSel || !campoId) return;
+    
+    let finalEstado = editEstado;
+    if (['Vaca', 'Vaquillona'].includes(editCategoria || '')) {
+        if (editLactancia) {
+            finalEstado = editEstado === 'PREÑADA' ? 'PREÑADA Y LACTANDO' : 'EN LACTANCIA';
+        }
+    }
+
     const condStr = editCondicion.length > 0 ? editCondicion.join(', ') : 'SANA';
     const eventosAInsertar = []; const fechaStr = new Date().toISOString();
 
@@ -450,7 +483,7 @@ export default function App() {
         eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_destino: lNom, lote_id: editLoteId }, establecimiento_id: campoId });
     }
 
-    const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: editEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSelId);
+    const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSelId);
     if (eventosAInsertar.length > 0) { await supabase.from('eventos').insert(eventosAInsertar); }
     if (!error) { alert("Datos actualizados"); fetchAnimales(); fetchActividadGlobal(); }
   }
@@ -475,6 +508,41 @@ export default function App() {
       
       setLoading(true);
       const fechaStr = new Date().toISOString();
+
+      // LOGICA DE DESTETE AUTOMATICO (INDIVIDUAL)
+      // Como el movimiento es de a un animal desde la ficha, SIEMPRE hay separación
+      if (['Vaca', 'Vaquillona'].includes(animalSel.categoria) && animalSel.estado.includes('LACTANCIA')) {
+          const { data: crias } = await supabase.from('animales').select('id, caravana').eq('madre_id', animalSel.id).eq('estado', 'LACTANTE');
+          if (crias && crias.length > 0) {
+              const criasIds = crias.map((c: any) => c.id);
+              // Destetar crías que se quedan en el campo
+              await supabase.from('animales').update({ estado: 'ACTIVO', madre_id: null }).in('id', criasIds);
+              const eventosCrias = crias.map((c: any) => ({ 
+                  animal_id: c.id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Madre dada de baja (${animalSel.caravana})`, fecha_evento: fechaStr, establecimiento_id: campoId 
+              }));
+              await supabase.from('eventos').insert(eventosCrias);
+              
+              // Ajustar el estado de la madre para que viaje/se venda sin la etiqueta de lactancia
+              const nuevoEstadoMadre = animalSel.estado.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
+              await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', animalSel.id);
+              animalSel.estado = nuevoEstadoMadre; 
+          }
+      } else if (animalSel.categoria === 'Ternero' && animalSel.estado === 'LACTANTE' && animalSel.madre_id) {
+          const { data: madreData } = await supabase.from('animales').select('id, caravana, estado').eq('id', animalSel.madre_id).single();
+          if (madreData && madreData.estado.includes('LACTANCIA')) {
+              const nuevoEstadoMadre = madreData.estado.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
+              // Destetar madre que se queda en el campo
+              await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', madreData.id);
+              await supabase.from('eventos').insert({ 
+                  animal_id: madreData.id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Cría dada de baja (${animalSel.caravana})`, fecha_evento: fechaStr, establecimiento_id: campoId 
+              });
+              
+              // Ajustar el estado del ternero para que viaje/se venda como ACTIVO
+              await supabase.from('animales').update({ estado: 'ACTIVO', madre_id: null }).eq('id', animalSel.id);
+              animalSel.estado = 'ACTIVO';
+          }
+      }
+      // FIN LOGICA DE DESTETE AUTOMATICO
 
       if (modoBaja === 'TRASLADO') {
           if (esTrasladoRed) {
@@ -509,7 +577,7 @@ export default function App() {
               const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre;
               const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
               
-              const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE']);
+              const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']);
               const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
               let nuevaCaravana = animalSel.caravana;
               if (destCaravanas.includes(nuevaCaravana.toLowerCase())) { nuevaCaravana = `${nuevaCaravana} (T)`; }
@@ -653,6 +721,25 @@ export default function App() {
 
   const torosDisponibles = animales.filter(a => a.categoria === 'Toro' && a.estado !== 'MUERTO' && a.estado !== 'VENDIDO');
 
+  const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) => {
+      if (!estado) return null;
+      if (estado === 'PREÑADA Y LACTANDO') {
+          return (
+              <Group gap={4} wrap="nowrap" style={{ display: 'inline-flex' }}>
+                  <Badge size="sm" color="teal">PREÑADA</Badge>
+                  <Badge size="sm" color="grape">LACTANCIA</Badge>
+              </Group>
+          );
+      }
+      let color = 'blue';
+      if (estado === 'PREÑADA') color = 'teal';
+      else if (estado === 'VACÍA') color = 'yellow';
+      else if (estado === 'EN LACTANCIA') color = 'grape';
+      else if (estado === 'LACTANTE') color = 'cyan';
+      
+      return <Badge size="sm" color={color}>{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
+  };
+
   return (
     <MantineProvider>
         {!session ? (
@@ -790,12 +877,17 @@ export default function App() {
          <Stack>
             <TextInput label="Caravana" placeholder="ID del animal" value={caravana} onChange={(e) => setCaravana(e.target.value)} />
             <Group grow mt="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} /><Select label="Sexo" data={['H', 'M']} value={sexo} onChange={setSexo} disabled={sexoBloqueado} /></Group>
+            
             {['Vaca', 'Vaquillona'].includes(categoria || '') && (
+                <>
                 <Group grow mt="sm" align="flex-start">
-                    <Select label="Estado Reproductivo" data={['VACÍA', 'PREÑADA', 'EN LACTANCIA']} value={nuevoEstadoReproductivo} onChange={setNuevoEstadoReproductivo} allowDeselect={false} />
-                    {nuevoEstadoReproductivo === 'PREÑADA' && <Select label="Gestación Estimada" placeholder="Opcional" data={opcionesGestacion} value={nuevoMesesGestacion} onChange={setNuevoMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>}/>}
+                    <Select label="Estado Reproductivo" data={['VACÍA', 'PREÑADA']} value={nuevoEstadoReproductivo} onChange={setNuevoEstadoReproductivo} allowDeselect={false} />
+                    {nuevoEstadoReproductivo === 'PREÑADA' && <Select label="Gestación (Meses)" placeholder="Opcional" data={opcionesGestacion} value={nuevoMesesGestacion} onChange={setNuevoMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>}/>}
                 </Group>
+                <Switch mt="sm" size="md" onLabel="EN LACTANCIA" offLabel="SIN CRÍA" label="¿Está criando a un ternero?" checked={nuevoLactancia} onChange={(e) => setNuevoLactancia(e.currentTarget.checked)} color="grape" />
+                </>
             )}
+
             <Group grow mt="sm" align="flex-start">
                 <Select label="Origen" data={['PROPIO', 'COMPRADO']} value={origenModal} onChange={setOrigenModal} allowDeselect={false} />
                 <Select label="Edad Estimada" placeholder="Opcional" data={opcionesEdadEstimada} value={edadEstimada} onChange={setEdadEstimada} clearable leftSection={<IconCalendarEvent size={16}/>} />
@@ -825,12 +917,20 @@ export default function App() {
           ) : (<Alert color="blue" title="Sin datos">Este animal no tiene registros de peso.</Alert>)}
       </Modal>
 
-      <Modal opened={modalVacaOpen} onClose={handleCloseModalVaca} title={<Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : animalSel?.estado === 'EN TRÁNSITO' ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text>} size="lg" centered zIndex={2000}>
+      <Modal opened={modalVacaOpen} onClose={handleCloseModalVaca} title={<Group><Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : animalSel?.estado === 'EN TRÁNSITO' ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text> <RenderEstadoBadge estado={animalSel?.estado} /></Group>} size="lg" centered zIndex={2000}>
          <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal"><Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
            <Tabs.Panel value="historia">
               {esActivo ? ( <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>
               
-              {tipoEventoInput === 'TACTO' && ( <Group grow mb="sm" align="flex-start"><Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ zIndex: 200005 }}/> {tactoResultado === 'PREÑADA' && ( <Select label="Tiempo de Gestación Estimado" placeholder="Opcional. Agenda parto automático." data={opcionesGestacion} value={mesesGestacion} onChange={setMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>} comboboxProps={{ zIndex: 200005 }}/> )}</Group> )}
+              {tipoEventoInput === 'TACTO' && ( 
+                <Group grow mb="sm" align="flex-start">
+                    <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ zIndex: 200005 }}/> 
+                    {tactoResultado === 'PREÑADA' && ( 
+                        <Select label="Gestación (Meses)" placeholder="Opcional" data={opcionesGestacion} value={mesesGestacion} onChange={setMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>} comboboxProps={{ zIndex: 200005 }}/> 
+                    )}
+                </Group> 
+              )}
+              
               {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}
               {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
               {!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO', 'DESTETE'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}
@@ -842,7 +942,17 @@ export default function App() {
            <Tabs.Panel value="datos">
               <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={abrirGraficoPeso}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>
               <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} />
-              <Group grow mb="sm"><Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />{['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}</Group>
+              
+              <Group grow mb="sm">
+                  <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />
+                  {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( 
+                      <Select label="Estado Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> 
+                  )}
+              </Group>
+
+              {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( 
+                  <Switch mb="sm" size="md" onLabel="EN LACTANCIA" offLabel="SIN CRÍA" label="¿Está criando a un ternero?" checked={editLactancia} onChange={(e) => setEditLactancia(e.currentTarget.checked)} disabled={!esActivo} color="grape" />
+              )}
               
               <Group grow mb="sm">
                   <Select label="Potrero (Ubicación)" placeholder="Sin asignar" data={potreros.map(p => ({value: p.id, label: p.nombre}))} value={editPotreroId} onChange={(val) => { setEditPotreroId(val); setEditParcelaId(null); }} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} />

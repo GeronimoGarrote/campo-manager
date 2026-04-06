@@ -119,6 +119,64 @@ export default function Masivos({
         }
 
         if(!confirm(mensajeConfirmacion)) return; setLoading(true); const fechaStr = massFecha.toISOString();
+
+        // --- LOGICA PRO: DESTETE AUTOMATICO COLATERAL PARA MASIVOS ---
+        if (massActividad === 'VENTA' || massActividad === 'TRASLADO') {
+            const ternerosSeleccionados = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero' && a.estado === 'LACTANTE');
+            const vacasSeleccionadasIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Vaca', 'Vaquillona'].includes(a.categoria) && a.estado.includes('LACTANCIA')).map((a: any) => a.id);
+
+            const ternerosADestetarIds: string[] = [];
+            const madresADestetarMap = new Map();
+
+            // 1. Terneros que se van SIN la madre (destetamos a la madre que se queda)
+            for (const ternero of ternerosSeleccionados) {
+                if (ternero.madre_id && !vacasSeleccionadasIds.includes(ternero.madre_id)) {
+                    const madre = animales.find((a: any) => a.id === ternero.madre_id);
+                    if (madre && madre.estado.includes('LACTANCIA')) {
+                        madresADestetarMap.set(madre.id, { id: madre.id, estadoOriginal: madre.estado, caravanaTernero: ternero.caravana });
+                    }
+                    ternerosADestetarIds.push(ternero.id);
+                }
+            }
+
+            // 2. Madres que se van SIN los terneros (destetamos a los terneros que se quedan)
+            for (const vacaId of vacasSeleccionadasIds) {
+                const criasQuedan = animales.filter((a: any) => a.madre_id === vacaId && a.estado === 'LACTANTE' && !idsParaProcesar.includes(a.id));
+                if (criasQuedan.length > 0) {
+                    for (const cria of criasQuedan) { ternerosADestetarIds.push(cria.id); }
+                    madresADestetarMap.set(vacaId, { id: vacaId, estadoOriginal: animales.find((a: any) => a.id === vacaId)?.estado, caravanaTernero: criasQuedan.map((c: any) => c.caravana).join(', ') });
+                }
+            }
+
+            // Ejecutar destetes colaterales y limpiar los estados de los que viajan
+            if (ternerosADestetarIds.length > 0) {
+                await supabase.from('animales').update({ estado: 'ACTIVO', madre_id: null }).in('id', ternerosADestetarIds);
+                const eventosTerneros = ternerosADestetarIds.map(id => ({
+                    animal_id: id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: 'Separación madre/cría (Venta/Traslado)', fecha_evento: fechaStr, establecimiento_id: campoId
+                }));
+                await supabase.from('eventos').insert(eventosTerneros);
+                // Si el ternero estaba en la selección, se blanquea en memoria para que viaje correcto
+                idsParaProcesar.forEach(idProc => {
+                    const a = animales.find((an: any) => an.id === idProc);
+                    if (a && ternerosADestetarIds.includes(a.id)) { a.estado = 'ACTIVO'; a.madre_id = undefined; }
+                });
+            }
+
+            if (madresADestetarMap.size > 0) {
+                const eventosMadres = [];
+                for (const [madreId, data] of madresADestetarMap.entries()) {
+                    const nuevoEstadoMadre = data.estadoOriginal.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
+                    await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', madreId);
+                    eventosMadres.push({ animal_id: madreId, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Separación de cría (${data.caravanaTernero})`, fecha_evento: fechaStr, establecimiento_id: campoId });
+                    
+                    // Si la madre estaba en la selección, viaja destetada
+                    const a = animales.find((an: any) => an.id === madreId);
+                    if (a && idsParaProcesar.includes(a.id)) { a.estado = nuevoEstadoMadre; }
+                }
+                await supabase.from('eventos').insert(eventosMadres);
+            }
+        }
+        // --- FIN LOGICA DE DESTETE MASIVO ---
         
         let resultadoTxt = massActividad === 'OTRO' ? massDetalle || 'Realizado' : 'Realizado (Masivo)'; 
         let datosExtra: any = {};
@@ -270,13 +328,29 @@ export default function Masivos({
                 if (massActividad === 'MOVIMIENTO_POTRERO') await supabase.from('animales').update({ potrero_id: massPotreroDestino, parcela_id: massParcelaDestino }).in('id', idsParaProcesar);
                 if (massActividad === 'CAMBIO_LOTE') await supabase.from('animales').update({ lote_id: massLoteDestino }).in('id', idsParaProcesar);
                 if (massActividad === 'DESTETE') {
-                    const vacasIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Vaca', 'Vaquillona'].includes(a.categoria)).map((a: any) => a.id);
+                    const vacasLactandoIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Vaca', 'Vaquillona'].includes(a.categoria)).map((a: any) => a.id);
+                    if (vacasLactandoIds.length > 0) {
+                        const preñadasIds = animales.filter((a: any) => vacasLactandoIds.includes(a.id) && a.estado.includes('PREÑADA')).map((a: any) => a.id);
+                        const vaciasIds = vacasLactandoIds.filter((id: any) => !preñadasIds.includes(id));
+                        if (preñadasIds.length > 0) await supabase.from('animales').update({ estado: 'PREÑADA' }).in('id', preñadasIds);
+                        if (vaciasIds.length > 0) await supabase.from('animales').update({ estado: 'VACÍA' }).in('id', vaciasIds);
+                    }
                     const ternerosIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero').map((a: any) => a.id);
-                    if (vacasIds.length > 0) await supabase.from('animales').update({ estado: 'VACÍA' }).in('id', vacasIds);
                     if (ternerosIds.length > 0) await supabase.from('animales').update({ estado: 'ACTIVO' }).in('id', ternerosIds);
                 }
                 if (massActividad === 'TACTO') {
-                    await supabase.from('animales').update({ estado: massTactoResultado }).in('id', idsParaProcesar);
+                    if (massTactoResultado === 'PREÑADA') {
+                        const lactandoIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.estado.includes('LACTANCIA')).map((a: any) => a.id);
+                        const noLactandoIds = idsParaProcesar.filter(id => !lactandoIds.includes(id));
+                        if (lactandoIds.length > 0) await supabase.from('animales').update({ estado: 'PREÑADA Y LACTANDO' }).in('id', lactandoIds);
+                        if (noLactandoIds.length > 0) await supabase.from('animales').update({ estado: 'PREÑADA' }).in('id', noLactandoIds);
+                    } else {
+                        const lactandoIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.estado.includes('LACTANCIA')).map((a: any) => a.id);
+                        const noLactandoIds = idsParaProcesar.filter(id => !lactandoIds.includes(id));
+                        if (lactandoIds.length > 0) await supabase.from('animales').update({ estado: 'EN LACTANCIA' }).in('id', lactandoIds);
+                        if (noLactandoIds.length > 0) await supabase.from('animales').update({ estado: 'VACÍA' }).in('id', noLactandoIds);
+                    }
+
                     if (massTactoResultado === 'PREÑADA' && massMesesGestacion) {
                         const diasFaltantes = Math.round(283 - (parseFloat(massMesesGestacion) * 30.4));
                         const fechaParto = new Date(massFecha); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
@@ -295,7 +369,7 @@ export default function Masivos({
                     }
                 }
                 if (massActividad === 'TRASLADO') {
-                    const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', massEstablecimientoDestino).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE']);
+                    const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', massEstablecimientoDestino).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']);
                     const destCaravanas = destAnimals?.map((a: any) => a.caravana.toLowerCase()) || [];
                     
                     for (const id of idsParaProcesar) { 
@@ -432,7 +506,7 @@ export default function Masivos({
                                 <Table.Td><Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} /></Table.Td>
                                 <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
                                 <Table.Td><Text fw={500}>{animal.categoria}</Text></Table.Td>
-                                <Table.Td><Badge size="sm" color={animal.estado === 'PREÑADA' ? 'teal' : animal.estado === 'VACÍA' ? 'yellow' : animal.estado === 'EN LACTANCIA' ? 'grape' : animal.estado === 'LACTANTE' ? 'cyan' : 'blue'}>{animal.estado}</Badge></Table.Td>
+                                <Table.Td><Badge size="sm" color={animal.estado.includes('PREÑADA') ? 'teal' : animal.estado === 'VACÍA' ? 'yellow' : animal.estado.includes('LACTANCIA') ? 'grape' : animal.estado === 'LACTANTE' ? 'cyan' : 'blue'}>{animal.estado}</Badge></Table.Td>
                                 <Table.Td>{getUbicacionCompleta(animal.potrero_id, animal.parcela_id)}</Table.Td>
                             </Table.Tr>
                         ))}

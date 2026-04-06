@@ -74,6 +74,10 @@ export default function Lotes({
     
     async function borrarLoteGrupo(id: string) {
         if (!confirm("¿Borrar grupo? Los animales quedarán sin lote asignado.")) return;
+        
+        // ACTUALIZACIÓN OPTIMISTA VISUAL
+        animales.forEach((a: any) => { if (a.lote_id === id) a.lote_id = null; });
+        
         await supabase.from('lotes').delete().eq('id', id); fetchLotes(); fetchAnimales(); setLoteSel(null);
     }
 
@@ -86,6 +90,12 @@ export default function Lotes({
 
     async function sacarAnimalDeLote(animalId: string) {
         if (!confirm("¿Quitar este animal del lote?")) return;
+        
+        // ACTUALIZACIÓN OPTIMISTA VISUAL
+        const animal = animales.find((a: any) => a.id === animalId);
+        if (animal) animal.lote_id = null;
+        setAgregarAlLoteIds([...agregarAlLoteIds]); // Fuerza re-render local
+        
         await supabase.from('animales').update({ lote_id: null }).eq('id', animalId);
         await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'CAMBIO_LOTE', resultado: 'REMOVIDO DE LOTE', detalle: 'Removido desde ficha de lote', establecimiento_id: campoId });
         fetchAnimales(); fetchActividadGlobal();
@@ -94,11 +104,19 @@ export default function Lotes({
     async function meterAnimalesAlLote() {
         if (agregarAlLoteIds.length === 0 || !loteSel || !campoId) return;
         setLoading(true);
+        
+        // ACTUALIZACIÓN OPTIMISTA VISUAL
+        animales.forEach((a: any) => {
+            if (agregarAlLoteIds.includes(a.id)) a.lote_id = loteSel.id;
+        });
+
         await supabase.from('animales').update({ lote_id: loteSel.id }).in('id', agregarAlLoteIds);
         const fechaStr = new Date().toISOString();
         const inserts = agregarAlLoteIds.map(id => ({ animal_id: id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: `Asignado a lote: ${loteSel.nombre} (Desde ficha de lote)`, datos_extra: { lote_destino: loteSel.nombre, lote_id: loteSel.id }, establecimiento_id: campoId }));
         await supabase.from('eventos').insert(inserts);
-        setAgregarAlLoteIds([]); fetchAnimales(); fetchActividadGlobal(); setLoading(false);
+        
+        setAgregarAlLoteIds([]); // Redibuja la tabla al instante
+        fetchAnimales(); fetchActividadGlobal(); setLoading(false);
     }
 
     async function guardarEventoLote() {
@@ -258,13 +276,14 @@ export default function Lotes({
                                 <Button onClick={meterAnimalesAlLote} color="grape" loading={loading} leftSection={<IconPlus size={16}/>}>Agregar al Lote</Button>
                             </Group>
                             <Table striped highlightOnHover>
-                                <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Ubicación Actual</Table.Th><Table.Th w={80}>Acción</Table.Th></Table.Tr></Table.Thead>
+                                <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Sexo</Table.Th><Table.Th>Ubicación Actual</Table.Th><Table.Th w={80}>Acción</Table.Th></Table.Tr></Table.Thead>
                                 <Table.Tbody>
                                     {haciendaActiva.filter((a: any) => a.lote_id === loteSel.id).length > 0 ? (
                                         haciendaActiva.filter((a: any) => a.lote_id === loteSel.id).map((a: any) => (
                                             <Table.Tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => abrirFichaVaca(a)}>
                                                 <Table.Td fw={700}>{a.caravana}</Table.Td>
                                                 <Table.Td>{a.categoria}</Table.Td>
+                                                <Table.Td><Badge color={a.sexo === 'M' ? 'blue' : 'pink'} variant="light">{a.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge></Table.Td>
                                                 <Table.Td>{getUbicacionCompleta(a.potrero_id, a.parcela_id)}</Table.Td>
                                                 <Table.Td align="right">
                                                     <Tooltip label="Sacar del lote" withArrow zIndex={3000}>
@@ -274,7 +293,7 @@ export default function Lotes({
                                             </Table.Tr>
                                         ))
                                     ) : (
-                                        <Table.Tr><Table.Td colSpan={4}><Text c="dimmed" size="sm" p="md" ta="center">No hay animales asignados a este lote.</Text></Table.Td></Table.Tr>
+                                        <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" size="sm" p="md" ta="center">No hay animales asignados a este lote.</Text></Table.Td></Table.Tr>
                                     )}
                                 </Table.Tbody>
                             </Table>
