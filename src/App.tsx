@@ -6,7 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
-import logoRodeo from './assets/logo.ico'; 
+import logoRodeo from './assets/logo.png'; 
 
 import Login from './views/Login';
 import Inicio from './views/Inicio';
