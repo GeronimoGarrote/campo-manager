@@ -55,7 +55,8 @@ export default function Lotes({
     const [loteEvCosto, setLoteEvCosto] = useState<string | number>('');
     const [agregarAlLoteIds, setAgregarAlLoteIds] = useState<string[]>([]);
 
-    const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
+    // Filtramos fantasmas de todo el componente (también sacamos los EN TRÁNSITO por si las dudas)
+    const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && a.estado !== 'EN TRÁNSITO');
 
     const getUbicacionCompleta = (potrero_id?: string, parcela_id?: string) => {
         if(!potrero_id) return <Text size="xs" c="dimmed">-</Text>;
@@ -75,7 +76,6 @@ export default function Lotes({
     async function borrarLoteGrupo(id: string) {
         if (!confirm("¿Borrar grupo? Los animales quedarán sin lote asignado.")) return;
         
-        // ACTUALIZACIÓN OPTIMISTA VISUAL
         animales.forEach((a: any) => { if (a.lote_id === id) a.lote_id = null; });
         
         await supabase.from('lotes').delete().eq('id', id); fetchLotes(); fetchAnimales(); setLoteSel(null);
@@ -88,13 +88,141 @@ export default function Lotes({
         fetchLotes(); setLoteSel((prev: any) => prev ? {...prev, nombre: nuevoNombre} : prev);
     }
 
+    async function generarGraficoLote(idLote: string) {
+        setLoadingGraficoLote(true);
+        // LA SOLUCIÓN: Usar haciendaActiva en vez de la lista cruda de animales
+        const animalesLote = haciendaActiva.filter((a: any) => a.lote_id === idLote);
+        
+        if (animalesLote.length === 0) {
+            setDatosGraficoLote([]);
+            setLineasAnimalesLote([]);
+            setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
+            setIsLoteEstimated(false);
+            setLoadingGraficoLote(false);
+            return;
+        }
+
+        const ids = animalesLote.map((a: any) => a.id);
+        const { data: pesajes } = await supabase.from('eventos').select('*, animales!inner(caravana)').in('animal_id', ids).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: true });
+        
+        if (!pesajes || pesajes.length === 0) {
+            setDatosGraficoLote([]);
+            setLineasAnimalesLote([]);
+            setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
+            setIsLoteEstimated(false);
+            setLoadingGraficoLote(false);
+            return;
+        }
+
+        const fechasUnicas = [...new Set(pesajes.map(p => p.fecha_evento.split('T')[0]))].sort();
+        const caravanasPresentes = new Set<string>();
+        const ultimoPesoConocido: Record<string, number> = {};
+
+        const dataGrafico = fechasUnicas.map((fechaStr: any) => {
+            const pesajesDelDia = pesajes.filter(p => p.fecha_evento.startsWith(fechaStr));
+            const objParaElGrafico: any = { fecha: formatDate(fechaStr) };
+
+            pesajesDelDia.forEach(p => {
+                const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
+                const caravana = (p.animales as any)?.caravana || 'Desc';
+                if(!isNaN(pesoNum)) {
+                    ultimoPesoConocido[caravana] = pesoNum; 
+                    caravanasPresentes.add(caravana);
+                    objParaElGrafico[caravana] = pesoNum; 
+                }
+            });
+
+            const pesosActivos = Object.values(ultimoPesoConocido);
+            if (pesosActivos.length > 0) {
+                const sumaTotal = pesosActivos.reduce((a, b) => a + b, 0);
+                objParaElGrafico['Promedio Lote'] = Math.round(sumaTotal / pesosActivos.length);
+            }
+            return objParaElGrafico;
+        });
+
+        if (dataGrafico.length > 1) {
+            const ultimoDiaReal = dataGrafico[dataGrafico.length - 1];
+            const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+            const fechaUltimoPesaje = new Date(fechasUnicas[fechasUnicas.length - 1] + 'T12:00:00');
+            
+            let targetDate = new Date(hoy);
+            let diasDesdeUltimo = Math.floor((hoy.getTime() - fechaUltimoPesaje.getTime()) / (1000 * 60 * 60 * 24));
+            if (isNaN(diasDesdeUltimo)) diasDesdeUltimo = 0;
+
+            let labelProyeccion = 'Hoy (Est.)';
+
+            if (diasDesdeUltimo < 2) {
+                targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000);
+                labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy.)';
+            }
+
+            const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date}> = {};
+            pesajes.forEach(p => {
+                const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00');
+                const w = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
+                const c = (p.animales as any)?.caravana || 'Desc';
+                if (!isNaN(w)) {
+                    if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d }; } 
+                    else {
+                        if (d < animalStats[c].firstD) { animalStats[c].firstW = w; animalStats[c].firstD = d; }
+                        if (d > animalStats[c].lastD) { animalStats[c].lastW = w; animalStats[c].lastD = d; }
+                    }
+                }
+            });
+
+            let sumEst = 0; let countEst = 0;
+            Object.keys(ultimoPesoConocido).forEach(caravana => {
+                const stats = animalStats[caravana];
+                let pesoProyectado = ultimoPesoConocido[caravana];
+                if (stats && stats.lastD > stats.firstD) { 
+                    const daysDiff = (stats.lastD.getTime() - stats.firstD.getTime()) / (1000 * 60 * 60 * 24);
+                    if (daysDiff > 0) { 
+                        const adpv = (stats.lastW - stats.firstW) / daysDiff;
+                        const daysSinceAnimalLastWeighing = (targetDate.getTime() - stats.lastD.getTime()) / (1000 * 60 * 60 * 24);
+                        if (daysSinceAnimalLastWeighing > 0) pesoProyectado += (adpv * daysSinceAnimalLastWeighing);
+                    }
+                }
+                sumEst += pesoProyectado; countEst++;
+            });
+
+            if (countEst > 0) {
+                const promedioEstTarget = Math.round(sumEst / countEst);
+                ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
+                dataGrafico.push({
+                    fecha: labelProyeccion,
+                    'Promedio Estimado': promedioEstTarget
+                });
+            }
+
+            const pesoInicio = dataGrafico[0]['Promedio Lote'] || 0;
+            const pesoActualReal = ultimoDiaReal['Promedio Lote'] || 0;
+            const gananciaReal = pesoActualReal - pesoInicio;
+            const diffDaysReal = Math.ceil(Math.abs(fechaUltimoPesaje.getTime() - new Date(fechasUnicas[0] + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24));
+
+            setStatsGraficoLote({ 
+                inicio: pesoInicio, actual: pesoActualReal, ganancia: gananciaReal, 
+                dias: diffDaysReal, adpv: diffDaysReal > 0 ? (gananciaReal / diffDaysReal).toFixed(3) : '0' 
+            });
+            setIsLoteEstimated(diasDesdeUltimo >= 2); 
+        } else {
+            const pesoUnico = dataGrafico.length > 0 ? (dataGrafico[0]['Promedio Lote'] || 0) : 0;
+            setStatsGraficoLote({ inicio: pesoUnico, actual: pesoUnico, ganancia: 0, dias: 0, adpv: '0' });
+            setIsLoteEstimated(false);
+        }
+
+        setLineasAnimalesLote(Array.from(caravanasPresentes));
+        setDatosGraficoLote(dataGrafico);
+        setLoadingGraficoLote(false);
+    }
+
     async function sacarAnimalDeLote(animalId: string) {
         if (!confirm("¿Quitar este animal del lote?")) return;
         
-        // ACTUALIZACIÓN OPTIMISTA VISUAL
         const animal = animales.find((a: any) => a.id === animalId);
         if (animal) animal.lote_id = null;
-        setAgregarAlLoteIds([...agregarAlLoteIds]); // Fuerza re-render local
+        setAgregarAlLoteIds([...agregarAlLoteIds]); 
+        
+        if (loteSel) generarGraficoLote(loteSel.id);
         
         await supabase.from('animales').update({ lote_id: null }).eq('id', animalId);
         await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'CAMBIO_LOTE', resultado: 'REMOVIDO DE LOTE', detalle: 'Removido desde ficha de lote', establecimiento_id: campoId });
@@ -105,17 +233,18 @@ export default function Lotes({
         if (agregarAlLoteIds.length === 0 || !loteSel || !campoId) return;
         setLoading(true);
         
-        // ACTUALIZACIÓN OPTIMISTA VISUAL
         animales.forEach((a: any) => {
             if (agregarAlLoteIds.includes(a.id)) a.lote_id = loteSel.id;
         });
+
+        generarGraficoLote(loteSel.id);
 
         await supabase.from('animales').update({ lote_id: loteSel.id }).in('id', agregarAlLoteIds);
         const fechaStr = new Date().toISOString();
         const inserts = agregarAlLoteIds.map(id => ({ animal_id: id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: `Asignado a lote: ${loteSel.nombre} (Desde ficha de lote)`, datos_extra: { lote_destino: loteSel.nombre, lote_id: loteSel.id }, establecimiento_id: campoId }));
         await supabase.from('eventos').insert(inserts);
         
-        setAgregarAlLoteIds([]); // Redibuja la tabla al instante
+        setAgregarAlLoteIds([]); 
         fetchAnimales(); fetchActividadGlobal(); setLoading(false);
     }
 
@@ -137,112 +266,12 @@ export default function Lotes({
 
     async function abrirFichaLote(lote: any) {
         setLoteSel(lote); setEventosLoteFicha([]); setDatosGraficoLote([]); setLineasAnimalesLote([]); setAgregarAlLoteIds([]); setIsLoteEstimated(false);
-        
+        setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' }); 
+
         const { data: evData } = await supabase.from('lotes_eventos').select('*').eq('lote_id', lote.id).order('fecha', { ascending: false });
         if (evData) setEventosLoteFicha(evData);
         
-        setLoadingGraficoLote(true);
-        const animalesLote = animales.filter((a: any) => a.lote_id === lote.id);
-        if (animalesLote.length > 0) {
-            const ids = animalesLote.map((a: any) => a.id);
-            const { data: pesajes } = await supabase.from('eventos').select('*, animales!inner(caravana)').in('animal_id', ids).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: true });
-            
-            if (pesajes && pesajes.length > 0) {
-                const fechasUnicas = [...new Set(pesajes.map(p => p.fecha_evento.split('T')[0]))].sort();
-                const caravanasPresentes = new Set<string>();
-                const ultimoPesoConocido: Record<string, number> = {};
-
-                const dataGrafico = fechasUnicas.map((fechaStr: any) => {
-                    const pesajesDelDia = pesajes.filter(p => p.fecha_evento.startsWith(fechaStr));
-                    const objParaElGrafico: any = { fecha: formatDate(fechaStr) };
-
-                    pesajesDelDia.forEach(p => {
-                        const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
-                        const caravana = (p.animales as any)?.caravana || 'Desc';
-                        if(!isNaN(pesoNum)) {
-                            ultimoPesoConocido[caravana] = pesoNum; 
-                            caravanasPresentes.add(caravana);
-                            objParaElGrafico[caravana] = pesoNum; 
-                        }
-                    });
-
-                    const pesosActivos = Object.values(ultimoPesoConocido);
-                    if (pesosActivos.length > 0) {
-                        const sumaTotal = pesosActivos.reduce((a, b) => a + b, 0);
-                        objParaElGrafico['Promedio Lote'] = Math.round(sumaTotal / pesosActivos.length);
-                    }
-                    return objParaElGrafico;
-                });
-
-                if (dataGrafico.length > 1) {
-                    const ultimoDiaReal = dataGrafico[dataGrafico.length - 1];
-                    const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
-                    const fechaUltimoPesaje = new Date(fechasUnicas[fechasUnicas.length - 1] + 'T12:00:00');
-                    
-                    let targetDate = new Date(hoy);
-                    let diasDesdeUltimo = Math.floor((hoy.getTime() - fechaUltimoPesaje.getTime()) / (1000 * 60 * 60 * 24));
-                    let labelProyeccion = 'Hoy (Est.)';
-
-                    if (diasDesdeUltimo < 2) {
-                        targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000);
-                        labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy.)';
-                    }
-
-                    const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date}> = {};
-                    pesajes.forEach(p => {
-                        const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00');
-                        const w = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
-                        const c = (p.animales as any)?.caravana || 'Desc';
-                        if (!isNaN(w)) {
-                            if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d }; } 
-                            else {
-                                if (d < animalStats[c].firstD) { animalStats[c].firstW = w; animalStats[c].firstD = d; }
-                                if (d > animalStats[c].lastD) { animalStats[c].lastW = w; animalStats[c].lastD = d; }
-                            }
-                        }
-                    });
-
-                    let sumEst = 0; let countEst = 0;
-                    Object.keys(ultimoPesoConocido).forEach(caravana => {
-                        const stats = animalStats[caravana];
-                        let pesoProyectado = ultimoPesoConocido[caravana];
-                        if (stats && stats.lastD > stats.firstD) { 
-                            const daysDiff = (stats.lastD.getTime() - stats.firstD.getTime()) / (1000 * 60 * 60 * 24);
-                            const adpv = (stats.lastW - stats.firstW) / daysDiff;
-                            const daysSinceAnimalLastWeighing = (targetDate.getTime() - stats.lastD.getTime()) / (1000 * 60 * 60 * 24);
-                            if (daysSinceAnimalLastWeighing > 0) pesoProyectado += (adpv * daysSinceAnimalLastWeighing);
-                        }
-                        sumEst += pesoProyectado; countEst++;
-                    });
-
-                    const promedioEstTarget = Math.round(sumEst / countEst);
-                    ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
-                    
-                    dataGrafico.push({
-                        fecha: labelProyeccion,
-                        'Promedio Estimado': promedioEstTarget
-                    });
-
-                    const pesoInicio = dataGrafico[0]['Promedio Lote'] || 0;
-                    const pesoActualReal = ultimoDiaReal['Promedio Lote'];
-                    const gananciaReal = pesoActualReal - pesoInicio;
-                    const diffDaysReal = Math.ceil(Math.abs(fechaUltimoPesaje.getTime() - new Date(fechasUnicas[0] + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24));
-
-                    setStatsGraficoLote({ 
-                        inicio: pesoInicio, actual: pesoActualReal, ganancia: gananciaReal, 
-                        dias: diffDaysReal, adpv: diffDaysReal > 0 ? (gananciaReal / diffDaysReal).toFixed(3) : '0' 
-                    });
-                    setIsLoteEstimated(diasDesdeUltimo >= 2); 
-                } else {
-                    const pesoUnico = dataGrafico[0]['Promedio Lote'] || 0;
-                    setStatsGraficoLote({ inicio: pesoUnico, actual: pesoUnico, ganancia: 0, dias: 0, adpv: '0' });
-                }
-
-                setLineasAnimalesLote(Array.from(caravanasPresentes));
-                setDatosGraficoLote(dataGrafico);
-            }
-        }
-        setLoadingGraficoLote(false);
+        generarGraficoLote(lote.id);
     }
 
     if (loteSel) {
