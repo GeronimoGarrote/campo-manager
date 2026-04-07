@@ -1,6 +1,6 @@
 import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider } from '@mantine/core';
 import { IconCheck, IconMail, IconBrandWhatsapp } from '@tabler/icons-react';
-import logoRodeo from '../assets/logoblanco.png'; 
+import logoRodeo from '../assets/loggoblanco.png'; 
 
 export default function Login({ email, setEmail, password, setPassword, handleLogin, authLoading }: any) {
     return (
