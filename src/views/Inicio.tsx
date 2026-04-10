@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Title, Grid, SimpleGrid, Card, Group, RingProgress, Center, Text, ThemeIcon, Badge, ScrollArea, Table, Stack, Paper, Button } from '@mantine/core';
+import { Title, Grid, SimpleGrid, Card, Group, RingProgress, Center, Text, ThemeIcon, Badge, ScrollArea, Table, Stack, Button } from '@mantine/core';
 import { IconBabyCarriage, IconHeartbeat, IconCalendarEvent, IconCheck, IconActivity, IconChartDots, IconMapPin, IconCurrencyDollar, IconSkull } from '@tabler/icons-react';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
@@ -25,7 +25,6 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
         total: haciendaActiva.length,
         vacas: haciendaActiva.filter((a: any) => a.categoria === 'Vaca').length,
         vaquillonas: haciendaActiva.filter((a: any) => a.categoria === 'Vaquillona').length,
-        // ACÁ ESTÁ LA MAGIA: usamos includes para agarrar 'PREÑADA' y 'PREÑADA Y LACTANDO'
         prenadas: haciendaActiva.filter((a: any) => a.estado && a.estado.includes('PREÑADA')).length,
         enfermos: haciendaActiva.filter((a: any) => a.condicion && a.condicion.includes('ENFERMA')).length,
         terneros: haciendaActiva.filter((a: any) => a.categoria === 'Ternero').length,
@@ -37,12 +36,23 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
     const totalVientres = stats.vacas + stats.vaquillonas; 
     const prenadaPct = totalVientres > 0 ? Math.round((stats.prenadas / totalVientres) * 100) : 0;
 
-    const hoyFormateado = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().split('T')[0];
+    // --- MAGIA NUEVA: Ventana de 7 días ---
+    const baseDate = new Date();
+    const offset = baseDate.getTimezoneOffset() * 60 * 1000;
+    const hoyDate = new Date(baseDate.getTime() - offset);
+    const hoyFormateado = hoyDate.toISOString().split('T')[0];
     
-    const tareasParaHoy = agenda.filter((t: any) => !t.completado && t.fecha_programada === hoyFormateado);
-    const partosProximos = agenda.filter((tarea: any) => 
-        tarea.tipo === 'PARTO_ESTIMADO' && !tarea.completado && tarea.fecha_programada >= hoyFormateado && animales.some((a: any) => a.id === tarea.animal_id)
-    ).sort((a: any, b: any) => a.fecha_programada.localeCompare(b.fecha_programada));
+    const date7 = new Date(hoyDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const limite7Dias = date7.toISOString().split('T')[0];
+    
+    const eventos7Dias = agenda.filter((tarea: any) => {
+        if (tarea.completado) return false;
+        // Si es un parto, filtramos que la vaca siga existiendo en el campo
+        if (tarea.tipo === 'PARTO_ESTIMADO' && !animales.some((a: any) => a.id === tarea.animal_id)) return false;
+        
+        return tarea.fecha_programada >= hoyFormateado && tarea.fecha_programada <= limite7Dias;
+    }).sort((a: any, b: any) => a.fecha_programada.localeCompare(b.fecha_programada));
+    // --------------------------------------
 
     return (
         <>
@@ -66,31 +76,62 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
 
                     <Card shadow="sm" radius="md" p="md" withBorder>
                         <Group gap="xs" mb="sm">
-                            <ThemeIcon size="lg" radius="md" color={partosProximos.length > 0 ? "teal" : "orange"}>{partosProximos.length > 0 ? <IconBabyCarriage size={20} /> : <IconCalendarEvent size={20} />}</ThemeIcon>
-                            <Text fw={700} size="xl">{partosProximos.length > 0 ? "Próximos Partos" : "Tareas para Hoy"}</Text>
-                            {partosProximos.length > 0 && <Badge color="teal" variant="light">{partosProximos.length} en espera</Badge>}
-                            {partosProximos.length === 0 && tareasParaHoy.length > 0 && <Badge color="orange" variant="light">{tareasParaHoy.length} pendientes</Badge>}
+                            <ThemeIcon size="lg" radius="md" color={eventos7Dias.length > 0 ? "orange" : "teal"}>
+                                <IconCalendarEvent size={20} />
+                            </ThemeIcon>
+                            <Text fw={700} size="xl">Agenda: Próximos 7 Días</Text>
+                            {eventos7Dias.length > 0 && <Badge color="orange" variant="light">{eventos7Dias.length} pendientes</Badge>}
                         </Group>
                         <ScrollArea h={583} offsetScrollbars>
-                            {partosProximos.length > 0 ? (
+                            {eventos7Dias.length > 0 ? (
                                 <Table striped stickyHeader>
-                                    <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Fecha Est.</Table.Th><Table.Th>Vaca</Table.Th></Table.Tr></Table.Thead>
+                                    <Table.Thead bg="gray.1">
+                                        <Table.Tr>
+                                            <Table.Th>Fecha</Table.Th>
+                                            <Table.Th>Evento / Tarea</Table.Th>
+                                        </Table.Tr>
+                                    </Table.Thead>
                                     <Table.Tbody>
-                                        {partosProximos.map((parto: any) => {
-                                            const vacaVal = animales.find((a: any) => a.id === parto.animal_id);
-                                            const diasFaltan = diasDiferencia(parto.fecha_programada); const colorBadge = diasFaltan < 7 ? 'red' : diasFaltan < 15 ? 'orange' : 'teal';
-                                            return (<Table.Tr key={parto.id}><Table.Td><Group gap="xs"><Text size="sm" fw={700} c={colorBadge}>{formatDate(parto.fecha_programada)}</Text><Badge size="xs" color={colorBadge} variant="light">{diasFaltan} días</Badge></Group></Table.Td><Table.Td><Text fw={700} size="sm">{vacaVal?.caravana || '?'}</Text></Table.Td></Table.Tr>);
+                                        {eventos7Dias.map((tarea: any) => {
+                                            const vacaVal = tarea.animal_id ? animales.find((a: any) => a.id === tarea.animal_id) : null;
+                                            const diasFaltan = diasDiferencia(tarea.fecha_programada); 
+                                            
+                                            // Lógica visual para la urgencia
+                                            const colorBadge = diasFaltan === 0 ? 'red' : diasFaltan <= 2 ? 'orange' : 'teal';
+                                            const textoDias = diasFaltan === 0 ? 'Hoy' : diasFaltan === 1 ? 'Mañana' : `En ${diasFaltan} días`;
+                                            
+                                            return (
+                                                <Table.Tr key={tarea.id}>
+                                                    <Table.Td>
+                                                        <Group gap="xs">
+                                                            <Text size="sm" fw={700} c={colorBadge}>{formatDate(tarea.fecha_programada)}</Text>
+                                                            <Badge size="xs" color={colorBadge} variant="light">{textoDias}</Badge>
+                                                        </Group>
+                                                    </Table.Td>
+                                                    <Table.Td>
+                                                        {tarea.tipo === 'PARTO_ESTIMADO' ? (
+                                                            <Group gap={6}>
+                                                                <ThemeIcon size="sm" color="pink" variant="light" radius="xl"><IconBabyCarriage size={12}/></ThemeIcon>
+                                                                <div>
+                                                                    <Text fw={700} size="sm" c="dark" lh={1.2}>Parto Estimado</Text>
+                                                                    <Text size="xs" c="dimmed">Caravana: {vacaVal?.caravana || '?'}</Text>
+                                                                </div>
+                                                            </Group>
+                                                        ) : (
+                                                            <Text fw={700} size="sm" c="dark">{tarea.titulo}</Text>
+                                                        )}
+                                                    </Table.Td>
+                                                </Table.Tr>
+                                            );
                                         })}
                                     </Table.Tbody>
                                 </Table>
-                            ) : tareasParaHoy.length > 0 ? (
-                                <Stack gap="xs" p="xs" mt="sm">
-                                    {tareasParaHoy.map((tarea: any) => (
-                                        <Paper key={tarea.id} p="md" withBorder shadow="sm" radius="md" style={{ borderLeft: `4px solid #fd7e14` }}><Group justify="space-between" align="center" wrap="nowrap"><div style={{ flex: 1 }}><Text fw={700} size="md" c="dark">{tarea.titulo}</Text></div></Group></Paper>
-                                    ))}
-                                </Stack>
                             ) : (
-                                <Center h="100%" style={{ display: 'flex', flexDirection: 'column', paddingTop: '2rem' }}><ThemeIcon size={80} radius="100%" variant="light" color="gray" mb="md"><IconCheck size={40} /></ThemeIcon><Text c="dimmed" size="lg" fw={700}>¡Todo al día!</Text></Center>
+                                <Center h="100%" style={{ display: 'flex', flexDirection: 'column', paddingTop: '2rem' }}>
+                                    <ThemeIcon size={80} radius="100%" variant="light" color="teal" mb="md"><IconCheck size={40} /></ThemeIcon>
+                                    <Text c="dimmed" size="lg" fw={700}>¡Semana libre!</Text>
+                                    <Text c="dimmed" size="sm">No hay tareas ni partos en los próximos 7 días.</Text>
+                                </Center>
                             )}
                         </ScrollArea>
                     </Card>

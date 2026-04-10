@@ -155,7 +155,6 @@ export default function Masivos({
                     animal_id: id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: 'Separación madre/cría (Venta/Traslado)', fecha_evento: fechaStr, establecimiento_id: campoId
                 }));
                 await supabase.from('eventos').insert(eventosTerneros);
-                // Si el ternero estaba en la selección, se blanquea en memoria para que viaje correcto
                 idsParaProcesar.forEach(idProc => {
                     const a = animales.find((an: any) => an.id === idProc);
                     if (a && ternerosADestetarIds.includes(a.id)) { a.estado = 'ACTIVO'; a.madre_id = undefined; }
@@ -169,7 +168,6 @@ export default function Masivos({
                     await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', madreId);
                     eventosMadres.push({ animal_id: madreId, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Separación de cría (${data.caravanaTernero})`, fecha_evento: fechaStr, establecimiento_id: campoId });
                     
-                    // Si la madre estaba en la selección, viaja destetada
                     const a = animales.find((an: any) => an.id === madreId);
                     if (a && idsParaProcesar.includes(a.id)) { a.estado = nuevoEstadoMadre; }
                 }
@@ -301,15 +299,39 @@ export default function Masivos({
                 await supabase.from('eventos').insert(insertsSalida);
             }
         } else {
+            // --- ACÁ ESTÁ LA MAGIA PARA DETALLES INDIVIDUALES EN MASIVOS ---
             const inserts = idsParaProcesar.map(animalId => {
                 const anim = animales.find((a: any) => a.id === animalId);
+                let finalDetalle = massDetalle;
+                let finalDatosExtra = { ...datosExtra, caravana_origen: anim?.caravana };
+
+                if (massActividad === 'CAMBIO_LOTE') {
+                    const lNom = lotes.find((l: any) => l.id === massLoteDestino)?.nombre || 'Sin asignar';
+                    const lAnterior = lotes.find((l: any) => l.id === anim?.lote_id)?.nombre || 'Sin asignar';
+                    finalDetalle = `Movido de: ${lAnterior} ➔ A: ${lNom}`;
+                    finalDatosExtra.lote_origen = lAnterior;
+                } else if (massActividad === 'MOVIMIENTO_POTRERO') {
+                    const pNom = potreros.find((p: any) => p.id === massPotreroDestino)?.nombre || 'Sin asignar';
+                    const parcNom = parcelas.find((p: any) => p.id === massParcelaDestino)?.nombre || '';
+                    
+                    const pAnterior = potreros.find((p: any) => p.id === anim?.potrero_id)?.nombre || 'Sin asignar';
+                    const parcAnterior = parcelas.find((p: any) => p.id === anim?.parcela_id)?.nombre || '';
+                    
+                    const strDestino = parcNom ? `${pNom} (${parcNom})` : pNom;
+                    const strOrigen = parcAnterior ? `${pAnterior} (${parcAnterior})` : pAnterior;
+                    
+                    finalDetalle = `Movido de: ${strOrigen} ➔ A: ${strDestino}`;
+                    finalDatosExtra.potrero_origen = pAnterior;
+                    finalDatosExtra.parcela_origen = parcAnterior;
+                }
+
                 return { 
                     animal_id: animalId, 
                     fecha_evento: fechaStr, 
                     tipo: massActividad, 
                     resultado: resultadoTxt, 
-                    detalle: massDetalle, 
-                    datos_extra: { ...datosExtra, caravana_origen: anim?.caravana }, 
+                    detalle: finalDetalle, 
+                    datos_extra: finalDatosExtra, 
                     costo: massActividad === 'VENTA' ? gastoPorAnimal : Number(massCostoUnitario), 
                     establecimiento_id: campoId 
                 }

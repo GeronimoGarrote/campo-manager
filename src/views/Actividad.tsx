@@ -9,7 +9,15 @@ export default function Actividad({ eventosGlobales }: any) {
     const [filtroTipoEvento, setFiltroTipoEvento] = useState<string | null>(''); 
 
     const eventosFiltrados = eventosGlobales.filter((ev: any) => {
-        const coincideTexto = ev.animales?.caravana.toLowerCase().includes(busqueda.toLowerCase()) || ev.tipo.toLowerCase().includes(busqueda.toLowerCase());
+        const search = busqueda.toLowerCase();
+        
+        // ACÁ ESTÁ EL FIX DEL BUSCADOR: Ahora lee adentro de detalle y resultado también
+        const coincideTexto = 
+            (ev.animales?.caravana && ev.animales.caravana.toLowerCase().includes(search)) || 
+            ev.tipo.toLowerCase().includes(search) ||
+            (ev.detalle && ev.detalle.toLowerCase().includes(search)) ||
+            (ev.resultado && ev.resultado.toLowerCase().includes(search));
+
         const coincideTipo = filtroTipoEvento ? ev.tipo === filtroTipoEvento : true;
         return coincideTexto && coincideTipo;
     });
@@ -17,7 +25,7 @@ export default function Actividad({ eventosGlobales }: any) {
     return (
         <>
             <Group mb="md">
-                <TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+                <TextInput style={{flex: 2}} leftSection={<IconSearch size={16}/>} placeholder="Buscar por Caravana, Detalle o Resultado..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                 <Select style={{flex: 1}} placeholder="Filtrar Actividad" data={['PESAJE', 'TACTO', 'SERVICIO', 'PARTO', 'BAJA', 'VACUNACION', 'ENFERMEDAD', 'CURACION', 'CAPADO', 'TRATAMIENTO', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'OTRO']} value={filtroTipoEvento} onChange={setFiltroTipoEvento} clearable />
             </Group>
             <Paper radius="md" withBorder>
@@ -31,10 +39,15 @@ export default function Actividad({ eventosGlobales }: any) {
                                 <Table.Td><Badge variant="outline" size="sm">{ev.tipo}</Badge></Table.Td>
                                 <Table.Td>
                                     <Text size="sm" fw={500}>{ev.resultado}</Text>
-                                    {ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}
+                                    
+                                    {/* Lo puse en fw={600} (semi-negrita) para que resalte más la flechita */}
+                                    {ev.detalle && <Text size="xs" c="dimmed" fw={600}>{ev.detalle}</Text>}
+                                    
                                     {ev.datos_extra?.toros_caravanas && <Text size="xs" c="dimmed">Toro/s: {ev.datos_extra.toros_caravanas}</Text>}
                                     {ev.datos_extra?.potrero_destino && <Text size="xs" c="dimmed">Destino: {ev.datos_extra.potrero_destino} {ev.datos_extra.parcela_destino ? `(${ev.datos_extra.parcela_destino})` : ''}</Text>}
-                                    {ev.datos_extra?.lote_destino && <Text size="xs" c="dimmed">Grupo: {ev.datos_extra.lote_destino}</Text>}
+                                    
+                                    {/* Si es cambio de lote, ocultamos la etiqueta redundante "Grupo: X" */}
+                                    {ev.tipo !== 'CAMBIO_LOTE' && ev.datos_extra?.lote_destino && <Text size="xs" c="dimmed">Grupo: {ev.datos_extra.lote_destino}</Text>}
                                 </Table.Td>
                                 <Table.Td><Text size="sm" c="dimmed">${ev.costo || 0}</Text></Table.Td>
                             </Table.Tr>

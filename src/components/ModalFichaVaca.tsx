@@ -249,9 +249,14 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             const desc = editPotreroId ? `Asignado a: ${pNom} ${parcNom ? `(${parcNom})` : ''}` : 'Retirado de potrero';
             eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'MOVIMIENTO_POTRERO', resultado: 'MOVIDO DE POTRERO', detalle: desc, datos_extra: { potrero_destino: pNom, parcela_destino: parcNom, potrero_id: editPotreroId, parcela_id: editParcelaId }, establecimiento_id: campoId });
         }
+        
         if (animalSel.lote_id !== editLoteId) {
-            const lNom = lotes.find(l => l.id === editLoteId)?.nombre; const desc = editLoteId ? `Asignado a lote: ${lNom}` : 'Retirado de lote';
-            eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_destino: lNom, lote_id: editLoteId }, establecimiento_id: campoId });
+            // ACÁ ESTÁ LA MAGIA: Busca el nombre del lote viejo antes de insertar el evento
+            const lNom = lotes.find(l => l.id === editLoteId)?.nombre || 'Sin asignar'; 
+            const lAnterior = lotes.find(l => l.id === animalSel.lote_id)?.nombre || 'Sin asignar';
+            const desc = `Movido de: ${lAnterior} ➔ A: ${lNom}`;
+            
+            eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_origen: lAnterior, lote_destino: lNom, lote_id: editLoteId }, establecimiento_id: campoId });
         }
     
         const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSel.id);

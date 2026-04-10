@@ -55,7 +55,6 @@ export default function Lotes({
     const [loteEvCosto, setLoteEvCosto] = useState<string | number>('');
     const [agregarAlLoteIds, setAgregarAlLoteIds] = useState<string[]>([]);
 
-    // Filtramos fantasmas de todo el componente (también sacamos los EN TRÁNSITO por si las dudas)
     const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && a.estado !== 'EN TRÁNSITO');
 
     const getUbicacionCompleta = (potrero_id?: string, parcela_id?: string) => {
@@ -75,9 +74,7 @@ export default function Lotes({
     
     async function borrarLoteGrupo(id: string) {
         if (!confirm("¿Borrar grupo? Los animales quedarán sin lote asignado.")) return;
-        
         animales.forEach((a: any) => { if (a.lote_id === id) a.lote_id = null; });
-        
         await supabase.from('lotes').delete().eq('id', id); fetchLotes(); fetchAnimales(); setLoteSel(null);
     }
 
@@ -90,15 +87,10 @@ export default function Lotes({
 
     async function generarGraficoLote(idLote: string) {
         setLoadingGraficoLote(true);
-        // LA SOLUCIÓN: Usar haciendaActiva en vez de la lista cruda de animales
         const animalesLote = haciendaActiva.filter((a: any) => a.lote_id === idLote);
         
         if (animalesLote.length === 0) {
-            setDatosGraficoLote([]);
-            setLineasAnimalesLote([]);
-            setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
-            setIsLoteEstimated(false);
-            setLoadingGraficoLote(false);
+            setDatosGraficoLote([]); setLineasAnimalesLote([]); setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' }); setIsLoteEstimated(false); setLoadingGraficoLote(false);
             return;
         }
 
@@ -106,11 +98,7 @@ export default function Lotes({
         const { data: pesajes } = await supabase.from('eventos').select('*, animales!inner(caravana)').in('animal_id', ids).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: true });
         
         if (!pesajes || pesajes.length === 0) {
-            setDatosGraficoLote([]);
-            setLineasAnimalesLote([]);
-            setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' });
-            setIsLoteEstimated(false);
-            setLoadingGraficoLote(false);
+            setDatosGraficoLote([]); setLineasAnimalesLote([]); setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' }); setIsLoteEstimated(false); setLoadingGraficoLote(false);
             return;
         }
 
@@ -225,14 +213,37 @@ export default function Lotes({
         if (loteSel) generarGraficoLote(loteSel.id);
         
         await supabase.from('animales').update({ lote_id: null }).eq('id', animalId);
-        await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'CAMBIO_LOTE', resultado: 'REMOVIDO DE LOTE', detalle: 'Removido desde ficha de lote', establecimiento_id: campoId });
+        await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'CAMBIO_LOTE', resultado: 'REMOVIDO DE LOTE', detalle: `Removido del lote: ${loteSel?.nombre}`, establecimiento_id: campoId });
         fetchAnimales(); fetchActividadGlobal();
     }
 
     async function meterAnimalesAlLote() {
         if (agregarAlLoteIds.length === 0 || !loteSel || !campoId) return;
         setLoading(true);
+        const fechaStr = new Date().toISOString();
         
+        // ACÁ ESTÁ EL CAMBIO: Primero armamos los eventos leyendo de qué lote vienen
+        const inserts = agregarAlLoteIds.map(id => {
+            const animalObj = animales.find((a: any) => a.id === id);
+            const loteAnteriorId = animalObj?.lote_id;
+            const loteAnteriorNombre = loteAnteriorId ? lotes.find((l: any) => l.id === loteAnteriorId)?.nombre || 'Sin Lote' : 'Sin Lote';
+
+            return {
+                animal_id: id,
+                fecha_evento: fechaStr,
+                tipo: 'CAMBIO_LOTE',
+                resultado: 'CAMBIO DE LOTE',
+                detalle: `Movido de: ${loteAnteriorNombre} ➔ A: ${loteSel.nombre}`,
+                datos_extra: { 
+                    lote_origen: loteAnteriorNombre, 
+                    lote_destino: loteSel.nombre, 
+                    lote_id: loteSel.id 
+                },
+                establecimiento_id: campoId
+            };
+        });
+        
+        // Ahora sí actualizamos la visual de React
         animales.forEach((a: any) => {
             if (agregarAlLoteIds.includes(a.id)) a.lote_id = loteSel.id;
         });
@@ -240,8 +251,6 @@ export default function Lotes({
         generarGraficoLote(loteSel.id);
 
         await supabase.from('animales').update({ lote_id: loteSel.id }).in('id', agregarAlLoteIds);
-        const fechaStr = new Date().toISOString();
-        const inserts = agregarAlLoteIds.map(id => ({ animal_id: id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: `Asignado a lote: ${loteSel.nombre} (Desde ficha de lote)`, datos_extra: { lote_destino: loteSel.nombre, lote_id: loteSel.id }, establecimiento_id: campoId }));
         await supabase.from('eventos').insert(inserts);
         
         setAgregarAlLoteIds([]); 
@@ -301,7 +310,7 @@ export default function Lotes({
 
                         <Tabs.Panel value="hacienda">
                             <Group mb="md" align="flex-end">
-                                <MultiSelect data={haciendaActiva.filter((a: any) => a.lote_id !== loteSel.id).map((a: any) => ({value: a.id, label: `${a.caravana} (${a.categoria})`}))} placeholder="Buscar vacas libres en el campo..." value={agregarAlLoteIds} onChange={setAgregarAlLoteIds} searchable style={{ flex: 1 }}/>
+                                <MultiSelect data={haciendaActiva.filter((a: any) => a.lote_id !== loteSel.id).map((a: any) => ({value: a.id, label: `${a.caravana} (${a.categoria})`}))} placeholder="Buscar vacas libres u en otros lotes..." value={agregarAlLoteIds} onChange={setAgregarAlLoteIds} searchable style={{ flex: 1 }}/>
                                 <Button onClick={meterAnimalesAlLote} color="grape" loading={loading} leftSection={<IconPlus size={16}/>}>Agregar al Lote</Button>
                             </Group>
                             <Table striped highlightOnHover>
