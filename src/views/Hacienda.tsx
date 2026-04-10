@@ -28,7 +28,6 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
     if (!estado) return null;
     
     if (estado === 'PREÑADA Y LACTANDO') {
-        // Al devolverlos en un Fragment (<>...</>), el <Group> de tu tabla los pone uno al lado del otro sin agrandar la fila
         return (
             <>
                 <Badge color="teal">PREÑADA</Badge>
@@ -79,7 +78,6 @@ export default function Hacienda({
             if (filterAtributos.length > 0) {
                 const tagsDelAnimal: string[] = [];
                 
-                // Agregado el filtro para que separe los estados
                 if (animal.estado === 'PREÑADA Y LACTANDO') {
                     tagsDelAnimal.push('PREÑADA', 'EN LACTANCIA');
                 } else {
@@ -91,6 +89,10 @@ export default function Hacienda({
                 if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
                 if (animal.castrado) tagsDelAnimal.push('CAPADO');
                 if (animal.destacado) tagsDelAnimal.push('DESTACADO');
+                
+                // Mágia para que lo encuentre el filtro
+                if (animal.en_transito) tagsDelAnimal.push('EN TRÁNSITO'); 
+
                 matchAtributos = filterAtributos.every((filtro: string) => tagsDelAnimal.includes(filtro));
             }
             return matchSeccion && matchBusqueda && matchCategoria && matchLote && matchAtributos;
@@ -148,7 +150,8 @@ export default function Hacienda({
                     <Group grow style={{ flex: 1 }}>
                         <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                         <Select label="Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                        <MultiSelect label="Estado" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
+                        {/* Agregado EN TRÁNSITO al select múltiple */}
+                        <MultiSelect label="Estado" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
                         <Select label="Lote" placeholder="Todos" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
                     </Group>
                     <Menu shadow="md" width={220} position="bottom-end">
@@ -188,10 +191,17 @@ export default function Hacienda({
                                             <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
                                         ) : (
                                             <Group gap="xs">
-                                                {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
-                                                {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
-                                                {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
-                                                {renderCondicionBadges(vaca.condicion)}
+                                                {/* ACÁ ESTÁ LA MAGIA VISUAL: Si está en tránsito, oculta lo demás y muestra el marrón */}
+                                                {vaca.en_transito ? (
+                                                    <Badge color="#795548">EN TRÁNSITO</Badge>
+                                                ) : (
+                                                    <>
+                                                        {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                        {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
+                                                        {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
+                                                        {renderCondicionBadges(vaca.condicion)}
+                                                    </>
+                                                )}
                                             </Group>
                                         )}
                                     </Table.Td>
