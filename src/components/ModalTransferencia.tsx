@@ -32,7 +32,11 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
 
     async function cargarAnimales() {
         setLoading(true);
-        const { data } = await supabase.rpc('obtener_animales_transferencia', { p_ids: transfActiva.animales_ids });
+        // Ahora le pasamos el id de la transferencia y tu campo (la llave)
+        const { data } = await supabase.rpc('obtener_animales_transferencia', { 
+            p_transfer_id: transfActiva.id,
+            p_campo_destino: campoId 
+        });
         if (data) setAnimalesEntrantes(data);
         setLoading(false);
     }
@@ -73,8 +77,10 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
         if (!transfActiva || !confirm("¿Rechazar transferencia? Los animales volverán al campo de origen.")) return;
         setLoading(true);
         
+        // Le mandamos tu campoId como llave de seguridad
         const { error } = await supabase.rpc('rechazar_transferencia', { 
-            p_transfer_id: transfActiva.id 
+            p_transfer_id: transfActiva.id,
+            p_campo_destino: campoId
         });
 
         if (error) {

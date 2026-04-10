@@ -304,7 +304,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
   
                 await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSel.id);
                 await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, datos_extra: { caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: 0 });
-                await supabase.from('agenda').delete().eq('animal_id', animalSel.id).eq('completado', false);
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
             } else {
                 if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
@@ -337,7 +336,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
   
                 await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSel.id);
                 await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
-                await supabase.from('agenda').delete().eq('animal_id', animalSel.id).eq('completado', false);
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
             } else {
                 if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }

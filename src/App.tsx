@@ -253,14 +253,14 @@ export default function App() {
       />
 
       <ModalTransferencia 
-          opened={modalTransfOpen} 
-          onClose={closeModalTransf} 
-          transfActiva={transfActiva}
-          campoId={campoId}
-          animales={animales}
-          potreros={potreros}
-          onSuccess={() => { fetchTransferencias(); fetchAnimales(); fetchActividadGlobal(); }}
-      />
+    opened={modalTransfOpen} 
+    onClose={closeModalTransf} 
+    transfActiva={transfActiva}
+    campoId={campoId}
+    animales={animales}
+    potreros={potreros}
+    onSuccess={() => { fetchTransferencias(); fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }}
+/>
 
       <ModalGraficoPeso 
           opened={modalGraficoOpen} 

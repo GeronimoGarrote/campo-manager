@@ -24,7 +24,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
     const [nuevoMesesGestacion, setNuevoMesesGestacion] = useState<string | null>(null);
     const [edadEstimada, setEdadEstimada] = useState<string | null>(null);
 
-    const opcionesGestacion = [ { value: '0.5', label: '15 días' }, { value: '1', label: '1 mes' }, { value: '3', label: '3 meses' }, { value: '6', label: '6 meses' }, { value: '9', label: '9 meses (A parir)' } ];
+    const opcionesGestacion = [ { value: '0.5', label: '15 días' }, { value: '1', label: '1 mes' }, { value: '2', label: '2 meses' }, { value: '3', label: '3 meses' }, { value: '4', label: '4 meses' }, { value: '5', label: '5 meses' }, { value: '6', label: '6 meses' }, { value: '7', label: '7 meses' }, { value: '8', label: '8 meses' }, { value: '9', label: '9 meses (A parir)' } ];
     const opcionesEdadEstimada = [ { value: '0', label: 'Recién nacido (0 meses)' }, { value: '6', label: '6 meses (Destete)' }, { value: '12', label: '1 año' }, { value: '24', label: '2 años' } ];
 
     useEffect(() => {
@@ -54,6 +54,25 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
         
         if (!error && newAnimalData && newAnimalData.length > 0) {
             const animalId = newAnimalData[0].id;
+
+            // --- ACÁ ESTÁ LA MAGIA PARA LA AGENDA ---
+            if (['Vaca', 'Vaquillona'].includes(categoria || '') && nuevoEstadoReproductivo === 'PREÑADA' && nuevoMesesGestacion) {
+                const diasGestacionActual = parseFloat(nuevoMesesGestacion) * 30.4; 
+                const diasFaltantes = Math.round(283 - diasGestacionActual); 
+                const fechaParto = new Date(); 
+                fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
+
+                await supabase.from('agenda').insert({ 
+                    establecimiento_id: campoId, 
+                    fecha_programada: fechaParto.toISOString().split('T')[0], 
+                    titulo: `Parto: ${caravana}`, 
+                    descripcion: `Parto estimado por alta inicial (${nuevoMesesGestacion} meses).`, 
+                    tipo: 'PARTO_ESTIMADO', 
+                    animal_id: animalId 
+                });
+            }
+            // ----------------------------------------
+
             if (origenModal === 'COMPRADO' && precioCompra) {
                 await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: hoy, tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Compra animal caravana: ${caravana}`, monto: Number(precioCompra) });
                 await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'COMPRA', resultado: 'Animal Comprado', detalle: `Costo: $${precioCompra}`, establecimiento_id: campoId, costo: Number(precioCompra) });

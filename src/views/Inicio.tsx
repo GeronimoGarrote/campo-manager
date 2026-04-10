@@ -25,7 +25,8 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
         total: haciendaActiva.length,
         vacas: haciendaActiva.filter((a: any) => a.categoria === 'Vaca').length,
         vaquillonas: haciendaActiva.filter((a: any) => a.categoria === 'Vaquillona').length,
-        prenadas: haciendaActiva.filter((a: any) => a.estado === 'PREÑADA').length,
+        // ACÁ ESTÁ LA MAGIA: usamos includes para agarrar 'PREÑADA' y 'PREÑADA Y LACTANDO'
+        prenadas: haciendaActiva.filter((a: any) => a.estado && a.estado.includes('PREÑADA')).length,
         enfermos: haciendaActiva.filter((a: any) => a.condicion && a.condicion.includes('ENFERMA')).length,
         terneros: haciendaActiva.filter((a: any) => a.categoria === 'Ternero').length,
         ternerosM: haciendaActiva.filter((a: any) => a.categoria === 'Ternero' && a.sexo === 'M').length,
