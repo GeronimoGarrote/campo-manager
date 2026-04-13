@@ -11,9 +11,10 @@ interface ModalTransferenciaProps {
     animales: any[];
     potreros: any[];
     onSuccess: () => void;
+    datosSuscripcion: any; // <--- AGREGADO
 }
 
-export default function ModalTransferencia({ opened, onClose, transfActiva, campoId, animales, potreros, onSuccess }: ModalTransferenciaProps) {
+export default function ModalTransferencia({ opened, onClose, transfActiva, campoId, animales, potreros, onSuccess, datosSuscripcion }: ModalTransferenciaProps) {
     const [loading, setLoading] = useState(false);
     const [animalesEntrantes, setAnimalesEntrantes] = useState<any[]>([]);
     const [nuevasCaravanasMap, setNuevasCaravanasMap] = useState<Record<string, string>>({});
@@ -43,6 +44,15 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
 
     async function aceptarTransferencia() {
         if (!transfActiva || !campoId) return;
+
+        // --- MAGIA PRO: CANDADO DE INGRESO RED ---
+        const animalesActivos = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
+        const cantidadEntrante = transfActiva.animales_ids.length; // <--- USAMOS LA CANTIDAD REAL DEL LOTE
+        
+        if (datosSuscripcion && (animalesActivos + cantidadEntrante) > datosSuscripcion.limite_animales) {
+            return alert(`Límite excedido. Tenés ${animalesActivos} animales y querés ingresar un lote de ${cantidadEntrante}. Tu plan solo permite hasta ${datosSuscripcion.limite_animales} animales. Mejorá tu suscripción para aceptar el ingreso.`);
+        }
+        // ----------------------------------------
         
         const hayErrores = animalesEntrantes.some(a => {
             const val = nuevasCaravanasMap[a.id] ?? a.caravana;

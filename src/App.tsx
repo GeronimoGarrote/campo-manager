@@ -1,7 +1,7 @@
 import { useEffect, useState} from 'react';
 import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, Textarea, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell} from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard} from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
@@ -17,6 +17,7 @@ import Lotes from './views/Lotes';
 import Agricultura from './views/Agricultura';
 import Hacienda from './views/Hacienda';
 import Actividad from './views/Actividad';
+import Suscripcion from './views/Suscripcion'; 
 
 // Modales Refactorizados
 import ModalAltaAnimal from './components/ModalAltaAnimal';
@@ -76,6 +77,22 @@ export default function App() {
   const [editingEventRes, setEditingEventRes] = useState('');
   const [editingEventDet, setEditingEventDet] = useState('');
 
+  // Estado de la suscripción agregado
+  const [datosSuscripcion, setDatosSuscripcion] = useState<any>(null);
+
+  // --- LÓGICA DE BLOQUEO (SOFT LOCK) ---
+  const estaVencido = datosSuscripcion?.fecha_vencimiento 
+      ? new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59') < new Date() 
+      : false;
+
+  useEffect(() => {
+      // Si está vencido y trata de ir a otra sección, lo forzamos a la pantalla de pago
+      if (estaVencido && activeSection !== 'suscripcion') {
+          setActiveSection('suscripcion');
+      }
+  }, [estaVencido, activeSection]);
+  // -------------------------------------
+
   // Sincronización Inicial
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if (session) loadCampos(); });
@@ -86,6 +103,7 @@ export default function App() {
   useEffect(() => {
     if (!campoId || !session) return;
     localStorage.setItem('campoId', campoId); 
+    fetchSuscripcion();
     fetchAnimales(); fetchPotreros(); fetchParcelas(); fetchLotes(); fetchEventosLotesGlobal(); fetchAgenda(); fetchTransferencias();
     if (activeSection === 'inicio' || activeSection === 'actividad') fetchActividadGlobal();
   }, [activeSection, campoId, session]); 
@@ -96,6 +114,26 @@ export default function App() {
 
   // Funciones de Fetch de Datos
   async function loadCampos() { const { data } = await supabase.from('establecimientos').select('*').order('created_at'); if (data && data.length > 0) { setEstablecimientos(data); const guardado = localStorage.getItem('campoId'); if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado); else if (!campoId) setCampoId(data[0].id); } }
+  
+  async function fetchSuscripcion() {
+      // 1. Verificamos que haya alguien logueado
+      if (!session?.user.id) return;
+
+      // 2. Buscamos el plan usando el ID del usuario
+      const { data } = await supabase
+          .from('suscripciones')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .single();
+
+      if (data) {
+          setDatosSuscripcion(data);
+      } else {
+          // Default si aún no tiene registro en la tabla
+          setDatosSuscripcion({ plan_nombre: 'BASICO', limite_animales: 300, limite_establecimientos: 1, estado: 'ACTIVO' });
+      }
+  }
+
   async function fetchAnimales() { if (!campoId) return; const { data } = await supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); setAnimales(data || []); }
   async function fetchPotreros() { if (!campoId) return; const { data } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setPotreros(data || []); }
   async function fetchParcelas() { if (!campoId) return; const { data } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setParcelas(data || []); }
@@ -126,8 +164,19 @@ export default function App() {
   async function fetchAgenda() { if(!campoId) return; const { data } = await supabase.from('agenda').select('*').eq('establecimiento_id', campoId).order('fecha_programada', { ascending: true }); if (data) setAgenda(data); }
   async function fetchTransferencias() { if (!campoId) return; const { data: transData } = await supabase.from('transferencias').select('*').eq('campo_destino_id', campoId).eq('estado', 'PENDIENTE'); setTransferencias(transData || []); }
 
-  // Gestión de Establecimientos
-  async function crearCampo() { if (!nuevoCampoNombre) return; const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]); if (error) alert("Error: " + error.message); else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } }
+  // Gestión de Establecimientos con Candado de Suscripción
+  async function crearCampo() { 
+      if (!nuevoCampoNombre) return; 
+      
+      if (datosSuscripcion && establecimientos.length >= datosSuscripcion.limite_establecimientos) {
+          alert(`Límite alcanzado. Tu plan actual solo permite ${datosSuscripcion.limite_establecimientos} establecimiento(s). Por favor, mejorá tu plan para agregar más.`);
+          return;
+      }
+
+      const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]); 
+      if (error) alert("Error: " + error.message); 
+      else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } 
+  }
   async function borrarCampo(id: string) { if (!confirm("⚠️ ¿BORRAR ESTABLECIMIENTO COMPLETO?")) return; const { error } = await supabase.from('establecimientos').delete().eq('id', id); if (error) alert("Error al borrar."); else { if (id === campoId) { const restantes = establecimientos.filter(e => e.id !== id); if (restantes.length > 0) setCampoId(restantes[0].id); else window.location.reload(); } loadCampos(); } }
   async function editarCampo(id: string, nombreActual: string, renspaActual?: string) { const nuevoNombre = prompt("Nuevo nombre del establecimiento:", nombreActual); if (nuevoNombre === null) return; const nuevoRenspa = prompt("Número de RENSPA:", renspaActual || ''); if (nuevoRenspa === null) return; await supabase.from('establecimientos').update({ nombre: nuevoNombre, renspa: nuevoRenspa }).eq('id', id); loadCampos(); }
 
@@ -150,7 +199,7 @@ export default function App() {
 
   // Edición rápida de Eventos (Desde la ficha)
   function iniciarEdicionEvento(ev: Evento) { setEditingEventId(ev.id); const partes = ev.fecha_evento.split('T')[0].split('-'); setEditingEventDate(new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]), 12, 0, 0)); setEditingEventRes(ev.resultado); setEditingEventDet(ev.detalle || ''); openModalEditEvent(); }
-  async function guardarEdicionEvento() { if(!editingEventId || !editingEventDate) return; await supabase.from('eventos').update({ fecha_evento: editingEventDate.toISOString(), resultado: editingEventRes, detalle: editingEventDet }).eq('id', editingEventId); closeModalEditEvent(); fetchActividadGlobal(); } // Nota: La recarga de la ficha la manejará el modal interno si hace falta
+  async function guardarEdicionEvento() { if(!editingEventId || !editingEventDate) return; await supabase.from('eventos').update({ fecha_evento: editingEventDate.toISOString(), resultado: editingEventRes, detalle: editingEventDet }).eq('id', editingEventId); closeModalEditEvent(); fetchActividadGlobal(); } 
 
   const hoyFormateado = getHoyIso();
   const tareasPendientesUrgentes = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
@@ -181,7 +230,8 @@ export default function App() {
                         <Popover width={300} position="bottom-end" withArrow shadow="md" opened={bellOpened} onChange={setBellOpened}>
                             <Popover.Target>
                                 <Indicator disabled={tareasPendientesUrgentes.length === 0 && tareasParaHoy.length === 0 && transferencias.length === 0} color="red" size={15} label={tareasPendientesUrgentes.length + tareasParaHoy.length + transferencias.length} offset={4} zIndex={100}>
-                                    <ActionIcon variant="light" color="orange" size="lg" radius="xl" onClick={() => setBellOpened((o) => !o)}><IconBell size={22} /></ActionIcon>
+                                    {/* Campanita deshabilitada si está vencido */}
+                                    <ActionIcon variant="light" color="orange" size="lg" radius="xl" onClick={() => setBellOpened((o) => !o)} disabled={estaVencido}><IconBell size={22} /></ActionIcon>
                                 </Indicator>
                             </Popover.Target>
                             <Popover.Dropdown>
@@ -204,26 +254,31 @@ export default function App() {
 
             <AppShell.Navbar p="md" style={{ display: 'flex', flexDirection: 'column' }}>
               <ScrollArea style={{ flex: 1 }} offsetScrollbars>
-                  <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md" style={{ borderRadius: 8 }}/>
+                  {/* Navegación deshabilitada si está vencido */}
+                  <NavLink label="Inicio / Resumen" leftSection={<IconHome size={20}/>} active={activeSection === 'inicio'} onClick={() => { setActiveSection('inicio'); toggle(); }} color="indigo" variant="filled" mb="md" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <Text size="xs" fw={700} c="dimmed" mb="sm" mt="md">GANADERÍA</Text>
-                  <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" style={{ borderRadius: 8 }}/>
-                  <NavLink label="Lotes y Nutrición" leftSection={<IconTag size={20}/>} active={activeSection === 'lotes' || activeSection === 'lote_detalle'} onClick={() => { setActiveSection('lotes'); toggle(); }} color="grape" variant="filled" style={{ borderRadius: 8 }}/>
-                  <NavLink label="Agenda / Tareas" leftSection={<IconCalendarEvent size={20}/>} active={activeSection === 'agenda'} onClick={() => { setActiveSection('agenda'); toggle(); }} color="orange" variant="filled" style={{ borderRadius: 8 }}/>
-                  <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" style={{ borderRadius: 8 }}/>
-                  <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" style={{ borderRadius: 8 }}/>
+                  <NavLink label="Hacienda Activa" leftSection={<IconPlus size={20}/>} active={activeSection === 'hacienda'} onClick={() => { setActiveSection('hacienda'); toggle(); }} color="teal" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
+                  <NavLink label="Lotes y Nutrición" leftSection={<IconTag size={20}/>} active={activeSection === 'lotes' || activeSection === 'lote_detalle'} onClick={() => { setActiveSection('lotes'); toggle(); }} color="grape" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
+                  <NavLink label="Agenda / Tareas" leftSection={<IconCalendarEvent size={20}/>} active={activeSection === 'agenda'} onClick={() => { setActiveSection('agenda'); toggle(); }} color="orange" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
+                  <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
+                  <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
-                  <NavLink label="Potreros y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura' || activeSection === 'potrero_detalle'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }}/>
+                  <NavLink label="Potreros y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura' || activeSection === 'potrero_detalle'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">ADMINISTRACIÓN</Text>
-                  <NavLink label="Caja / Economía" leftSection={<IconCurrencyDollar size={20}/>} active={activeSection === 'economia'} onClick={() => { setActiveSection('economia'); toggle(); }} color="green" variant="filled" style={{ borderRadius: 8 }}/>
+                  <NavLink label="Caja / Economía" leftSection={<IconCurrencyDollar size={20}/>} active={activeSection === 'economia'} onClick={() => { setActiveSection('economia'); toggle(); }} color="green" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
+                  
+                  {/* Este NavLink SIEMPRE queda habilitado para que puedan entrar a pagar */}
+                  <NavLink label="Mi Plan" leftSection={<IconCreditCard size={20}/>} active={activeSection === 'suscripcion'} onClick={() => { setActiveSection('suscripcion'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }} mt="sm" />
+                  
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
-                  <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }}/>
+                  <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
               </ScrollArea>
               
               <AppShell.Section style={{ borderTop: '1px solid #eee', paddingTop: '1rem', marginTop: '1rem' }}>
                   <Text size="xs" fw={700} c="dimmed" mb="xs" ml={4}>ESTABLECIMIENTO</Text>
                   <Group wrap="nowrap" gap="xs" mb="sm">
-                      <Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} variant="filled" style={{ flex: 1 }} comboboxProps={{ zIndex: 1001 }}/>
-                      <ActionIcon variant="light" color="gray" size="lg" onClick={openModalConfig} title="Gestionar Campos" style={{ width: 36, height: 36 }}><IconSettings size={20}/></ActionIcon>
+                      <Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} variant="filled" style={{ flex: 1 }} comboboxProps={{ zIndex: 1001 }} disabled={estaVencido}/>
+                      <ActionIcon variant="light" color="gray" size="lg" onClick={openModalConfig} title="Gestionar Campos" style={{ width: 36, height: 36 }} disabled={estaVencido}><IconSettings size={20}/></ActionIcon>
                   </Group>
                   <Button fullWidth variant="subtle" color="red" leftSection={<IconLogout size={18}/>} onClick={handleLogout}>Cerrar Sesión</Button>
               </AppShell.Section>
@@ -233,34 +288,43 @@ export default function App() {
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} />}
               {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca}/>}
-              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} />}
+              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} datosSuscripcion={datosSuscripcion} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales}/>}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} />}
               {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} />}
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}
+              
+              {activeSection === 'suscripcion' && (
+                  <Suscripcion 
+                      animalesTotales={animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length} 
+                      establecimientosTotales={establecimientos.length} 
+                      datosSuscripcion={datosSuscripcion} 
+                  />
+              )}
             </AppShell.Main>
           </AppShell>
         )}
 
       {/* --- MODALES EXTERNOS REFACTORIZADOS --- */}
-      
       <ModalAltaAnimal 
           opened={modalAltaOpen} 
           onClose={closeModalAlta} 
           campoId={campoId} 
           animales={animales} 
+          datosSuscripcion={datosSuscripcion}
           onSuccess={() => { fetchAnimales(); fetchAgenda(); fetchActividadGlobal(); }} 
       />
 
       <ModalTransferencia 
-    opened={modalTransfOpen} 
-    onClose={closeModalTransf} 
-    transfActiva={transfActiva}
-    campoId={campoId}
-    animales={animales}
-    potreros={potreros}
-    onSuccess={() => { fetchTransferencias(); fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }}
-/>
+        opened={modalTransfOpen} 
+        onClose={closeModalTransf} 
+        transfActiva={transfActiva}
+        campoId={campoId}
+        animales={animales}
+        potreros={potreros}
+        datosSuscripcion={datosSuscripcion}
+        onSuccess={() => { fetchTransferencias(); fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }}
+      />
 
       <ModalGraficoPeso 
           opened={modalGraficoOpen} 
@@ -283,10 +347,10 @@ export default function App() {
           onUpdate={() => { fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }} 
           abrirGraficoPeso={handleAbrirGrafico}
           iniciarEdicionEvento={iniciarEdicionEvento}
+          datosSuscripcion={datosSuscripcion}
       />
 
-      {/* --- MODALES INTERNOS (Mantenidos en App.tsx por ser pequeños) --- */}
-      
+      {/* --- MODALES INTERNOS --- */}
       <Modal opened={modalEditEventOpen} onClose={closeModalEditEvent} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
           <Stack><TextInput label="Fecha" type="date" value={getLocalDateForInput(editingEventDate)} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/><TextInput label="Resultado" value={editingEventRes} onChange={(e) => setEditingEventRes(e.target.value)}/><Textarea label="Detalle" value={editingEventDet} onChange={(e) => setEditingEventDet(e.target.value)}/><Button onClick={guardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button></Stack>
       </Modal>

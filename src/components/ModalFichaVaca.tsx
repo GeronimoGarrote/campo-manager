@@ -17,9 +17,10 @@ interface ModalFichaVacaProps {
     abrirGraficoPeso: (id: string) => void;
     iniciarEdicionEvento: (ev: any) => void;
     setAnimalSelId: (id: string | null) => void; 
+    datosSuscripcion: any;
 }
 
-export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, iniciarEdicionEvento, setAnimalSelId }: ModalFichaVacaProps) {
+export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, iniciarEdicionEvento, setAnimalSelId, datosSuscripcion }: ModalFichaVacaProps) {
     const [loading, setLoading] = useState(false);
     const [activeTabVaca, setActiveTabVaca] = useState<string | null>('historia'); 
     const [fichaAnterior, setFichaAnterior] = useState<any>(null); 
@@ -70,8 +71,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [bajaGastosVenta, setBajaGastosVenta] = useState('');
     const [esVentaRed, setEsVentaRed] = useState(false);
     const [renspaDestino, setRenspaDestino] = useState('');
-    const [esTrasladoRed, setEsTrasladoRed] = useState(false);
-    const [renspaTrasladoDestino, setRenspaTrasladoDestino] = useState('');
 
     const animalSel = animales.find(a => a.id === animalSelId) || null;
     const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO' && animalSel?.en_transito === false;
@@ -156,6 +155,14 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
 
     async function guardarEventoVaca() {
         if (!animalSel || !tipoEventoInput || !fechaEvento || !campoId) return alert("Faltan datos");
+
+        if (tipoEventoInput === 'PARTO') {
+            const animalesActivos = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
+            if (datosSuscripcion && animalesActivos >= datosSuscripcion.limite_animales) {
+                return alert(`Límite alcanzado (${datosSuscripcion.limite_animales} animales). No podés registrar nuevos nacimientos. Por favor, mejorá tu plan.`);
+            }
+        }
+
         setLoading(true); let resultadoFinal = resultadoInput; let datosExtra = null; let nuevoEstado = ''; let nuevasCondiciones = [...editCondicion]; let esCastrado = editCastrado; let torosToUpdate: string[] = [];
         
         if (tipoEventoInput === 'TACTO') { 
@@ -251,7 +258,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         }
         
         if (animalSel.lote_id !== editLoteId) {
-            // ACÁ ESTÁ LA MAGIA: Busca el nombre del lote viejo antes de insertar el evento
             const lNom = lotes.find(l => l.id === editLoteId)?.nombre || 'Sin asignar'; 
             const lAnterior = lotes.find(l => l.id === animalSel.lote_id)?.nombre || 'Sin asignar';
             const desc = `Movido de: ${lAnterior} ➔ A: ${lNom}`;
@@ -266,6 +272,15 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
 
     async function confirmarBaja() { 
         if (!animalSel || !modoBaja || !campoId) return; 
+
+        // --- MAGIA PRO: Bloqueo Premium en Individual ---
+        if (modoBaja === 'VENDIDO' && esVentaRed) {
+            if (datosSuscripcion?.plan_nombre !== 'PREMIUM') {
+                return alert("⭐ La venta directa por RENSPA a otros usuarios es una función exclusiva del Plan Premium. Contactanos para mejorar tu cuenta.");
+            }
+        }
+        // -----------------------------------------------
+
         if (modoBaja === 'VENDIDO') { if (!bajaPrecio) return alert("Ingresá el precio"); if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) return alert("Faltan los kilos totales"); }
         if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); 
         if (!confirm(`¿Confirmar ${modoBaja === 'TRASLADO' ? 'traslado' : 'salida'}?`)) return; 
@@ -295,33 +310,16 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         }
   
         if (modoBaja === 'TRASLADO') {
-            if (esTrasladoRed) {
-                if (!renspaTrasladoDestino) { setLoading(false); return alert("Ingresá el RENSPA destino."); }
-                const { data, error: rpcErr } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaTrasladoDestino.trim() }).single();
-                const dest = data as any; 
+            if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
+            const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre; const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
+            const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']);
+            const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
+            let nuevaCaravana = animalSel.caravana; if (destCaravanas.includes(nuevaCaravana.toLowerCase())) { nuevaCaravana = `${nuevaCaravana} (T)`; }
 
-                if (rpcErr || !dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
-                if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
-                const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Campo Desconocido';
-                
-                const { error: errTransf } = await supabase.from('transferencias').insert({ campo_origen_id: campoId, campo_destino_id: dest.id, animales_ids: [animalSel.id], precio_total: 0, detalles: `Traslado animal ${animalSel.caravana}`, origen_nombre: nombreOrigen, estado: 'PENDIENTE' });
-                if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
-  
-                await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSel.id);
-                await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO EN RED', detalle: `Destino: ${dest.nombre}`, datos_extra: { caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: 0 });
-                if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
-            } else {
-                if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
-                const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre; const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
-                const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']);
-                const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
-                let nuevaCaravana = animalSel.caravana; if (destCaravanas.includes(nuevaCaravana.toLowerCase())) { nuevaCaravana = `${nuevaCaravana} (T)`; }
-  
-                await supabase.from('animales').update({ establecimiento_id: bajaMotivo, potrero_id: null, parcela_id: null, lote_id: null, caravana: nuevaCaravana, toros_servicio_ids: null, en_transito: false }).eq('id', animalSel.id);
-                await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, datos_extra: { caravana_origen: animalSel.caravana }, establecimiento_id: campoId });
-                await supabase.from('eventos').insert({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Origen: ${nombreOrigen}`, establecimiento_id: bajaMotivo });
-                await supabase.from('agenda').update({ establecimiento_id: bajaMotivo }).eq('animal_id', animalSel.id).eq('completado', false);
-            }
+            await supabase.from('animales').update({ establecimiento_id: bajaMotivo, potrero_id: null, parcela_id: null, lote_id: null, caravana: nuevaCaravana, toros_servicio_ids: null, en_transito: false }).eq('id', animalSel.id);
+            await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'TRASLADO_SALIDA', resultado: 'TRASLADO A OTRO CAMPO', detalle: `Destino: ${nombreDestino}`, datos_extra: { caravana_origen: animalSel.caravana }, establecimiento_id: campoId });
+            await supabase.from('eventos').insert({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Origen: ${nombreOrigen}`, establecimiento_id: bajaMotivo });
+            await supabase.from('agenda').update({ establecimiento_id: bajaMotivo }).eq('animal_id', animalSel.id).eq('completado', false);
             
         } else if (modoBaja === 'VENDIDO') {
             const precioNum = Number(bajaPrecio); let totalIngreso = 0; if (bajaModalidadVenta === 'TOTAL') totalIngreso = precioNum; else if (bajaModalidadVenta === 'KILO') totalIngreso = precioNum * Number(bajaKilosTotales);
@@ -357,7 +355,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             await supabase.from('agenda').delete().eq('animal_id', animalSel.id).eq('completado', false);
         }
         
-        setLoading(false); setBajaKilosTotales(''); setBajaGastosVenta(''); setBajaModalidadVenta('TOTAL'); setEsVentaRed(false); setRenspaDestino(''); setEsTrasladoRed(false); setRenspaTrasladoDestino('');
+        setLoading(false); setBajaKilosTotales(''); setBajaGastosVenta(''); setBajaModalidadVenta('TOTAL'); setEsVentaRed(false); setRenspaDestino(''); 
         onClose(); onUpdate();
     }
 
@@ -478,6 +476,13 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                            <Text size="sm" fw={600} c="blue.9">Vender a usuario de RodeoControl</Text>
                                            <Switch checked={esVentaRed} onChange={(e) => setEsVentaRed(e.currentTarget.checked)} color="blue" />
                                        </Group>
+
+                                       {esVentaRed && (
+                                            <Alert icon={<IconInfoCircle size="1rem" />} color="blue" variant="light">
+                                                <b>Importante:</b> El animal se pondrá "EN TRÁNSITO". Si el comprador rechaza la transferencia, volverá a tu campo con el estado genérico "ACTIVO".
+                                            </Alert>
+                                        )}
+
                                        {esVentaRed && ( <TextInput label="RENSPA del Comprador" placeholder="Ej: 01.002.0.00000/00" required value={renspaDestino} onChange={(e) => setRenspaDestino(e.target.value)} /> )}
                                        
                                        <Group grow align="flex-start">
@@ -496,13 +501,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                {modoBaja === 'MUERTO' && ( <TextInput label="Causa" placeholder="Ej: Accidente" value={bajaMotivo} onChange={(e) => setBajaMotivo(e.target.value)} mb="sm"/> )}
                                {modoBaja === 'TRASLADO' && ( 
                                    <Stack gap="xs" mb="sm">
-                                       <Group justify="space-between" p="xs" bg="blue.0" style={{ borderRadius: 8, border: '1px solid #74c0fc' }}>
-                                           <Text size="sm" fw={600} c="blue.9">Trasladar a usuario de RodeoControl</Text>
-                                           <Switch checked={esTrasladoRed} onChange={(e) => setEsTrasladoRed(e.currentTarget.checked)} color="blue" />
-                                       </Group>
-                                       {esTrasladoRed ? ( <TextInput label="RENSPA del Destino" placeholder="Ej: 01.002.0.00000/00" required value={renspaTrasladoDestino} onChange={(e) => setRenspaTrasladoDestino(e.target.value)} /> ) : (
-                                           <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
-                                       )}
+                                       <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
                                    </Stack> 
                                )}
                                <Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'} onClick={confirmarBaja} loading={loading}>Confirmar Acción</Button>

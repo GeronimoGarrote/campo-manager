@@ -9,9 +9,10 @@ interface ModalAltaAnimalProps {
     campoId: string | null;
     animales: any[];
     onSuccess: () => void;
+    datosSuscripcion: any; // <--- AGREGADO: TypeScript ahora sabe que esto existe
 }
 
-export default function ModalAltaAnimal({ opened, onClose, campoId, animales, onSuccess }: ModalAltaAnimalProps) {
+export default function ModalAltaAnimal({ opened, onClose, campoId, animales, onSuccess, datosSuscripcion }: ModalAltaAnimalProps) {
     const [loading, setLoading] = useState(false);
     const [caravana, setCaravana] = useState('');
     const [categoria, setCategoria] = useState<string | null>('Vaca');
@@ -34,6 +35,13 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
     }, [categoria]);
 
     async function guardarAnimal(cerrarModal: boolean = true) {
+        // --- CANDADO DE SUSCRIPCIÓN (LA SEGURIDAD PRIMERO) ---
+        const animalesActivos = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
+        if (datosSuscripcion && animalesActivos >= datosSuscripcion.limite_animales) {
+            return alert(`Límite alcanzado. Tu plan actual permite hasta ${datosSuscripcion.limite_animales} animales activos. Por favor, renová o mejorá tu plan para seguir cargando hacienda.`);
+        }
+        // ------------------------------------------------------
+
         if (!caravana || !campoId) return;
         if (origenModal === 'COMPRADO' && !precioCompra) return alert("Ingresá el precio de compra.");
         
