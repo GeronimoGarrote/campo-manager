@@ -177,7 +177,32 @@ export default function App() {
       if (error) alert("Error: " + error.message); 
       else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } 
   }
-  async function borrarCampo(id: string) { if (!confirm("⚠️ ¿BORRAR ESTABLECIMIENTO COMPLETO?")) return; const { error } = await supabase.from('establecimientos').delete().eq('id', id); if (error) alert("Error al borrar."); else { if (id === campoId) { const restantes = establecimientos.filter(e => e.id !== id); if (restantes.length > 0) setCampoId(restantes[0].id); else window.location.reload(); } loadCampos(); } }
+  
+  // --- FUNCIÓN BORRAR CAMPO MEJORADA ---
+  async function borrarCampo(id: string) { 
+      const confirmacion = prompt("⚠️ PELIGRO EXTREMO ⚠️\nEstás por borrar este campo y TODAS sus vacas, eventos, caja y potreros para siempre. Esta acción NO se puede deshacer.\n\nEscribí la palabra ELIMINAR en mayúsculas para confirmar:");
+      
+      if (confirmacion !== "ELIMINAR") {
+          if (confirmacion !== null) alert("Acción cancelada. La palabra de seguridad no coincide.");
+          return;
+      }
+
+      const { error } = await supabase.from('establecimientos').delete().eq('id', id); 
+      
+      if (error) {
+          console.error("Falla en Supabase:", error);
+          alert("Error real: " + error.message + "\nDetalles: " + error.details); 
+      } else { 
+          alert("Establecimiento y todos sus datos eliminados correctamente.");
+          if (id === campoId) { 
+              const restantes = establecimientos.filter(e => e.id !== id); 
+              if (restantes.length > 0) setCampoId(restantes[0].id); 
+              else window.location.reload(); 
+          } 
+          loadCampos(); 
+      } 
+  }
+
   async function editarCampo(id: string, nombreActual: string, renspaActual?: string) { const nuevoNombre = prompt("Nuevo nombre del establecimiento:", nombreActual); if (nuevoNombre === null) return; const nuevoRenspa = prompt("Número de RENSPA:", renspaActual || ''); if (nuevoRenspa === null) return; await supabase.from('establecimientos').update({ nombre: nuevoNombre, renspa: nuevoRenspa }).eq('id', id); loadCampos(); }
 
   // Handlers para abrir modales específicos

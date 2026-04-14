@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Group, Title, Badge, Button, SimpleGrid, Card, Paper, Text, ActionIcon, Tabs, MultiSelect, Table, TextInput, Select, Modal, Stack, Tooltip, ThemeIcon, Alert } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle } from '@tabler/icons-react';
+import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle, IconCalendar } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../supabase';
 
@@ -48,6 +48,12 @@ export default function Lotes({
     const [statsGraficoLote, setStatsGraficoLote] = useState({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' }); 
     const [isLoteEstimated, setIsLoteEstimated] = useState(false);
     
+    // --- ESTADOS PARA EL FILTRO DE TIEMPO DEL GRÁFICO ---
+    const [filtroTiempo, setFiltroTiempo] = useState<string>('TODOS');
+    const [fechaDesde, setFechaDesde] = useState<Date | null>(null);
+    const [fechaHasta, setFechaHasta] = useState<Date | null>(null);
+    // ----------------------------------------------------
+
     const [loteEvFecha, setLoteEvFecha] = useState<Date | null>(new Date());
     const [loteEvTipo, setLoteEvTipo] = useState<string | null>('RACIÓN');
     const [loteEvDetalle, setLoteEvDetalle] = useState('');
@@ -85,7 +91,25 @@ export default function Lotes({
         fetchLotes(); setLoteSel((prev: any) => prev ? {...prev, nombre: nuevoNombre} : prev);
     }
 
-    async function generarGraficoLote(idLote: string) {
+    // --- FUNCIÓN DEL FILTRO DE TIEMPO ---
+    const cambiarFiltroTiempo = (val: string) => {
+        setFiltroTiempo(val);
+        const hoy = new Date();
+        let desde = null;
+        let hasta = null;
+        
+        if (val === '30D') { desde = new Date(hoy.getTime() - 30*24*60*60*1000); hasta = hoy; }
+        if (val === '6M') { desde = new Date(hoy.getTime() - 180*24*60*60*1000); hasta = hoy; }
+        
+        if (val !== 'PERSONALIZADO') {
+            setFechaDesde(desde);
+            setFechaHasta(hasta);
+            if (loteSel) generarGraficoLote(loteSel.id, desde, hasta);
+        }
+    };
+
+    // --- GRÁFICO ACTUALIZADO CON RANGO DE FECHAS ---
+    async function generarGraficoLote(idLote: string, fDesde: Date | null = fechaDesde, fHasta: Date | null = fechaHasta) {
         setLoadingGraficoLote(true);
         const animalesLote = haciendaActiva.filter((a: any) => a.lote_id === idLote);
         
@@ -102,12 +126,28 @@ export default function Lotes({
             return;
         }
 
-        const fechasUnicas = [...new Set(pesajes.map(p => p.fecha_evento.split('T')[0]))].sort();
+        // Filtramos en memoria según el rango de fechas
+        let pesajesFiltrados = pesajes;
+        if (fDesde) {
+            const desdeIso = fDesde.toISOString().split('T')[0];
+            pesajesFiltrados = pesajesFiltrados.filter(p => p.fecha_evento >= desdeIso);
+        }
+        if (fHasta) {
+            const hastaIso = fHasta.toISOString().split('T')[0];
+            pesajesFiltrados = pesajesFiltrados.filter(p => p.fecha_evento <= hastaIso + 'T23:59:59');
+        }
+
+        if (pesajesFiltrados.length === 0) {
+            setDatosGraficoLote([]); setLineasAnimalesLote([]); setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' }); setIsLoteEstimated(false); setLoadingGraficoLote(false);
+            return;
+        }
+
+        const fechasUnicas = [...new Set(pesajesFiltrados.map(p => p.fecha_evento.split('T')[0]))].sort();
         const caravanasPresentes = new Set<string>();
         const ultimoPesoConocido: Record<string, number> = {};
 
         const dataGrafico = fechasUnicas.map((fechaStr: any) => {
-            const pesajesDelDia = pesajes.filter(p => p.fecha_evento.startsWith(fechaStr));
+            const pesajesDelDia = pesajesFiltrados.filter(p => p.fecha_evento.startsWith(fechaStr));
             const objParaElGrafico: any = { fecha: formatDate(fechaStr) };
 
             pesajesDelDia.forEach(p => {
@@ -133,19 +173,21 @@ export default function Lotes({
             const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
             const fechaUltimoPesaje = new Date(fechasUnicas[fechasUnicas.length - 1] + 'T12:00:00');
             
-            let targetDate = new Date(hoy);
-            let diasDesdeUltimo = Math.floor((hoy.getTime() - fechaUltimoPesaje.getTime()) / (1000 * 60 * 60 * 24));
+            let targetDate = fHasta || new Date(hoy);
+            if (fHasta && fHasta < hoy) targetDate = fHasta;
+
+            let diasDesdeUltimo = Math.floor((targetDate.getTime() - fechaUltimoPesaje.getTime()) / (1000 * 60 * 60 * 24));
             if (isNaN(diasDesdeUltimo)) diasDesdeUltimo = 0;
 
-            let labelProyeccion = 'Hoy (Est.)';
+            let labelProyeccion = fHasta && fHasta < hoy ? formatDate(targetDate.toISOString().split('T')[0]) + ' (Est.)' : 'Hoy (Est.)';
 
-            if (diasDesdeUltimo < 2) {
+            if (!fHasta && diasDesdeUltimo < 2) {
                 targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000);
                 labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy.)';
             }
 
             const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date}> = {};
-            pesajes.forEach(p => {
+            pesajesFiltrados.forEach(p => {
                 const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00');
                 const w = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
                 const c = (p.animales as any)?.caravana || 'Desc';
@@ -173,7 +215,7 @@ export default function Lotes({
                 sumEst += pesoProyectado; countEst++;
             });
 
-            if (countEst > 0) {
+            if (countEst > 0 && diasDesdeUltimo >= 2) {
                 const promedioEstTarget = Math.round(sumEst / countEst);
                 ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
                 dataGrafico.push({
@@ -222,7 +264,6 @@ export default function Lotes({
         setLoading(true);
         const fechaStr = new Date().toISOString();
         
-        // ACÁ ESTÁ EL CAMBIO: Primero armamos los eventos leyendo de qué lote vienen
         const inserts = agregarAlLoteIds.map(id => {
             const animalObj = animales.find((a: any) => a.id === id);
             const loteAnteriorId = animalObj?.lote_id;
@@ -243,7 +284,6 @@ export default function Lotes({
             };
         });
         
-        // Ahora sí actualizamos la visual de React
         animales.forEach((a: any) => {
             if (agregarAlLoteIds.includes(a.id)) a.lote_id = loteSel.id;
         });
@@ -276,11 +316,13 @@ export default function Lotes({
     async function abrirFichaLote(lote: any) {
         setLoteSel(lote); setEventosLoteFicha([]); setDatosGraficoLote([]); setLineasAnimalesLote([]); setAgregarAlLoteIds([]); setIsLoteEstimated(false);
         setStatsGraficoLote({ inicio: 0, actual: 0, ganancia: 0, dias: 0, adpv: '0' }); 
+        
+        setFiltroTiempo('TODOS'); setFechaDesde(null); setFechaHasta(null);
 
         const { data: evData } = await supabase.from('lotes_eventos').select('*').eq('lote_id', lote.id).order('fecha', { ascending: false });
         if (evData) setEventosLoteFicha(evData);
         
-        generarGraficoLote(lote.id);
+        generarGraficoLote(lote.id, null, null);
     }
 
     if (loteSel) {
@@ -296,6 +338,8 @@ export default function Lotes({
                         <ActionIcon variant="subtle" color="grape" onClick={() => renombrarLoteGrupo(loteSel.id, loteSel.nombre)}>
                             <IconEdit size={20}/>
                         </ActionIcon>
+                        {/* ACÁ ESTÁ LA FECHA DE CREACIÓN */}
+                        <Badge variant="light" color="gray" leftSection={<IconCalendar size={12}/>} ml="sm">Creado: {formatDate(loteSel.created_at)}</Badge>
                     </Group>
                     <Button color="red" variant="subtle" onClick={() => borrarLoteGrupo(loteSel.id)} leftSection={<IconTrash size={16}/>}>Eliminar Lote</Button>
                 </Group>
@@ -373,8 +417,31 @@ export default function Lotes({
                         </Tabs.Panel>
 
                         <Tabs.Panel value="rendimiento">
-                            <Group justify="flex-end" mt="sm" mb="md">
-                                <Tooltip label="Línea morada continua: Peso promedio real. Línea morada punteada: Proyección al día de hoy según el ritmo de engorde (ADPV). Líneas grises: Evolución individual de cada animal." multiline w={250} withArrow position="left" zIndex={3000}>
+                            {/* --- ACÁ ESTÁ EL NUEVO FILTRO DE TIEMPO --- */}
+                            <Paper withBorder p="sm" bg="gray.0" mb="md" radius="md">
+                                <Group align="flex-end">
+                                    <Select 
+                                        label="Periodo a analizar" 
+                                        data={[
+                                            {value: 'TODOS', label: 'Histórico Completo'}, 
+                                            {value: '30D', label: 'Últimos 30 Días'}, 
+                                            {value: '6M', label: 'Últimos 6 Meses'}, 
+                                            {value: 'PERSONALIZADO', label: 'Rango Personalizado'}
+                                        ]} 
+                                        value={filtroTiempo} 
+                                        onChange={(v) => cambiarFiltroTiempo(v || 'TODOS')} 
+                                    />
+                                    {filtroTiempo === 'PERSONALIZADO' && (
+                                        <>
+                                            <TextInput label="Desde" type="date" value={getLocalDateForInput(fechaDesde)} onChange={(e) => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; setFechaDesde(d); generarGraficoLote(loteSel.id, d, fechaHasta); }} />
+                                            <TextInput label="Hasta" type="date" value={getLocalDateForInput(fechaHasta)} onChange={(e) => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; setFechaHasta(d); generarGraficoLote(loteSel.id, fechaDesde, d); }} />
+                                        </>
+                                    )}
+                                </Group>
+                            </Paper>
+
+                            <Group justify="flex-end" mb="md">
+                                <Tooltip label="Línea morada continua: Peso promedio real. Línea morada punteada: Proyección según el ritmo de engorde (ADPV). Líneas grises: Evolución individual de cada animal." multiline w={250} withArrow position="left" zIndex={3000}>
                                     <Badge variant="light" color="gray" leftSection={<IconInfoCircle size={14}/>} style={{cursor: 'help'}}>¿Cómo leer este gráfico?</Badge>
                                 </Tooltip>
                             </Group>
@@ -398,7 +465,7 @@ export default function Lotes({
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
-                                    <SimpleGrid cols={{ base: 1, sm: 3 }} mt="xl">
+                                    <SimpleGrid cols={{ base: 2, sm: 4 }} mt="xl">
                                         <Paper withBorder p="md" ta="center" radius="md">
                                             <Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Inicial</Text>
                                             <Text fw={700} size="xl">{statsGraficoLote.inicio} kg</Text>
@@ -407,11 +474,16 @@ export default function Lotes({
                                             <Text size="sm" c="dimmed" fw={700} tt="uppercase">Ganancia Promedio</Text>
                                             <Text fw={700} size="xl" c={statsGraficoLote.ganancia > 0 ? 'teal' : 'red'}>{statsGraficoLote.ganancia > 0 ? '+' : ''}{statsGraficoLote.ganancia} kg</Text>
                                         </Paper>
+                                        {/* ACÁ ESTÁ EL NUEVO CUADRO DE ADPV */}
+                                        <Paper withBorder p="md" ta="center" radius="md">
+                                            <Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text>
+                                            <Text fw={700} size="xl" c="blue">{statsGraficoLote.adpv} kg/día</Text>
+                                        </Paper>
                                         <Paper withBorder p="md" ta="center" radius="md">
                                             <Group justify="center" gap={6}>
                                                 <Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Actual</Text>
                                                 {isLoteEstimated && (
-                                                    <Tooltip label="Al menos un animal no tiene pesajes recientes. El gráfico proyecta matemáticamente su peso (línea punteada) hasta el día de hoy." multiline w={250} withArrow zIndex={3000}>
+                                                    <Tooltip label="Al menos un animal no tiene pesajes recientes. El gráfico proyecta matemáticamente su peso (línea punteada) hasta el final del periodo." multiline w={250} withArrow zIndex={3000}>
                                                         <ThemeIcon size="sm" variant="light" color="grape" style={{ cursor: 'help' }} radius="xl"><IconInfoCircle size={14} /></ThemeIcon>
                                                     </Tooltip>
                                                 )}
@@ -420,7 +492,7 @@ export default function Lotes({
                                         </Paper>
                                     </SimpleGrid>
                                 </>
-                            ) : (<Alert color="grape" title="Faltan Datos" mt="md" icon={<IconInfoCircle/>}>Para ver la curva de rendimiento, los animales de este lote necesitan tener registros de pesaje (PESAJE) en sus fichas individuales.</Alert>)}
+                            ) : (<Alert color="grape" title="Faltan Datos" mt="md" icon={<IconInfoCircle/>}>No hay registros de pesaje para este lote en el rango de fechas seleccionado.</Alert>)}
                         </Tabs.Panel>
                     </Tabs>
                 </Paper>

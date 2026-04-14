@@ -25,14 +25,12 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [activeTabVaca, setActiveTabVaca] = useState<string | null>('historia'); 
     const [fichaAnterior, setFichaAnterior] = useState<any>(null); 
     
-    // Estados Ficha General
     const [eventosFicha, setEventosFicha] = useState<any[]>([]);
     const [ultimoPeso, setUltimoPeso] = useState<string>('Sin datos');
     const [madreCaravana, setMadreCaravana] = useState<string>(''); 
     const [hijos, setHijos] = useState<{ id: string, caravana: string, sexo: string, estado: string, ajeno?: boolean }[]>([]); 
     const [nombresTorosCartel, setNombresTorosCartel] = useState<string | null>(null);
 
-    // Estados Evento Nuevo
     const [fechaEvento, setFechaEvento] = useState<Date | null>(new Date());
     const [tipoEventoInput, setTipoEventoInput] = useState<string | null>('PESAJE');
     const [resultadoInput, setResultadoInput] = useState('');
@@ -47,7 +45,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [pesoNacimiento, setPesoNacimiento] = useState(''); 
     const [adpvCalculado, setAdpvCalculado] = useState<string | null>(null);
 
-    // Estados Edición
     const [editCaravana, setEditCaravana] = useState('');
     const [editCategoria, setEditCategoria] = useState<string | null>('');
     const [editSexo, setEditSexo] = useState<string | null>('');
@@ -62,7 +59,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [editParcelaId, setEditParcelaId] = useState<string | null>(null); 
     const [editLoteId, setEditLoteId] = useState<string | null>(null);
 
-    // Estados Baja
     const [modoBaja, setModoBaja] = useState<string | null>(null);
     const [bajaMotivo, setBajaMotivo] = useState('');
     const [bajaModalidadVenta, setBajaModalidadVenta] = useState<string>('TOTAL');
@@ -75,7 +71,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const animalSel = animales.find(a => a.id === animalSelId) || null;
     const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO' && animalSel?.en_transito === false;
 
-    // Utilidades
     const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
     const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
     const opcionesGestacion = [ { value: '0.5', label: '15 días' }, { value: '1', label: '1 mes' }, { value: '2', label: '2 meses' }, { value: '3', label: '3 meses' }, { value: '4', label: '4 meses' }, { value: '5', label: '5 meses' }, { value: '6', label: '6 meses' }, { value: '7', label: '7 meses' }, { value: '8', label: '8 meses' }, { value: '9', label: '9 meses (A parir)' } ];
@@ -231,6 +226,11 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         }
     
         const { error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: datosExtra, costo: Number(costoEvento), establecimiento_id: campoId }]);
+        
+        if (Number(costoEvento) > 0) {
+            await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaEvento.toISOString().split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Sanidad/Manejo)', detalle: `Costo ${tipoEventoInput} - Caravana ${animalSel.caravana}`, monto: Number(costoEvento) });
+        }
+
         const stringCondicion = nuevasCondiciones.length > 0 ? nuevasCondiciones.join(', ') : 'SANA'; const updates: any = { condicion: stringCondicion, castrado: esCastrado }; 
         if (nuevoEstado) updates.estado = nuevoEstado; if (tipoEventoInput === 'SERVICIO' && tipoServicio === 'TORO') updates.toros_servicio_ids = torosIdsInput; if (tipoEventoInput === 'PARTO') updates.toros_servicio_ids = null; 
         await supabase.from('animales').update(updates).eq('id', animalSel.id);
@@ -273,13 +273,11 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     async function confirmarBaja() { 
         if (!animalSel || !modoBaja || !campoId) return; 
 
-        // --- MAGIA PRO: Bloqueo Premium en Individual ---
         if (modoBaja === 'VENDIDO' && esVentaRed) {
             if (datosSuscripcion?.plan_nombre !== 'PREMIUM') {
                 return alert("⭐ La venta directa por RENSPA a otros usuarios es una función exclusiva del Plan Premium. Contactanos para mejorar tu cuenta.");
             }
         }
-        // -----------------------------------------------
 
         if (modoBaja === 'VENDIDO') { if (!bajaPrecio) return alert("Ingresá el precio"); if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) return alert("Faltan los kilos totales"); }
         if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); 
@@ -343,6 +341,11 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             } else {
                 if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
                 await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso });
+                
+                if (gastosTotales > 0) {
+                    await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Gastos de venta animal ${animalSel.caravana}`, monto: gastosTotales });
+                }
+
                 await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${bajaMotivo || '-'} ($${totalIngreso})`, toros_servicio_ids: null, en_transito: false }).eq('id', animalSel.id);
                 await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `Destino: ${bajaMotivo} - Total: $${totalIngreso}`, datos_extra: { destino: bajaMotivo, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
                 await supabase.from('agenda').delete().eq('animal_id', animalSel.id).eq('completado', false);
@@ -367,10 +370,21 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         onClose(); onUpdate(); 
     }
 
+    // --- FUNCIÓN DE BORRADO MEJORADA CON CARTEL DE ADVERTENCIA ---
     async function borrarAnimalDefinitivo() {
-        if (!animalSel || !confirm("⚠️ ¿BORRAR DEFINITIVAMENTE?")) return;
+        if (!animalSel) return;
+        const msg = "⚠️ ¿BORRAR DEFINITIVAMENTE?\n\nEl animal se ocultará de la lista de bajas para siempre.\n\nIMPORTANTE: Sus eventos pasados (pesajes, vacunas, partos) NO se borrarán para mantener la integridad de las estadísticas y los balances económicos del campo.\n\n¿Desea continuar?";
+        if (!confirm(msg)) return;
+
         await supabase.from('animales').update({ estado: 'ELIMINADO' }).eq('id', animalSel.id);
-        await supabase.from('eventos').insert({ animal_id: animalSel.id, fecha_evento: new Date().toISOString(), tipo: 'BORRADO', resultado: 'ELIMINADO DEL SISTEMA', detalle: 'Borrado manual por seguridad', establecimiento_id: campoId });
+        await supabase.from('eventos').insert({ 
+            animal_id: animalSel.id, 
+            fecha_evento: new Date().toISOString(), 
+            tipo: 'BORRADO', 
+            resultado: 'ELIMINADO DEL SISTEMA', 
+            detalle: 'Ocultado por el usuario (Soft Delete)', 
+            establecimiento_id: campoId 
+        });
         onClose(); onUpdate();
     }
 

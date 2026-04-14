@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem } from '@mantine/core';
 import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin } from '@tabler/icons-react';
+import { supabase } from '../supabase'; // ¡Agregado el import de supabase!
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 
@@ -123,7 +124,23 @@ export default function Hacienda({
         return <Badge size="sm" variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{parcNom ? `${pNom} (${parcNom})` : pNom}</Badge>;
     }
 
-    async function toggleDestacado(id: string, estadoActual: boolean) { setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: !estadoActual } : a)); }
+    // --- FUNCIÓN ARREGLADA ---
+    async function toggleDestacado(id: string, estadoActual: boolean) { 
+        // 1. Actualiza visualmente rápido (Optimistic UI)
+        setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: !estadoActual } : a)); 
+        
+        // 2. Guarda el cambio en la base de datos de verdad
+        const { error } = await supabase
+            .from('animales')
+            .update({ destacado: !estadoActual })
+            .eq('id', id);
+
+        if (error) {
+            console.error("Error guardando destacado:", error);
+            // Si falla, revertimos visualmente
+            setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: estadoActual } : a));
+        }
+    }
 
     const exportarAExcel = () => {
         if (animalesFiltrados.length === 0) return alert("No hay datos para exportar");

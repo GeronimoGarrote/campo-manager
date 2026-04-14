@@ -30,7 +30,7 @@ export default function Actividad({ eventosGlobales }: any) {
             </Group>
             <Paper radius="md" withBorder>
                 <Table>
-                    <Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th><Table.Th>Costo</Table.Th></Table.Tr></Table.Thead>
+                    <Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Ref</Table.Th><Table.Th>Evento</Table.Th><Table.Th>Detalle</Table.Th></Table.Tr></Table.Thead>
                     <Table.Tbody>
                         {eventosFiltrados.map((ev: any) => (
                             <Table.Tr key={ev.id}>
@@ -49,7 +49,6 @@ export default function Actividad({ eventosGlobales }: any) {
                                     {/* Si es cambio de lote, ocultamos la etiqueta redundante "Grupo: X" */}
                                     {ev.tipo !== 'CAMBIO_LOTE' && ev.datos_extra?.lote_destino && <Text size="xs" c="dimmed">Grupo: {ev.datos_extra.lote_destino}</Text>}
                                 </Table.Td>
-                                <Table.Td><Text size="sm" c="dimmed">${ev.costo || 0}</Text></Table.Td>
                             </Table.Tr>
                         ))}
                     </Table.Tbody>
