@@ -11,7 +11,7 @@ interface ModalTransferenciaProps {
     animales: any[];
     potreros: any[];
     onSuccess: () => void;
-    datosSuscripcion: any; // <--- AGREGADO
+    datosSuscripcion: any; 
 }
 
 export default function ModalTransferencia({ opened, onClose, transfActiva, campoId, animales, potreros, onSuccess, datosSuscripcion }: ModalTransferenciaProps) {

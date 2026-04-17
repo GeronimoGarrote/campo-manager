@@ -11,7 +11,6 @@ export default function Actividad({ eventosGlobales }: any) {
     const eventosFiltrados = eventosGlobales.filter((ev: any) => {
         const search = busqueda.toLowerCase();
         
-        // ACÁ ESTÁ EL FIX DEL BUSCADOR: Ahora lee adentro de detalle y resultado también
         const coincideTexto = 
             (ev.animales?.caravana && ev.animales.caravana.toLowerCase().includes(search)) || 
             ev.tipo.toLowerCase().includes(search) ||
@@ -40,7 +39,6 @@ export default function Actividad({ eventosGlobales }: any) {
                                 <Table.Td>
                                     <Text size="sm" fw={500}>{ev.resultado}</Text>
                                     
-                                    {/* Lo puse en fw={600} (semi-negrita) para que resalte más la flechita */}
                                     {ev.detalle && <Text size="xs" c="dimmed" fw={600}>{ev.detalle}</Text>}
                                     
                                     {ev.datos_extra?.toros_caravanas && <Text size="xs" c="dimmed">Toro/s: {ev.datos_extra.toros_caravanas}</Text>}

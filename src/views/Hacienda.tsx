@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem } from '@mantine/core';
 import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin } from '@tabler/icons-react';
-import { supabase } from '../supabase'; // ¡Agregado el import de supabase!
+import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 
@@ -90,8 +90,6 @@ export default function Hacienda({
                 if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
                 if (animal.castrado) tagsDelAnimal.push('CAPADO');
                 if (animal.destacado) tagsDelAnimal.push('DESTACADO');
-                
-                // Mágia para que lo encuentre el filtro
                 if (animal.en_transito) tagsDelAnimal.push('EN TRÁNSITO'); 
 
                 matchAtributos = filterAtributos.every((filtro: string) => tagsDelAnimal.includes(filtro));
@@ -124,12 +122,9 @@ export default function Hacienda({
         return <Badge size="sm" variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{parcNom ? `${pNom} (${parcNom})` : pNom}</Badge>;
     }
 
-    // --- FUNCIÓN ARREGLADA ---
     async function toggleDestacado(id: string, estadoActual: boolean) { 
-        // 1. Actualiza visualmente rápido (Optimistic UI)
         setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: !estadoActual } : a)); 
         
-        // 2. Guarda el cambio en la base de datos de verdad
         const { error } = await supabase
             .from('animales')
             .update({ destacado: !estadoActual })
@@ -137,7 +132,6 @@ export default function Hacienda({
 
         if (error) {
             console.error("Error guardando destacado:", error);
-            // Si falla, revertimos visualmente
             setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: estadoActual } : a));
         }
     }
@@ -167,7 +161,6 @@ export default function Hacienda({
                     <Group grow style={{ flex: 1 }}>
                         <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                         <Select label="Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                        {/* Agregado EN TRÁNSITO al select múltiple */}
                         <MultiSelect label="Estado" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
                         <Select label="Lote" placeholder="Todos" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
                     </Group>
@@ -192,8 +185,11 @@ export default function Hacienda({
                                 <Table.Th>Categoría</Table.Th>
                                 <Table.Th>Estado / Condición</Table.Th>
                                 <Table.Th>Anotación</Table.Th>
-                                <Table.Th>Ubicación</Table.Th>
-                                <Table.Th>Lote</Table.Th>
+                                
+                                {/* Ocultamos Ubicación y Lote si estamos en bajas */}
+                                {activeSection === 'hacienda' && <Table.Th>Ubicación</Table.Th>}
+                                {activeSection === 'hacienda' && <Table.Th>Lote</Table.Th>}
+                                
                                 {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
                                 <Table.Th w={50}></Table.Th>
                             </Table.Tr>
@@ -208,7 +204,6 @@ export default function Hacienda({
                                             <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
                                         ) : (
                                             <Group gap="xs">
-                                                {/* ACÁ ESTÁ LA MAGIA VISUAL: Si está en tránsito, oculta lo demás y muestra el marrón */}
                                                 {vaca.en_transito ? (
                                                     <Badge color="#795548">EN TRÁNSITO</Badge>
                                                 ) : (
@@ -223,9 +218,26 @@ export default function Hacienda({
                                         )}
                                     </Table.Td>
                                     <Table.Td style={{ maxWidth: 150 }}><Tooltip label={vaca.detalles} disabled={!vaca.detalles} multiline w={200} withArrow zIndex={3000}><Text size="sm" c="dimmed" truncate="end">{vaca.detalles || '-'}</Text></Tooltip></Table.Td>
-                                    <Table.Td>{getUbicacionCompleta(vaca.potrero_id, vaca.parcela_id)}</Table.Td>
-                                    <Table.Td>{vaca.lote_id ? <Badge variant="outline" color="grape" leftSection={<IconTag size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
-                                    {activeSection === 'bajas' && <Table.Td>{vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>}
+                                    
+                                    {/* Ocultamos los datos de Ubicación y Lote si estamos en bajas */}
+                                    {activeSection === 'hacienda' && (
+                                        <>
+                                            <Table.Td>{getUbicacionCompleta(vaca.potrero_id, vaca.parcela_id)}</Table.Td>
+                                            <Table.Td>{vaca.lote_id ? <Badge variant="outline" color="grape" leftSection={<IconTag size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
+                                        </>
+                                    )}
+
+                                    {activeSection === 'bajas' && (
+                                        <Table.Td>
+                                            {vaca.estado === 'VENDIDO' ? (
+                                                <Text size="xs" c="dimmed">-</Text>
+                                            ) : vaca.detalle_baja ? (
+                                                <Text size="sm" fw={500}>{vaca.detalle_baja}</Text>
+                                            ) : (
+                                                <Text size="xs" c="dimmed">-</Text>
+                                            )}
+                                        </Table.Td>
+                                    )}
                                     <Table.Td onClick={(e) => { e.stopPropagation(); toggleDestacado(vaca.id, !!vaca.destacado); }} align="right"><ActionIcon variant="subtle" color="yellow">{vaca.destacado ? <IconStarFilled size={18} /> : <IconStar size={18} />}</ActionIcon></Table.Td>
                                 </Table.Tr>
                             ))}

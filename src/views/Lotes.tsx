@@ -10,17 +10,60 @@ const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; cons
 
 const CustomTooltipMulti = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+        // payload[0].payload contiene toda la información del punto actual en el eje X
+        const data = payload[0].payload;
+        const meta = data._meta || {};
+
+        // Filtramos las claves para quedarnos estrictamente con las caravanas (ignoramos los promedios y metadatos)
+        const animalKeys = Object.keys(data).filter(
+            k => k !== 'fecha' && k !== '_meta' && k !== 'Promedio Lote' && k !== 'Promedio Estimado'
+        );
+
+        // Calculamos la sumatoria real de kilos y la cantidad de animales en esta fecha específica
+        const pesoTotal = animalKeys.reduce((acc, curr) => acc + (Number(data[curr]) || 0), 0);
+        const cantAnimales = animalKeys.length;
+
+        const promedioLote = data['Promedio Lote'];
+        const promedioEst = data['Promedio Estimado'];
+
         return (
-            <div style={{ backgroundColor: 'white', padding: '10px', border: '1px solid #ccc', borderRadius: '5px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-                <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '4px', marginBottom: '4px' }}>{label}</p>
-                {payload.map((entry: any, index: number) => {
-                    const isPromedio = entry.name === 'Promedio Lote' || entry.name === 'Promedio Estimado';
-                    return (
-                        <p key={index} style={{ margin: 0, color: entry.color, fontWeight: isPromedio ? 'bold' : 'normal', fontSize: isPromedio ? '14px' : '12px' }}>
-                            {entry.name}: {entry.value} kg
+            <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', minWidth: '220px' }}>
+                <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '8px', fontSize: '14px', color: '#343a40' }}>
+                    Fecha: {label}
+                </p>
+                
+                {cantAnimales > 0 && (
+                    <div style={{ marginBottom: '10px' }}>
+                        <p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados: <b>{cantAnimales}</b></p>
+                        <p style={{ margin: 0, fontSize: '13px', color: '#495057' }}>Sumatoria (Peso Total): <b>{pesoTotal} kg</b></p>
+                    </div>
+                )}
+
+                {promedioLote && (
+                    <div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px' }}>
+                        <p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>
+                            Promedio Lote: {promedioLote} kg
                         </p>
-                    )
-                })}
+                        {meta['Promedio Lote'] && (
+                            <p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>
+                                Rendimiento: <span style={{color: meta['Promedio Lote'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Lote'].diff > 0 ? '+' : ''}{meta['Promedio Lote'].diff} kg</span> ({meta['Promedio Lote'].adpv} kg/día)
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {promedioEst && (
+                    <div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px', marginTop: '8px' }}>
+                        <p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>
+                            Promedio Estimado: {promedioEst} kg
+                        </p>
+                        {meta['Promedio Estimado'] && (
+                            <p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>
+                                Rendimiento: <span style={{color: meta['Promedio Estimado'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Estimado'].diff > 0 ? '+' : ''}{meta['Promedio Estimado'].diff} kg</span> ({meta['Promedio Estimado'].adpv} kg/día)
+                            </p>
+                        )}
+                    </div>
+                )}
             </div>
         );
     }
@@ -91,7 +134,6 @@ export default function Lotes({
         fetchLotes(); setLoteSel((prev: any) => prev ? {...prev, nombre: nuevoNombre} : prev);
     }
 
-    // --- FUNCIÓN DEL FILTRO DE TIEMPO ---
     const cambiarFiltroTiempo = (val: string) => {
         setFiltroTiempo(val);
         const hoy = new Date();
@@ -108,7 +150,6 @@ export default function Lotes({
         }
     };
 
-    // --- GRÁFICO ACTUALIZADO CON RANGO DE FECHAS ---
     async function generarGraficoLote(idLote: string, fDesde: Date | null = fechaDesde, fHasta: Date | null = fechaHasta) {
         setLoadingGraficoLote(true);
         const animalesLote = haciendaActiva.filter((a: any) => a.lote_id === idLote);
@@ -126,7 +167,6 @@ export default function Lotes({
             return;
         }
 
-        // Filtramos en memoria según el rango de fechas
         let pesajesFiltrados = pesajes;
         if (fDesde) {
             const desdeIso = fDesde.toISOString().split('T')[0];
@@ -145,10 +185,11 @@ export default function Lotes({
         const fechasUnicas = [...new Set(pesajesFiltrados.map(p => p.fecha_evento.split('T')[0]))].sort();
         const caravanasPresentes = new Set<string>();
         const ultimoPesoConocido: Record<string, number> = {};
+        const lastKnownForMeta: Record<string, { weight: number, date: Date }> = {}; 
 
         const dataGrafico = fechasUnicas.map((fechaStr: any) => {
             const pesajesDelDia = pesajesFiltrados.filter(p => p.fecha_evento.startsWith(fechaStr));
-            const objParaElGrafico: any = { fecha: formatDate(fechaStr) };
+            const objParaElGrafico: any = { fecha: formatDate(fechaStr), _meta: {} };
 
             pesajesDelDia.forEach(p => {
                 const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, ''));
@@ -165,6 +206,26 @@ export default function Lotes({
                 const sumaTotal = pesosActivos.reduce((a, b) => a + b, 0);
                 objParaElGrafico['Promedio Lote'] = Math.round(sumaTotal / pesosActivos.length);
             }
+
+            // Calculamos la diferencia y el ADPV con el punto anterior para el promedio
+            const currentDate = new Date(fechaStr + 'T12:00:00');
+            Object.keys(objParaElGrafico).forEach(key => {
+                if (key === 'fecha' || key === '_meta') return;
+                const currentWeight = objParaElGrafico[key];
+
+                if (lastKnownForMeta[key]) {
+                    const diffDays = (currentDate.getTime() - lastKnownForMeta[key].date.getTime()) / (1000 * 60 * 60 * 24);
+                    if (diffDays > 0) {
+                        const diffWeight = currentWeight - lastKnownForMeta[key].weight;
+                        objParaElGrafico._meta[key] = {
+                            diff: diffWeight,
+                            adpv: (diffWeight / diffDays).toFixed(3)
+                        };
+                    }
+                }
+                lastKnownForMeta[key] = { weight: currentWeight, date: currentDate };
+            });
+
             return objParaElGrafico;
         });
 
@@ -218,9 +279,16 @@ export default function Lotes({
             if (countEst > 0 && diasDesdeUltimo >= 2) {
                 const promedioEstTarget = Math.round(sumEst / countEst);
                 ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
+
+                const diffWeight = promedioEstTarget - ultimoDiaReal['Promedio Lote'];
+                const adpv = diasDesdeUltimo > 0 ? (diffWeight / diasDesdeUltimo).toFixed(3) : '0';
+
                 dataGrafico.push({
                     fecha: labelProyeccion,
-                    'Promedio Estimado': promedioEstTarget
+                    'Promedio Estimado': promedioEstTarget,
+                    _meta: {
+                        'Promedio Estimado': { diff: diffWeight, adpv }
+                    }
                 });
             }
 
@@ -338,7 +406,6 @@ export default function Lotes({
                         <ActionIcon variant="subtle" color="grape" onClick={() => renombrarLoteGrupo(loteSel.id, loteSel.nombre)}>
                             <IconEdit size={20}/>
                         </ActionIcon>
-                        {/* ACÁ ESTÁ LA FECHA DE CREACIÓN */}
                         <Badge variant="light" color="gray" leftSection={<IconCalendar size={12}/>} ml="sm">Creado: {formatDate(loteSel.created_at)}</Badge>
                     </Group>
                     <Button color="red" variant="subtle" onClick={() => borrarLoteGrupo(loteSel.id)} leftSection={<IconTrash size={16}/>}>Eliminar Lote</Button>
@@ -417,7 +484,6 @@ export default function Lotes({
                         </Tabs.Panel>
 
                         <Tabs.Panel value="rendimiento">
-                            {/* --- ACÁ ESTÁ EL NUEVO FILTRO DE TIEMPO --- */}
                             <Paper withBorder p="sm" bg="gray.0" mb="md" radius="md">
                                 <Group align="flex-end">
                                     <Select 
@@ -474,7 +540,6 @@ export default function Lotes({
                                             <Text size="sm" c="dimmed" fw={700} tt="uppercase">Ganancia Promedio</Text>
                                             <Text fw={700} size="xl" c={statsGraficoLote.ganancia > 0 ? 'teal' : 'red'}>{statsGraficoLote.ganancia > 0 ? '+' : ''}{statsGraficoLote.ganancia} kg</Text>
                                         </Paper>
-                                        {/* ACÁ ESTÁ EL NUEVO CUADRO DE ADPV */}
                                         <Paper withBorder p="md" ta="center" radius="md">
                                             <Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text>
                                             <Text fw={700} size="xl" c="blue">{statsGraficoLote.adpv} kg/día</Text>
