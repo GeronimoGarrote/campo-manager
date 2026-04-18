@@ -3,7 +3,21 @@ import { Title, Grid, SimpleGrid, Card, Group, RingProgress, Center, Text, Theme
 import { IconBabyCarriage, IconHeartbeat, IconCalendarEvent, IconCheck, IconActivity, IconChartDots, IconMapPin, IconCurrencyDollar, IconSkull } from '@tabler/icons-react';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
-const diasDiferencia = (fechaFuturaStr: string) => { const hoy = new Date(); hoy.setHours(0,0,0,0); const fechaParto = new Date(fechaFuturaStr); fechaParto.setHours(0,0,0,0); const diffTime = fechaParto.getTime() - hoy.getTime(); return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); };
+
+const diasDiferencia = (fechaFuturaStr: string) => { 
+    const hoy = new Date(); hoy.setHours(0,0,0,0); 
+    const fechaParto = new Date(fechaFuturaStr + 'T12:00:00'); 
+    fechaParto.setHours(0,0,0,0); 
+    const diffTime = fechaParto.getTime() - hoy.getTime(); 
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+};
+
+// Suma 283 días exactos a la fecha de servicio para calcular el parto
+const calcularFechaParto = (fechaServicio: string) => {
+    const d = new Date(fechaServicio + 'T12:00:00');
+    d.setDate(d.getDate() + 283);
+    return d.toISOString().split('T')[0];
+};
 
 const getIconoEvento = (tipo: string) => {
     switch(tipo) {
@@ -36,7 +50,7 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
     const totalVientres = stats.vacas + stats.vaquillonas; 
     const prenadaPct = totalVientres > 0 ? Math.round((stats.prenadas / totalVientres) * 100) : 0;
 
-    // --- MAGIA NUEVA: Ventana de 7 días ---
+    // --- MAGIA NUEVA: Ventana de 7 días y Partos Dinámicos ---
     const baseDate = new Date();
     const offset = baseDate.getTimezoneOffset() * 60 * 1000;
     const hoyDate = new Date(baseDate.getTime() - offset);
@@ -45,13 +59,27 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
     const date7 = new Date(hoyDate.getTime() + 7 * 24 * 60 * 60 * 1000);
     const limite7Dias = date7.toISOString().split('T')[0];
     
-    const eventos7Dias = agenda.filter((tarea: any) => {
+    // 1. Tareas normales de la base de datos (Ignoramos los partos viejos guardados físicamente)
+    const tareasNormales = agenda.filter((tarea: any) => {
         if (tarea.completado) return false;
-        // Si es un parto, filtramos que la vaca siga existiendo en el campo
-        if (tarea.tipo === 'PARTO_ESTIMADO' && !animales.some((a: any) => a.id === tarea.animal_id)) return false;
-        
+        if (tarea.tipo === 'PARTO_ESTIMADO') return false; 
         return tarea.fecha_programada >= hoyFormateado && tarea.fecha_programada <= limite7Dias;
-    }).sort((a: any, b: any) => a.fecha_programada.localeCompare(b.fecha_programada));
+    });
+
+    // 2. Generamos los partos en tiempo real leyendo la fecha de servicio de la vaca
+    const partosDinamicos = haciendaActiva
+        .filter((a: any) => (a.estado === 'PREÑADA' || a.estado === 'PREÑADA Y LACTANDO') && a.fecha_servicio)
+        .map((a: any) => ({
+            id: 'dinamico-' + a.id,
+            tipo: 'PARTO_ESTIMADO',
+            animal_id: a.id,
+            fecha_programada: calcularFechaParto(a.fecha_servicio),
+            titulo: 'Parto Estimado'
+        }))
+        .filter((p: any) => p.fecha_programada >= hoyFormateado && p.fecha_programada <= limite7Dias);
+
+    // 3. Unimos todo y lo ordenamos cronológicamente
+    const eventos7Dias = [...tareasNormales, ...partosDinamicos].sort((a: any, b: any) => a.fecha_programada.localeCompare(b.fecha_programada));
     // --------------------------------------
 
     return (
@@ -97,8 +125,8 @@ export default function Inicio({ animales, agenda, eventosGlobales, setActiveSec
                                             const diasFaltan = diasDiferencia(tarea.fecha_programada); 
                                             
                                             // Lógica visual para la urgencia
-                                            const colorBadge = diasFaltan === 0 ? 'red' : diasFaltan <= 2 ? 'orange' : 'teal';
-                                            const textoDias = diasFaltan === 0 ? 'Hoy' : diasFaltan === 1 ? 'Mañana' : `En ${diasFaltan} días`;
+                                            const colorBadge = diasFaltan <= 0 ? 'red' : diasFaltan <= 2 ? 'orange' : 'teal';
+                                            const textoDias = diasFaltan <= 0 ? 'Hoy' : diasFaltan === 1 ? 'Mañana' : `En ${diasFaltan} días`;
                                             
                                             return (
                                                 <Table.Tr key={tarea.id}>

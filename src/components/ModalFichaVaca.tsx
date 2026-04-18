@@ -158,15 +158,37 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             }
         }
 
-        setLoading(true); let resultadoFinal = resultadoInput; let datosExtra = null; let nuevoEstado = ''; let nuevasCondiciones = [...editCondicion]; let esCastrado = editCastrado; let torosToUpdate: string[] = [];
+        setLoading(true); 
+        let resultadoFinal = resultadoInput; 
+        let datosExtra = null; 
+        let nuevoEstado = ''; 
+        let nuevasCondiciones = [...editCondicion]; 
+        let esCastrado = editCastrado; 
+        let torosToUpdate: string[] = [];
+        let fechaServicioAActualizar: string | null | undefined = undefined; // Agregado
         
         if (tipoEventoInput === 'TACTO') { 
             resultadoFinal = tactoResultado || ''; 
-            if (tactoResultado === 'PREÑADA') { nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'PREÑADA Y LACTANDO' : 'PREÑADA'; } else if (tactoResultado === 'VACÍA') { nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'EN LACTANCIA' : 'VACÍA'; }
-            if (tactoResultado === 'PREÑADA' && mesesGestacion) {
-                const diasGestacionActual = parseFloat(mesesGestacion) * 30.4; const diasFaltantes = Math.round(283 - diasGestacionActual); const fechaParto = new Date(fechaEvento); fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
-                await supabase.from('agenda').insert({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${animalSel.caravana}`, descripcion: `Parto estimado calculado por tacto (${mesesGestacion} meses).`, tipo: 'PARTO_ESTIMADO', animal_id: animalSel.id });
-                onUpdate();
+            if (tactoResultado === 'PREÑADA') { 
+                nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'PREÑADA Y LACTANDO' : 'PREÑADA'; 
+                if (mesesGestacion) {
+                    const diasGestacionActual = parseFloat(mesesGestacion) * 30.4; 
+                    const diasFaltantes = Math.round(283 - diasGestacionActual); 
+                    const fechaParto = new Date(fechaEvento); 
+                    fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
+                    
+                    // SE MANTIENE INTACTO PARA TU VIEJO
+                    await supabase.from('agenda').insert({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${animalSel.caravana}`, descripcion: `Parto estimado calculado por tacto (${mesesGestacion} meses).`, tipo: 'PARTO_ESTIMADO', animal_id: animalSel.id });
+                    onUpdate();
+
+                    // CALCULAMOS LA FECHA DE SERVICIO PARA EL BADGE
+                    const fServ = new Date(fechaEvento);
+                    fServ.setDate(fServ.getDate() - Math.round(diasGestacionActual));
+                    fechaServicioAActualizar = fServ.toISOString().split('T')[0];
+                }
+            } else if (tactoResultado === 'VACÍA') { 
+                nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'EN LACTANCIA' : 'VACÍA'; 
+                fechaServicioAActualizar = null; // Limpia si dio vacía
             }
         } 
         else if (tipoEventoInput === 'PARTO') {
@@ -180,7 +202,9 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
           if (err) { setLoading(false); return alert("Error: " + err.message); }
           if (pesoNacimiento) await supabase.from('eventos').insert({ animal_id: nuevoTernero.id, tipo: 'PESAJE', resultado: `${pesoNacimiento}kg`, detalle: 'Peso al nacer', fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
           
-          nuevoEstado = 'EN LACTANCIA'; if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
+          nuevoEstado = 'EN LACTANCIA'; 
+          fechaServicioAActualizar = null; // Limpia porque ya parió
+          if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
           resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; 
           if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo, estado: 'LACTANTE' }]);
         }
@@ -212,6 +236,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         else if (tipoEventoInput === 'TRATAMIENTO') { resultadoFinal = resultadoInput || 'Tratamiento aplicado'; }
         else if (tipoEventoInput === 'OTRO') { resultadoFinal = resultadoInput || detalleInput || 'Realizado'; }
         else if (tipoEventoInput === 'SERVICIO') { 
+            fechaServicioAActualizar = fechaEvento.toISOString().split('T')[0];
             if (tipoServicio === 'TORO') {
                 if (torosIdsInput.length === 0) { setLoading(false); return alert("Seleccioná al menos un toro"); }
                 const nombres = animales.filter(a => torosIdsInput.includes(a.id)).map(a => a.caravana).join(', ');
@@ -231,8 +256,13 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaEvento.toISOString().split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Sanidad/Manejo)', detalle: `Costo ${tipoEventoInput} - Caravana ${animalSel.caravana}`, monto: Number(costoEvento) });
         }
 
-        const stringCondicion = nuevasCondiciones.length > 0 ? nuevasCondiciones.join(', ') : 'SANA'; const updates: any = { condicion: stringCondicion, castrado: esCastrado }; 
-        if (nuevoEstado) updates.estado = nuevoEstado; if (tipoEventoInput === 'SERVICIO' && tipoServicio === 'TORO') updates.toros_servicio_ids = torosIdsInput; if (tipoEventoInput === 'PARTO') updates.toros_servicio_ids = null; 
+        const stringCondicion = nuevasCondiciones.length > 0 ? nuevasCondiciones.join(', ') : 'SANA'; 
+        const updates: any = { condicion: stringCondicion, castrado: esCastrado }; 
+        if (nuevoEstado) updates.estado = nuevoEstado; 
+        if (tipoEventoInput === 'SERVICIO' && tipoServicio === 'TORO') updates.toros_servicio_ids = torosIdsInput; 
+        if (tipoEventoInput === 'PARTO') updates.toros_servicio_ids = null; 
+        if (fechaServicioAActualizar !== undefined) updates.fecha_servicio = fechaServicioAActualizar;
+
         await supabase.from('animales').update(updates).eq('id', animalSel.id);
     
         if (torosToUpdate.length > 0) {
@@ -370,7 +400,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         onClose(); onUpdate(); 
     }
 
-    // --- FUNCIÓN DE BORRADO MEJORADA CON CARTEL DE ADVERTENCIA ---
     async function borrarAnimalDefinitivo() {
         if (!animalSel) return;
         const msg = "⚠️ ¿BORRAR DEFINITIVAMENTE?\n\nEl animal se ocultará de la lista de bajas para siempre.\n\nIMPORTANTE: Sus eventos pasados (pesajes, vacunas, partos) NO se borrarán para mantener la integridad de las estadísticas y los balances económicos del campo.\n\n¿Desea continuar?";

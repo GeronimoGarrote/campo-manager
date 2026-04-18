@@ -14,6 +14,15 @@ const calcularEdad = (nacimiento?: string, ingreso?: string) => {
     return { dias: Math.floor(diffTime / (1000 * 60 * 60 * 24)) };
 };
 
+// --- FUNCIÓN PARA EL CÁLCULO DE PARTO ---
+const calcularDiasFaltantesParto = (fechaServicio?: string) => {
+    if (!fechaServicio) return null;
+    const hoy = new Date();
+    const servicio = new Date(fechaServicio + 'T12:00:00');
+    const diasTranscurridos = Math.floor((hoy.getTime() - servicio.getTime()) / (1000 * 60 * 60 * 24));
+    return 283 - diasTranscurridos;
+};
+
 function Th({ children, reversed, sorted, onSort }: any) {
     const Icon = sorted ? (reversed ? IconChevronUp : IconChevronDown) : IconSelector;
     return (
@@ -27,16 +36,9 @@ function Th({ children, reversed, sorted, onSort }: any) {
 
 export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) => {
     if (!estado) return null;
-    
     if (estado === 'PREÑADA Y LACTANDO') {
-        return (
-            <>
-                <Badge color="teal">PREÑADA</Badge>
-                <Badge color="grape">LACTANCIA</Badge>
-            </>
-        );
+        return ( <> <Badge color="teal">PREÑADA</Badge> <Badge color="grape">LACTANCIA</Badge> </> );
     }
-    
     let color = 'blue';
     if (estado === 'PREÑADA') color = 'teal';
     else if (estado === 'VACÍA') color = 'yellow';
@@ -44,7 +46,6 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
     else if (estado === 'LACTANTE') color = 'cyan';
     else if (estado === 'EN SERVICIO') color = 'pink'; 
     else if (estado === 'APARTADO') color = 'orange'; 
-    
     return <Badge color={color}>{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
 };
 
@@ -78,20 +79,13 @@ export default function Hacienda({
             let matchAtributos = true;
             if (filterAtributos.length > 0) {
                 const tagsDelAnimal: string[] = [];
-                
-                if (animal.estado === 'PREÑADA Y LACTANDO') {
-                    tagsDelAnimal.push('PREÑADA', 'EN LACTANCIA');
-                } else {
-                    tagsDelAnimal.push(animal.estado);
-                }
-
+                if (animal.estado === 'PREÑADA Y LACTANDO') tagsDelAnimal.push('PREÑADA', 'EN LACTANCIA'); else tagsDelAnimal.push(animal.estado);
                 if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
                 if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
                 if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
                 if (animal.castrado) tagsDelAnimal.push('CAPADO');
                 if (animal.destacado) tagsDelAnimal.push('DESTACADO');
                 if (animal.en_transito) tagsDelAnimal.push('EN TRÁNSITO'); 
-
                 matchAtributos = filterAtributos.every((filtro: string) => tagsDelAnimal.includes(filtro));
             }
             return matchSeccion && matchBusqueda && matchCategoria && matchLote && matchAtributos;
@@ -124,16 +118,8 @@ export default function Hacienda({
 
     async function toggleDestacado(id: string, estadoActual: boolean) { 
         setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: !estadoActual } : a)); 
-        
-        const { error } = await supabase
-            .from('animales')
-            .update({ destacado: !estadoActual })
-            .eq('id', id);
-
-        if (error) {
-            console.error("Error guardando destacado:", error);
-            setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: estadoActual } : a));
-        }
+        const { error } = await supabase.from('animales').update({ destacado: !estadoActual }).eq('id', id);
+        if (error) { console.error("Error:", error); setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: estadoActual } : a)); }
     }
 
     const exportarAExcel = () => {
@@ -185,11 +171,8 @@ export default function Hacienda({
                                 <Table.Th>Categoría</Table.Th>
                                 <Table.Th>Estado / Condición</Table.Th>
                                 <Table.Th>Anotación</Table.Th>
-                                
-                                {/* Ocultamos Ubicación y Lote si estamos en bajas */}
                                 {activeSection === 'hacienda' && <Table.Th>Ubicación</Table.Th>}
                                 {activeSection === 'hacienda' && <Table.Th>Lote</Table.Th>}
-                                
                                 {activeSection === 'bajas' && <Table.Th>Detalle</Table.Th>}
                                 <Table.Th w={50}></Table.Th>
                             </Table.Tr>
@@ -211,6 +194,23 @@ export default function Hacienda({
                                                         {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
                                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
                                                         {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
+                                                        
+                                                        {/* --- LÓGICA DE DÍAS DE PARTO (LEYENDO COLUMNA) --- */}
+                                                        {(vaca.estado === 'PREÑADA' || vaca.estado === 'PREÑADA Y LACTANDO') && vaca.fecha_servicio && (
+                                                            (() => {
+                                                                const diasFaltantes = calcularDiasFaltantesParto(vaca.fecha_servicio);
+                                                                if (diasFaltantes === null) return null;
+                                                                const colorBadge = diasFaltantes <= 30 ? 'red' : 'orange';
+                                                                const textoBadge = diasFaltantes < 0 ? `+${Math.abs(diasFaltantes)}d` : `${diasFaltantes}d`;
+                                                                return (
+                                                                    <Tooltip label={`Servicio estimado: ${formatDate(vaca.fecha_servicio)}`} withArrow zIndex={3000}>
+                                                                        <Badge variant="outline" color={colorBadge} size="sm" px={4}>{textoBadge}</Badge>
+                                                                    </Tooltip>
+                                                                );
+                                                            })()
+                                                        )}
+                                                        {/* ----------------------------------------------- */}
+
                                                         {renderCondicionBadges(vaca.condicion)}
                                                     </>
                                                 )}
@@ -218,25 +218,14 @@ export default function Hacienda({
                                         )}
                                     </Table.Td>
                                     <Table.Td style={{ maxWidth: 150 }}><Tooltip label={vaca.detalles} disabled={!vaca.detalles} multiline w={200} withArrow zIndex={3000}><Text size="sm" c="dimmed" truncate="end">{vaca.detalles || '-'}</Text></Tooltip></Table.Td>
-                                    
-                                    {/* Ocultamos los datos de Ubicación y Lote si estamos en bajas */}
                                     {activeSection === 'hacienda' && (
                                         <>
                                             <Table.Td>{getUbicacionCompleta(vaca.potrero_id, vaca.parcela_id)}</Table.Td>
                                             <Table.Td>{vaca.lote_id ? <Badge variant="outline" color="grape" leftSection={<IconTag size={10}/>}>{getNombreLote(vaca.lote_id)}</Badge> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
                                         </>
                                     )}
-
                                     {activeSection === 'bajas' && (
-                                        <Table.Td>
-                                            {vaca.estado === 'VENDIDO' ? (
-                                                <Text size="xs" c="dimmed">-</Text>
-                                            ) : vaca.detalle_baja ? (
-                                                <Text size="sm" fw={500}>{vaca.detalle_baja}</Text>
-                                            ) : (
-                                                <Text size="xs" c="dimmed">-</Text>
-                                            )}
-                                        </Table.Td>
+                                        <Table.Td>{vaca.estado === 'VENDIDO' ? <Text size="xs" c="dimmed">-</Text> : vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
                                     )}
                                     <Table.Td onClick={(e) => { e.stopPropagation(); toggleDestacado(vaca.id, !!vaca.destacado); }} align="right"><ActionIcon variant="subtle" color="yellow">{vaca.destacado ? <IconStarFilled size={18} /> : <IconStar size={18} />}</ActionIcon></Table.Td>
                                 </Table.Tr>
