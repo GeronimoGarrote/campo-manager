@@ -35,22 +35,34 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
     }, [categoria]);
 
     async function guardarAnimal(cerrarModal: boolean = true) {
-        // --- CANDADO DE SUSCRIPCIÓN (LA SEGURIDAD PRIMERO) ---
+        // --- CANDADO DE SUSCRIPCIÓN ---
         const animalesActivos = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
         if (datosSuscripcion && animalesActivos >= datosSuscripcion.limite_animales) {
-            return alert(`Límite alcanzado. Tu plan actual permite hasta ${datosSuscripcion.limite_animales} animales activos. Por favor, renová o mejorá tu plan para seguir cargando hacienda.`);
+            return alert(`Límite alcanzado...`);
         }
-        // ------------------------------------------------------
 
         if (!caravana || !campoId) return;
-        if (origenModal === 'COMPRADO' && !precioCompra) return alert("Ingresá el precio de compra.");
         
         const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravana.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
         if (yaExiste) return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana.");
         
-        setLoading(true); const hoy = new Date().toISOString().split('T')[0];
-        let fechaNac = hoy; 
-        if (edadEstimada) { const d = new Date(); d.setMonth(d.getMonth() - parseInt(edadEstimada)); fechaNac = d.toISOString().split('T')[0]; }
+        setLoading(true); 
+        const hoyStr = new Date().toISOString().split('T')[0];
+        
+        // --- CÁLCULO DE FECHAS ---
+        let fechaNac = hoyStr; 
+        if (edadEstimada) { 
+            const d = new Date(); d.setMonth(d.getMonth() - parseInt(edadEstimada)); 
+            fechaNac = d.toISOString().split('T')[0]; 
+        }
+
+        let fechaServicioInicial = null;
+        if (['Vaca', 'Vaquillona'].includes(categoria || '') && nuevoEstadoReproductivo === 'PREÑADA' && nuevoMesesGestacion) {
+            const diasGestacionActual = parseFloat(nuevoMesesGestacion) * 30.4;
+            const fServ = new Date();
+            fServ.setDate(fServ.getDate() - Math.round(diasGestacionActual));
+            fechaServicioInicial = fServ.toISOString().split('T')[0];
+        }
         
         let estadoInicial = 'ACTIVO'; 
         if (['Vaca', 'Vaquillona'].includes(categoria || '')) { 
@@ -58,16 +70,28 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             if (nuevoLactancia) { estadoInicial = estadoInicial === 'PREÑADA' ? 'PREÑADA Y LACTANDO' : 'EN LACTANCIA'; }
         }
         
-        const { data: newAnimalData, error } = await supabase.from('animales').insert([{ caravana, categoria, sexo, estado: estadoInicial, condicion: 'SANA', origen: origenModal, fecha_nacimiento: fechaNac, fecha_ingreso: hoy, establecimiento_id: campoId, en_transito: false }]).select();
+        // INSERTAMOS CON LA COLUMNA fecha_servicio
+        const { data: newAnimalData, error } = await supabase.from('animales').insert([{ 
+            caravana, 
+            categoria, 
+            sexo, 
+            estado: estadoInicial, 
+            condicion: 'SANA', 
+            origen: origenModal, 
+            fecha_nacimiento: fechaNac, 
+            fecha_ingreso: hoyStr, 
+            fecha_servicio: fechaServicioInicial, // <--- ESTO ES LO NUEVO
+            establecimiento_id: campoId, 
+            en_transito: false 
+        }]).select();
         
         if (!error && newAnimalData && newAnimalData.length > 0) {
             const animalId = newAnimalData[0].id;
 
-            // --- ACÁ ESTÁ LA MAGIA PARA LA AGENDA ---
-            if (['Vaca', 'Vaquillona'].includes(categoria || '') && nuevoEstadoReproductivo === 'PREÑADA' && nuevoMesesGestacion) {
-                const diasGestacionActual = parseFloat(nuevoMesesGestacion) * 30.4; 
-                const diasFaltantes = Math.round(283 - diasGestacionActual); 
-                const fechaParto = new Date(); 
+            // Mantenemos la lógica de la agenda para tu viejo
+            if (fechaServicioInicial) {
+                const diasFaltantes = Math.round(283 - (parseFloat(nuevoMesesGestacion!) * 30.4));
+                const fechaParto = new Date();
                 fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
 
                 await supabase.from('agenda').insert({ 
@@ -79,12 +103,12 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
                     animal_id: animalId 
                 });
             }
-            // ----------------------------------------
 
             if (origenModal === 'COMPRADO' && precioCompra) {
-                await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: hoy, tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Compra animal caravana: ${caravana}`, monto: Number(precioCompra) });
+                await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: hoyStr, tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Compra animal caravana: ${caravana}`, monto: Number(precioCompra) });
                 await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'COMPRA', resultado: 'Animal Comprado', detalle: `Costo: $${precioCompra}`, establecimiento_id: campoId, costo: Number(precioCompra) });
             }
+            // Reset de estados...
             setCaravana(''); setPrecioCompra(''); setOrigenModal('PROPIO'); setNuevoEstadoReproductivo('VACÍA'); setNuevoMesesGestacion(null); setEdadEstimada(null); setNuevoLactancia(false); 
             onSuccess();
             if (cerrarModal) onClose(); 

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem } from '@mantine/core';
-import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
@@ -14,7 +14,6 @@ const calcularEdad = (nacimiento?: string, ingreso?: string) => {
     return { dias: Math.floor(diffTime / (1000 * 60 * 60 * 24)) };
 };
 
-// --- FUNCIÓN PARA EL CÁLCULO DE PARTO ---
 const calcularDiasFaltantesParto = (fechaServicio?: string) => {
     if (!fechaServicio) return null;
     const hoy = new Date();
@@ -58,12 +57,13 @@ export default function Hacienda({
     const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterLote, setFilterLote] = useState<string | null>(null); 
     const [ordenEdad, setOrdenEdad] = useState<string | null>(null); 
+    const [ordenParto, setOrdenParto] = useState(false); // NUEVO ESTADO PARA ORDENAR POR PARTO
     const [sortBy, setSortBy] = useState<string | null>(null); 
     const [reverseSortDirection, setReverseSortDirection] = useState(false);
 
     const setSorting = (field: string) => {
         const reversed = field === sortBy ? !reverseSortDirection : false;
-        setReverseSortDirection(reversed); setSortBy(field); setOrdenEdad(null); 
+        setReverseSortDirection(reversed); setSortBy(field); setOrdenEdad(null); setOrdenParto(false);
     };
 
     const animalesFiltrados = useMemo(() => {
@@ -91,6 +91,17 @@ export default function Hacienda({
             return matchSeccion && matchBusqueda && matchCategoria && matchLote && matchAtributos;
         }).sort((a: any, b: any) => {
             if (busqueda) { const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase(); const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase(); if (exactA && !exactB) return -1; if (!exactA && exactB) return 1; }
+            
+            // LÓGICA DE ORDENAMIENTO POR PROXIMIDAD DE PARTO
+            if (ordenParto) {
+                const diasA = calcularDiasFaltantesParto(a.fecha_servicio);
+                const diasB = calcularDiasFaltantesParto(b.fecha_servicio);
+                if (diasA === null && diasB === null) return 0;
+                if (diasA === null) return 1; // Las que no están preñadas van al fondo
+                if (diasB === null) return -1;
+                return diasA - diasB; // De menor a mayor (las más urgentes primero)
+            }
+
             if (ordenEdad) {
                 const diasA = calcularEdad(a.fecha_nacimiento, a.fecha_ingreso).dias; const diasB = calcularEdad(b.fecha_nacimiento, b.fecha_ingreso).dias;
                 if (diasA === -1 && diasB !== -1) return 1; if (diasB === -1 && diasA !== -1) return -1;
@@ -102,7 +113,7 @@ export default function Hacienda({
             }
             return 0;
         });
-    }, [animales, busqueda, filterCategoria, filterAtributos, filterLote, ordenEdad, sortBy, reverseSortDirection, activeSection]);
+    }, [animales, busqueda, filterCategoria, filterAtributos, filterLote, ordenEdad, ordenParto, sortBy, reverseSortDirection, activeSection]);
 
     const renderCondicionBadges = (condStr: string) => { if (!condStr || condStr === 'SANA') return null; return condStr.split(', ').map((c: any, i: number) => ( <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> )); };
     const getNombrePotrero = (id?: string) => { if(!id) return null; const p = potreros.find((pot: any) => pot.id === id); return p ? p.nombre : null; };
@@ -151,12 +162,17 @@ export default function Hacienda({
                         <Select label="Lote" placeholder="Todos" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
                     </Group>
                     <Menu shadow="md" width={220} position="bottom-end">
-                        <Menu.Target><Tooltip label="Ordenar por Edad"><ActionIcon size={36} variant={ordenEdad ? "filled" : "default"} color={ordenEdad ? "blue" : "gray"} aria-label="Ordenar" mb={2}><IconSortAscending style={{ width: '60%', height: '60%' }} stroke={1.5} /></ActionIcon></Tooltip></Menu.Target>
+                        <Menu.Target><Tooltip label="Opciones de Orden"><ActionIcon size={36} variant={(ordenEdad || ordenParto) ? "filled" : "default"} color={(ordenEdad || ordenParto) ? "blue" : "gray"} aria-label="Ordenar" mb={2}><IconSortAscending style={{ width: '60%', height: '60%' }} stroke={1.5} /></ActionIcon></Tooltip></Menu.Target>
                         <Menu.Dropdown>
-                            <Menu.Label>Ordenar cronológicamente</Menu.Label>
-                            <Menu.Item leftSection={<IconSortDescending size={14} />} onClick={() => { setOrdenEdad('desc'); setSortBy(null); }} bg={ordenEdad === 'desc' ? 'blue.0' : undefined}>Más viejos primero</Menu.Item>
-                            <Menu.Item leftSection={<IconSortAscending size={14} />} onClick={() => { setOrdenEdad('asc'); setSortBy(null); }} bg={ordenEdad === 'asc' ? 'blue.0' : undefined}>Más jóvenes primero</Menu.Item>
-                            {ordenEdad && (<><Menu.Divider /><Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => setOrdenEdad(null)}>Quitar orden</Menu.Item></>)}
+                            <Menu.Label>Ordenar por fecha</Menu.Label>
+                            <Menu.Item leftSection={<IconSortDescending size={14} />} onClick={() => { setOrdenEdad('desc'); setOrdenParto(false); setSortBy(null); }} bg={ordenEdad === 'desc' ? 'blue.0' : undefined}>Más viejos primero</Menu.Item>
+                            <Menu.Item leftSection={<IconSortAscending size={14} />} onClick={() => { setOrdenEdad('asc'); setOrdenParto(false); setSortBy(null); }} bg={ordenEdad === 'asc' ? 'blue.0' : undefined}>Más jóvenes primero</Menu.Item>
+                            
+                            <Menu.Divider />
+                            <Menu.Label>Maternidad</Menu.Label>
+                            <Menu.Item leftSection={<IconBabyCarriage size={14} />} onClick={() => { setOrdenParto(true); setOrdenEdad(null); setSortBy(null); }} bg={ordenParto ? 'blue.0' : undefined}>Próximas a parir</Menu.Item>
+                            
+                            {(ordenEdad || ordenParto) && (<><Menu.Divider /><Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => { setOrdenEdad(null); setOrdenParto(false); }}>Quitar orden</Menu.Item></>)}
                         </Menu.Dropdown>
                     </Menu>
                 </div>
@@ -195,21 +211,33 @@ export default function Hacienda({
                                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
                                                         {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
                                                         
-                                                        {/* --- LÓGICA DE DÍAS DE PARTO (LEYENDO COLUMNA) --- */}
+                                                        {/* LÓGICA DE DÍAS DE PARTO DESPINTADA */}
                                                         {(vaca.estado === 'PREÑADA' || vaca.estado === 'PREÑADA Y LACTANDO') && vaca.fecha_servicio && (
                                                             (() => {
                                                                 const diasFaltantes = calcularDiasFaltantesParto(vaca.fecha_servicio);
                                                                 if (diasFaltantes === null) return null;
-                                                                const colorBadge = diasFaltantes <= 30 ? 'red' : 'orange';
-                                                                const textoBadge = diasFaltantes < 0 ? `+${Math.abs(diasFaltantes)}d` : `${diasFaltantes}d`;
+                                                                
+                                                                let textoBadge = "";
+                                                                let colorBadge = "orange";
+
+                                                                if (diasFaltantes < 0) {
+                                                                    textoBadge = `+${Math.abs(diasFaltantes)}d`;
+                                                                    colorBadge = "red";
+                                                                } else if (diasFaltantes <= 7) {
+                                                                    textoBadge = `${diasFaltantes}d`;
+                                                                    colorBadge = "red";
+                                                                } else {
+                                                                    textoBadge = `${Math.floor(diasFaltantes / 7)}s`;
+                                                                    colorBadge = diasFaltantes <= 30 ? "red" : "orange";
+                                                                }
+
                                                                 return (
-                                                                    <Tooltip label={`Servicio estimado: ${formatDate(vaca.fecha_servicio)}`} withArrow zIndex={3000}>
+                                                                    <Tooltip label={`Servicio estimado: ${formatDate(vaca.fecha_servicio)} (${diasFaltantes} días restantes)`} withArrow zIndex={3000}>
                                                                         <Badge variant="outline" color={colorBadge} size="sm" px={4}>{textoBadge}</Badge>
                                                                     </Tooltip>
                                                                 );
                                                             })()
                                                         )}
-                                                        {/* ----------------------------------------------- */}
 
                                                         {renderCondicionBadges(vaca.condicion)}
                                                     </>
