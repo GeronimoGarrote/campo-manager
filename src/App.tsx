@@ -238,24 +238,46 @@ export default function App() {
         ) : (
           <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
             <AppShell.Header>
-              <Group h="100%" px="md" justify="space-between">
-                <Group gap="sm" align="center" style={{ flex: 1 }}>
+              <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+                
+                {/* GRUPO IZQUIERDO (Logo + Nombre App + Establecimiento) */}
+                <Group gap="sm" align="center" style={{ flex: 1, minWidth: 0, flexWrap: 'nowrap' }}>
                     <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 32, width: 'auto' }} />
-                    <Title order={3} visibleFrom="xs">RodeoControl</Title>
+                    
+                    {/* Logo agrandado (pasó a height: 46) */}
+                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 46, width: 'auto', flexShrink: 0 }} />
+                    
+                    {/* Nombre de la app: Oculto en celu para dejar espacio */}
+                    <Title order={3} visibleFrom="sm" style={{ flexShrink: 0 }}>RodeoControl</Title>
+                    
+                    {/* Nombre del Establecimiento: Restaurado al estilo original, pero fluido para mobile */}
                     {campoId && establecimientos.length > 0 && (
-                        <Group gap="sm" align="center" visibleFrom="sm">
-                            <Text size="xl" c="dimmed" style={{ fontWeight: 300, userSelect: 'none' }}>|</Text>
-                            <Title order={4} c="dimmed" fw={500}>{establecimientos.find(e => e.id === campoId)?.nombre || ''}</Title>
+                        <Group gap="sm" align="center" style={{ flex: 1, minWidth: 0, flexWrap: 'nowrap' }}>
+                            <Text size="xl" c="dimmed" visibleFrom="sm" style={{ fontWeight: 300, userSelect: 'none', flexShrink: 0 }}>|</Text>
+                            {/* Vuelve a ser un Title order={4} como querías, con truncate para que no rompa */}
+                            <Title 
+                                order={4} 
+                                c="dimmed" 
+                                fw={500} 
+                                style={{ 
+                                    flex: 1, 
+                                    whiteSpace: 'nowrap', 
+                                    overflow: 'hidden', 
+                                    textOverflow: 'ellipsis' 
+                                }}
+                            >
+                                {establecimientos.find(e => e.id === campoId)?.nombre || ''}
+                            </Title>
                         </Group>
                     )}
                 </Group>
-                <Group>
+
+                {/* GRUPO DERECHO (Notificaciones) */}
+                <Group style={{ flexShrink: 0 }}>
                     {campoId && (
                         <Popover width={300} position="bottom-end" withArrow shadow="md" opened={bellOpened} onChange={setBellOpened}>
                             <Popover.Target>
                                 <Indicator disabled={tareasPendientesUrgentes.length === 0 && tareasParaHoy.length === 0 && transferencias.length === 0} color="red" size={15} label={tareasPendientesUrgentes.length + tareasParaHoy.length + transferencias.length} offset={4} zIndex={100}>
-                                    {/* Campanita deshabilitada si está vencido */}
                                     <ActionIcon variant="light" color="orange" size="lg" radius="xl" onClick={() => setBellOpened((o) => !o)} disabled={estaVencido}><IconBell size={22} /></ActionIcon>
                                 </Indicator>
                             </Popover.Target>
@@ -276,7 +298,7 @@ export default function App() {
                 </Group>
               </Group>
             </AppShell.Header>
-
+            
             <AppShell.Navbar p="md" style={{ display: 'flex', flexDirection: 'column' }}>
               <ScrollArea style={{ flex: 1 }} offsetScrollbars>
                   {/* Navegación deshabilitada si está vencido */}
