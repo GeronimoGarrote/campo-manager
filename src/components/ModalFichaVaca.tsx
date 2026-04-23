@@ -303,11 +303,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     async function confirmarBaja() { 
         if (!animalSel || !modoBaja || !campoId) return; 
 
-        if (modoBaja === 'VENDIDO' && esVentaRed) {
-            if (datosSuscripcion?.plan_nombre !== 'PREMIUM') {
-                return alert("⭐ La venta directa por RENSPA a otros usuarios es una función exclusiva del Plan Premium. Contactanos para mejorar tu cuenta.");
-            }
-        }
+        // YA NO HAY RESTRICCIÓN DE SUSCRIPCIÓN PARA VENTAS EN RED. ¡Vía libre!
 
         if (modoBaja === 'VENDIDO') { if (!bajaPrecio) return alert("Ingresá el precio"); if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) return alert("Faltan los kilos totales"); }
         if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); 

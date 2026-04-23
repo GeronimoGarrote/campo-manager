@@ -1,191 +1,352 @@
-import { Title, Card, Group, Text, Badge, Progress, Button, SimpleGrid, Paper, Select, Stack, Divider, ActionIcon, CopyButton, Tooltip } from '@mantine/core';
-import { IconCheck, IconCopy, IconCircleCheck, IconInfoCircle, IconBrandWhatsapp, IconMail } from '@tabler/icons-react';
-import { useState } from 'react';
+import { 
+    Title, Card, Group, Text, Badge, Progress, Button, Paper, 
+    Stack, Divider, ActionIcon, CopyButton, Grid 
+} from '@mantine/core';
+import { 
+    IconCheck, IconCopy, IconCircleCheck, 
+    IconBrandWhatsapp, IconMail, IconCreditCard 
+} from '@tabler/icons-react';
+import { useState, useEffect } from 'react';
 
-const formatDate = (dateString: string) => {
+interface SuscripcionProps {
+    animalesTotales: number;
+    establecimientosTotales: number;
+    datosSuscripcion: any;
+}
+
+const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
     const parts = dateString.split('-');
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
 };
 
-export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion }: any) {
-    const [planVisualizar, setPlanVisualizar] = useState<string | null>(datosSuscripcion?.plan_nombre || 'BASICO');
+// Función pura para blindar la matemática. Devuelve SIEMPRE un entero de 0 a 100.
+const calcularProgresoSeguro = (actual: any, limite: any, esPremium: boolean) => {
+    if (esPremium) return 100;
+    const numActual = Number(actual) || 0;
+    const numLimite = Math.max(1, Number(limite) || 100); // Nunca divide por 0
+    const porcentaje = Math.floor((numActual / numLimite) * 100);
+    return (Number.isNaN(porcentaje) || porcentaje < 0) ? 0 : Math.min(porcentaje, 100);
+};
 
-    if (!datosSuscripcion) return <Text mt="xl" ta="center" c="dimmed">Cargando datos de suscripción...</Text>;
+export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion }: SuscripcionProps) {
+    const [planVisualizar, setPlanVisualizar] = useState<string>('BASICO');
 
-    const estaVencido = datosSuscripcion.fecha_vencimiento ? new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59') < new Date() : false;
+    useEffect(() => {
+        if (datosSuscripcion?.plan_nombre) {
+            setPlanVisualizar(datosSuscripcion.plan_nombre);
+        }
+    }, [datosSuscripcion]);
+
+    if (!datosSuscripcion) return null; 
+
+    const esPremium = datosSuscripcion.plan_nombre === 'PREMIUM';
+
+    // Cálculo de fechas limpio
+    let diasRestantes = 0;
+    if (datosSuscripcion.fecha_vencimiento) {
+        const diff = new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59').getTime() - new Date().getTime();
+        const diasCalc = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        diasRestantes = (Number.isNaN(diasCalc) || diasCalc < 0) ? 0 : diasCalc;
+    }
+
+    // Cálculos de capacidades
+    const numAnimales = Number(animalesTotales) || 0;
+    const numLimAnimales = Number(datosSuscripcion.limite_animales) || 100;
+    const porcentajeAnimales = calcularProgresoSeguro(animalesTotales, datosSuscripcion.limite_animales, esPremium);
+
+    const numEstablecimientos = Number(establecimientosTotales) || 0;
+    const numLimEstablecimientos = Number(datosSuscripcion.limite_establecimientos) || 1;
+    const porcentajeEstablecimientos = calcularProgresoSeguro(establecimientosTotales, datosSuscripcion.limite_establecimientos, esPremium);
+
+    const labelLimiteAnimales = esPremium ? 'Ilimitados' : numLimAnimales;
+    const labelLimiteEstablecimientos = esPremium ? 'Ilimitados' : numLimEstablecimientos;
 
     const planesInfo: any = {
         'BASICO': {
-            precio: '$40.000',
-            animales: 100,
-            campos: 1,
-            features: ['Gestión integral de Hacienda', 'Agenda Sanitaria automatizada', 'Control de Caja y Economía', 'Respaldo seguro de Base de Datos', 'Soporte técnico ante errores'],
-            color: 'blue'
+            titulo: 'Plan Básico',
+            precio: '$ 35.000 / mes',
+            color: 'teal',
+            limites: 'Para productores chicos',
+            caracteristicas: [
+                'Hasta 100 animales por establecimiento',
+                'Un solo establecimiento',
+                'Transferencia de animales entre usuarios',
+                'Gestión completa de Sanidad y Eventos',
+                'Control de Economía y Cuentas',
+                'Alerta automática de Partos Estimados',
+                'Clasificación por Lotes',
+                'Carga Masiva de Animales',
+                'Módulo de Agricultura y Potreros',
+                'Soporte de errores'
+            ]
         },
         'PRO': {
-            precio: '$65.000',
-            animales: 300,
-            campos: 3,
-            features: ['Todo lo del plan Básico', 'Módulo de Lotes y Nutrición', 'Carga de eventos Masivos', 'Soporte prioritario y atención rápida'],
-            color: 'violet'
+            titulo: 'Plan Profesional',
+            precio: '$ 50.000 / mes',
+            color: 'blue',
+            limites: 'Para productores que requieran mas espacio y mejor soporte',
+            caracteristicas: [
+                'TODO lo incluido en el Plan Básico',
+                'Hasta 3 establecimientos',
+                'Hasta 300 animales por establecimiento',
+                'Soporte técnico',
+                'backup de datos mensual'
+            ]
         },
         'PREMIUM': {
-            precio: '$90.000',
-            animales: 'Ilimitados',
-            campos: 'Ilimitados',
-            features: ['Hasta ilimitados animales', 'Hasta ilimitados establecimientos', 'Todo lo del plan Pro', 'Transferencias en red a otros usuarios', 'Reportes de métricas avanzadas', 'Soporte VIP y atención personalizada'],
-            color: 'teal'
+            titulo: 'Plan Premium',
+            precio: '$ 75.000 / mes',
+            color: 'grape',
+            limites: 'Para grandes productores.',
+            caracteristicas: [
+                'Todo lo incluido en el Plan Profesional',
+                'Establecimientos ilimitados', 
+                'Animales ilimitados',
+                'Soporte técnico prioritario',
+                'Backup de datos semanal'
+            ]
         }
     };
 
-    const planActualInfo = planesInfo[datosSuscripcion.plan_nombre || 'BASICO'] || planesInfo['BASICO'];
-    const planVistoInfo = planesInfo[planVisualizar || 'BASICO'];
-
-    const pctAnimales = planActualInfo.animales === 'Ilimitados' ? 0 : Math.min((animalesTotales / planActualInfo.animales) * 100, 100);
-    const pctCampos = planActualInfo.campos === 'Ilimitados' ? 0 : Math.min((establecimientosTotales / planActualInfo.campos) * 100, 100);
+    const handleContact = (tipo: 'WA' | 'MAIL', plan: string) => {
+        const msg = `Hola! Me interesa mejorar mi cuenta de RodeoControl al Plan ${plan}. Mi ID: ${datosSuscripcion.user_id || 'Desconocido'}`;
+        if (tipo === 'WA') {
+            window.open(`https://wa.me/5492345505575?text=${encodeURIComponent(msg)}`, '_blank');
+        } else {
+            window.location.href = `mailto:rodeocontrol.app@gmail.com?subject=Cambio de Plan&body=${encodeURIComponent(msg)}`;
+        }
+    };
 
     return (
-        <>
-            <Title order={2} mb="lg">Suscripción y Estado de Cuenta</Title>
+        <Stack gap="xl">
+            <div>
+                <Title order={2} mb={5}>ESTADO DE LA CUENTA</Title>
+                <Text c="dimmed" size="sm">Gestioná tu suscripción y visualizá los límites de tu plan actual.</Text>
+            </div>
 
-            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-                {/* COLUMNA IZQUIERDA - ESTADO ACTUAL */}
-                <Card shadow="sm" p="lg" radius="md" withBorder>
-                    <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Plan Actual</Text>
-                    <Group justify="space-between" mb="md" align="center">
-                        <Title order={3}>Plan {datosSuscripcion.plan_nombre}</Title>
-                        <Badge color={estaVencido ? 'red' : 'teal'} size="lg" variant="light">{estaVencido ? 'VENCIDO' : 'ACTIVO'}</Badge>
-                    </Group>
-
-                    <Paper bg="gray.0" p="sm" radius="md" mb="xl">
-                        <Group justify="space-between">
-                            <Text size="sm" c="dimmed">Próximo Vencimiento</Text>
-                            <Text fw={700} c={estaVencido ? 'red' : 'dark'}>{formatDate(datosSuscripcion.fecha_vencimiento)}</Text>
-                        </Group>
-                    </Paper>
-
-                    <Text fw={700} mb="sm">Consumo de Recursos</Text>
-                    <Stack gap="xs" mb="xl">
-                        <div>
-                            <Group justify="space-between" mb={5}>
-                                <Text size="sm">Animales ({animalesTotales} / {planActualInfo.animales})</Text>
-                                <Text size="xs" c="dimmed">{Math.round(pctAnimales)}%</Text>
-                            </Group>
-                            {/* Acá restauramos el tamaño de la barra original */}
-                            <Progress value={pctAnimales} color={pctAnimales > 90 ? 'red' : 'blue'} size="lg" />
-                        </div>
-                        <div style={{ marginTop: '10px' }}>
-                            <Group justify="space-between" mb={5}>
-                                <Text size="sm">Establecimientos ({establecimientosTotales} / {planActualInfo.campos})</Text>
-                                <Text size="xs" c="dimmed">{Math.round(pctCampos)}%</Text>
-                            </Group>
-                            {/* Acá restauramos el tamaño de la barra original */}
-                            <Progress value={pctCampos} color={pctCampos > 90 ? 'red' : 'teal'} size="lg" />
-                        </div>
-                    </Stack>
-
-                    {/* BLOQUE DE PAGO POR TRANSFERENCIA DIRECTA (SIN COMISIONES) */}
-                    <Paper withBorder p="md" radius="md" bg="gray.0">
-                        <Text fw={700} mb="xs">Pagar Mensualidad</Text>
-                        <Text size="sm" c="dimmed" mb="md">Transferí el monto de tu plan y envianos el comprobante para habilitarte el mes.</Text>
-
-                        <Group mb="xs" align="center">
-                            <Text size="sm" fw={600} w={40}>Alias:</Text>
-                            {/* Alias sin badge/recuadro */}
-                            <Text size="sm" ff="monospace" fw={500}>ggeroo</Text>
-                            <CopyButton value="ggeroo" timeout={2000}>
-                                {({ copied, copy }) => (
-                                    <Tooltip label={copied ? 'Copiado' : 'Copiar Alias'} withArrow position="right">
-                                        <ActionIcon color={copied ? 'teal' : 'gray'} variant="subtle" onClick={copy}>
-                                            {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                                        </ActionIcon>
-                                    </Tooltip>
-                                )}
-                            </CopyButton>
-                        </Group>
-
-                        <Group mb="md" align="center">
-                            <Text size="sm" fw={600} w={40}>CBU:</Text>
-                            <Text size="sm" ff="monospace" fw={500}>0000003100012241790004</Text>
-                            <CopyButton value="0000003100012241790004" timeout={2000}>
-                                {({ copied, copy }) => (
-                                    <Tooltip label={copied ? 'Copiado' : 'Copiar CBU'} withArrow position="right">
-                                        <ActionIcon color={copied ? 'teal' : 'gray'} variant="subtle" onClick={copy}>
-                                            {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                                        </ActionIcon>
-                                    </Tooltip>
-                                )}
-                            </CopyButton>
-                        </Group>
-
-                        <Divider my="sm" />
-                        <Text size="sm" fw={600} mb="sm">Informar Pago:</Text>
-                        <Group>
-                            <Button
-                                variant="light"
-                                color="green"
-                                leftSection={<IconBrandWhatsapp size={16} />}
-                                onClick={() => window.open(`https://wa.me/5492345505575?text=Hola! Te paso el comprobante de pago de mi suscripción.%0A%0A*ID de Usuario:* ${datosSuscripcion?.user_id}`, '_blank')}
-                            >
-                                WhatsApp
-                            </Button>
-                            <Button
-                                variant="light"
-                                color="dark"
-                                leftSection={<IconMail size={16} />}
-                                onClick={() => window.open(`mailto:rodeocontrol.app@gmail.com?subject=Comprobante de Pago&body=Hola! Adjunto el comprobante de pago de mi suscripción.%0A%0AMi ID de usuario es: ${datosSuscripcion?.user_id}`)}
-                            >
-                                Email
-                            </Button>
-                        </Group>
-                    </Paper>
-                </Card>
-
-                {/* COLUMNA DERECHA - COMPARATIVA */}
-                <Stack>
-                    <Card shadow="sm" p="lg" radius="md" withBorder>
-                        <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Explorar otros niveles</Text>
-                        <Select
-                            label="Ver detalles del plan:"
-                            data={['BASICO', 'PRO', 'PREMIUM']}
-                            value={planVisualizar}
-                            onChange={setPlanVisualizar}
-                            mb="md"
-                        />
-
-                        <Paper p="md" radius="md" bg={`${planVistoInfo.color}.0`} style={{ border: `1px solid var(--mantine-color-${planVistoInfo.color}-3)` }}>
+            <Grid gutter="lg" align="stretch">
+                {/* COLUMNA IZQUIERDA */}
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                    <Stack gap="lg" style={{ height: '100%' }}>
+                        <Card withBorder shadow="sm" radius="md" p="xl">
                             <Group justify="space-between" mb="lg">
-                                <Title order={4} c={`${planVistoInfo.color}.9`}>Plan {planVisualizar}</Title>
-                                <Text fw={800} size="xl" c={`${planVistoInfo.color}.9`}>{planVistoInfo.precio}<Text span size="sm" c="dimmed" fw={400}>/mes</Text></Text>
+                                <div>
+                                    <Text size="xs" fw={700} c="dimmed">PLAN ACTUAL</Text>
+                                    <Title order={3} c={`${planesInfo[datosSuscripcion.plan_nombre || 'BASICO'].color}.7`}>
+                                        {planesInfo[datosSuscripcion.plan_nombre || 'BASICO'].titulo}
+                                    </Title>
+                                </div>
+                                <Badge size="xl" color={diasRestantes > 7 ? 'teal' : diasRestantes > 0 ? 'orange' : 'red'} variant="light">
+                                    {datosSuscripcion.estado === 'ACTIVO' ? `${diasRestantes} días` : 'INACTIVO'}
+                                </Badge>
                             </Group>
 
-                            <Stack gap="sm">
-                                {planVistoInfo.features.map((feat: string, idx: number) => (
-                                    <Group key={idx} gap="sm" wrap="nowrap" align="flex-start">
-                                        <IconCircleCheck size={18} color={`var(--mantine-color-${planVistoInfo.color}-6)`} style={{ marginTop: '2px', flexShrink: 0 }} />
-                                        <Text size="sm" c="dark.4">{feat}</Text>
+                            <Text size="sm" c="dimmed" mb="md">
+                                Vencimiento: <b>{formatDate(datosSuscripcion.fecha_vencimiento)}</b>
+                            </Text>
+
+                            <Divider my="md" />
+
+                            <Stack gap="md">
+                                <div>
+                                    <Group justify="space-between" mb={5}>
+                                        <Text size="sm" fw={500}>Animales</Text>
+                                        <Text size="sm" fw={700}>
+                                            {esPremium ? `${numAnimales} (Sin límite)` : `${numAnimales} / ${labelLimiteAnimales}`}
+                                        </Text>
                                     </Group>
-                                ))}
+                                    <Progress 
+                                        value={porcentajeAnimales} 
+                                        color={esPremium ? 'teal.4' : (Boolean(porcentajeAnimales > 90) ? 'red' : 'teal')} 
+                                        size="md" 
+                                        radius="xl" 
+                                        striped={esPremium}
+                                        animated={esPremium}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Group justify="space-between" mb={5}>
+                                        <Text size="sm" fw={500}>Campos</Text>
+                                        <Text size="sm" fw={700}>
+                                            {esPremium ? `${numEstablecimientos} (Sin límite)` : `${numEstablecimientos} / ${labelLimiteEstablecimientos}`}
+                                        </Text>
+                                    </Group>
+                                    <Progress 
+                                        value={porcentajeEstablecimientos} 
+                                        color={esPremium ? 'teal.4' : (Boolean(porcentajeEstablecimientos > 90) ? 'red' : 'teal')} 
+                                        size="md" 
+                                        radius="xl" 
+                                        striped={esPremium}
+                                        animated={esPremium}
+                                    />
+                                </div>
                             </Stack>
+                        </Card>
+
+                        {/* SECCIÓN DE PAGO (Widget Bancario) */}
+                        <Card withBorder shadow="sm" radius="md" p="xl" bg="gray.0" style={{ flexGrow: 1 }}>
+                            <Title order={4} mb="md" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <IconCreditCard size={22} color="var(--mantine-color-blue-6)" /> PAGAR E INFORMAR PAGO
+                            </Title>
+                            
+                            <Text size="xs" c="dimmed" fs="italic" mb="lg">
+                                Transferí el monto de tu plan y envianos el comprobante junto con el id de cuenta para habilitarte el mes.
+                            </Text>
+
+                            <Paper withBorder p="sm" radius="md" bg="white" mb="lg">
+                                <Stack gap="xs">
+                                    <Group justify="space-between" wrap="nowrap">
+                                        <Group gap="xs" wrap="nowrap">
+                                            <Text size="sm" fw={700}>CBU:</Text>
+                                            <Text size="sm" ff="monospace">0000003100012241790004</Text>
+                                        </Group>
+                                        <CopyButton value="0000003100012241790004">
+                                            {({ copied, copy }) => (
+                                                <ActionIcon color={copied ? 'teal' : 'blue'} variant="light" size="sm" onClick={copy}>
+                                                    {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                                                </ActionIcon>
+                                            )}
+                                        </CopyButton>
+                                    </Group>
+                                    
+                                    {/* CORRECCIÓN ACÁ: variant="dashed" */}
+                                    <Divider variant="dashed" />
+                                    
+                                    <Group justify="space-between" wrap="nowrap">
+                                        <Group gap="xs" wrap="nowrap">
+                                            <Text size="sm" fw={700}>Alias:</Text>
+                                            <Text size="sm" ff="monospace" c="blue.8" fw={700}>ggeroo</Text>
+                                        </Group>
+                                        <CopyButton value="ggeroo">
+                                            {({ copied, copy }) => (
+                                                <ActionIcon color={copied ? 'teal' : 'blue'} variant="light" size="sm" onClick={copy}>
+                                                    {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                                                </ActionIcon>
+                                            )}
+                                        </CopyButton>
+                                    </Group>
+                                </Stack>
+                            </Paper>
+
+                            <Divider label="ID de tu cuenta" labelPosition="center" my="sm" />
+
+                            <Stack gap="xs" align="center">
+                                <Group gap={5}>
+                                    <Text size="sm" fw={800} ff="monospace" c="blue.9">{datosSuscripcion.user_id?.substring(0, 18) || 'RC-XXXX-XXXX'}</Text>
+                                    <CopyButton value={datosSuscripcion.user_id || ''}>
+                                        {({ copied, copy }) => (
+                                            <ActionIcon color={copied ? 'teal' : 'blue'} variant="subtle" onClick={copy}>
+                                                {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                                            </ActionIcon>
+                                        )}
+                                    </CopyButton>
+                                </Group>
+                                
+                                <Group grow w="100%" mt="sm">
+                                    <Button 
+                                        color="green" 
+                                        variant="light"
+                                        size="sm"
+                                        onClick={() => handleContact('WA', planVisualizar)}
+                                    >
+                                        <IconBrandWhatsapp size={16} style={{ marginRight: 6 }} /> WhatsApp
+                                    </Button>
+                                    <Button 
+                                        color="blue" 
+                                        variant="light"
+                                        size="sm"
+                                        onClick={() => handleContact('MAIL', planVisualizar)}
+                                    >
+                                        <IconMail size={16} style={{ marginRight: 6 }} /> Mail
+                                    </Button>
+                                </Group>
+                            </Stack>
+                        </Card>
+                    </Stack>
+                </Grid.Col>
+
+                {/* COLUMNA DERECHA */}
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                    <Card withBorder shadow="sm" radius="md" p="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <Text fw={700} size="sm" mb="md" c="dimmed">VER PLANES DISPONIBLES</Text>
+                        
+                        <Group grow gap="xs" mb="lg">
+                            {['BASICO', 'PRO', 'PREMIUM'].map((p) => (
+                                <Button 
+                                    key={p} 
+                                    variant={planVisualizar === p ? 'filled' : 'light'} 
+                                    color={planesInfo[p].color} 
+                                    onClick={() => setPlanVisualizar(p)} 
+                                    size="xs"
+                                >
+                                    {p}
+                                </Button>
+                            ))}
+                        </Group>
+
+                        <Paper 
+                            p="xl" 
+                            bg={`${planesInfo[planVisualizar].color}.0`} 
+                            radius="md" 
+                            style={{ 
+                                border: `1px solid var(--mantine-color-${planesInfo[planVisualizar].color}-2)`,
+                                flexGrow: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between'
+                            }}
+                        >
+                            <div>
+                                <Group justify="space-between" mb="xs">
+                                    <Text fw={800} size="lg" c={`${planesInfo[planVisualizar].color}.9`}>
+                                        {planesInfo[planVisualizar].titulo}
+                                    </Text>
+                                    <Badge size="lg" color={planesInfo[planVisualizar].color} variant="filled">
+                                        {planesInfo[planVisualizar].precio}
+                                    </Badge>
+                                </Group>
+                                
+                                <Text size="sm" fw={700} c="dark" mb="xl" fs="italic">
+                                    "{planesInfo[planVisualizar].limites}"
+                                </Text>
+
+                                <Stack gap="xs" mb="xl">
+                                    {planesInfo[planVisualizar].caracteristicas.map((caract: string, idx: number) => (
+                                        <Group key={idx} wrap="nowrap" align="flex-start" gap="xs">
+                                            <IconCircleCheck 
+                                                size={18} 
+                                                color={`var(--mantine-color-${planesInfo[planVisualizar].color}-6)`} 
+                                                style={{ flexShrink: 0, marginTop: 2 }} 
+                                            />
+                                            <Text size="sm" fw={500}>{caract}</Text>
+                                        </Group>
+                                    ))}
+                                </Stack>
+                            </div>
+
+                            <div>
+                                {planVisualizar !== datosSuscripcion.plan_nombre ? (
+                                    <Button 
+                                        fullWidth 
+                                        color="dark" 
+                                        size="md"
+                                        radius="md"
+                                        onClick={() => handleContact('WA', planVisualizar)}
+                                    >
+                                        Solicitar Cambio a {planVisualizar}
+                                    </Button>
+                                ) : (
+                                    <Badge variant="outline" color="gray" fullWidth size="xl" p="md">
+                                        Este es tu plan actual
+                                    </Badge>
+                                )}
+                            </div>
                         </Paper>
                     </Card>
-
-                    <Paper withBorder p="md" radius="md" bg="gray.0">
-                        <Group gap="sm" mb="xs" wrap="nowrap">
-                            <IconInfoCircle size={20} color="gray" />
-                            <Text fw={700} size="sm">¿Querés cambiar de plan?</Text>
-                        </Group>
-                        <Text size="sm" c="dimmed" mb="md" pl={34}>
-                            Para realizar un upgrade/downgrade de tu plan o extender tus límites, contactanos directamente. Nosotros nos encargamos de actualizar tu cuenta y enviarte el nuevo enlace de facturación.
-                        </Text>
-                        <Group pl={34}>
-                            <Button variant="default" size="xs" leftSection={<IconBrandWhatsapp size={14} />} onClick={() => window.open(`https://wa.me/5492345505575`, '_blank')}>+54 9 2345 505575</Button>
-                            <Button variant="default" size="xs" leftSection={<IconMail size={14} />} onClick={() => window.open(`mailto:rodeocontrol.app@gmail.com`)}>rodeocontrol.app@gmail.com</Button>
-                        </Group>
-                    </Paper>
-                </Stack>
-            </SimpleGrid>
-        </>
+                </Grid.Col>
+            </Grid>
+        </Stack>
     );
 }
