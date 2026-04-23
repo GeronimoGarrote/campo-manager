@@ -1,23 +1,23 @@
-import { useState, useEffect } from 'react';
-import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack } from '@mantine/core';
-import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp } from '@tabler/icons-react';
+import { useState, useEffect } from 'react'; 
+import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack, SimpleGrid } from '@mantine/core'; 
+import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp } from '@tabler/icons-react'; 
 import { supabase } from '../supabase';
 
-interface ModalFichaVacaProps {
-    opened: boolean;
+interface ModalFichaVacaProps { 
+    opened: boolean; 
     onClose: () => void;
-    animalSelId: string | null;
-    campoId: string | null;
-    animales: any[];
+    animalSelId: string | null; 
+    campoId: string | null; 
+    animales: any[]; 
     potreros: any[];
-    parcelas: any[];
-    lotes: any[];
-    establecimientos: any[];
+    parcelas: any[]; 
+    lotes: any[]; 
+    establecimientos: any[]; 
     onUpdate: () => void; 
-    abrirGraficoPeso: (id: string) => void;
-    iniciarEdicionEvento: (ev: any) => void;
+    abrirGraficoPeso: (id: string) => void; 
+    iniciarEdicionEvento: (ev: any) => void; 
     setAnimalSelId: (id: string | null) => void; 
-    datosSuscripcion: any;
+    datosSuscripcion: any; 
 }
 
 export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, iniciarEdicionEvento, setAnimalSelId, datosSuscripcion }: ModalFichaVacaProps) {
@@ -165,7 +165,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         let nuevasCondiciones = [...editCondicion]; 
         let esCastrado = editCastrado; 
         let torosToUpdate: string[] = [];
-        let fechaServicioAActualizar: string | null | undefined = undefined; // Agregado
+        let fechaServicioAActualizar: string | null | undefined = undefined; 
         
         if (tipoEventoInput === 'TACTO') { 
             resultadoFinal = tactoResultado || ''; 
@@ -177,18 +177,16 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                     const fechaParto = new Date(fechaEvento); 
                     fechaParto.setDate(fechaParto.getDate() + diasFaltantes);
                     
-                    // SE MANTIENE INTACTO PARA TU VIEJO
                     await supabase.from('agenda').insert({ establecimiento_id: campoId, fecha_programada: fechaParto.toISOString().split('T')[0], titulo: `Parto: ${animalSel.caravana}`, descripcion: `Parto estimado calculado por tacto (${mesesGestacion} meses).`, tipo: 'PARTO_ESTIMADO', animal_id: animalSel.id });
                     onUpdate();
 
-                    // CALCULAMOS LA FECHA DE SERVICIO PARA EL BADGE
                     const fServ = new Date(fechaEvento);
                     fServ.setDate(fServ.getDate() - Math.round(diasGestacionActual));
                     fechaServicioAActualizar = fServ.toISOString().split('T')[0];
                 }
             } else if (tactoResultado === 'VACÍA') { 
                 nuevoEstado = animalSel.estado.includes('LACTANCIA') ? 'EN LACTANCIA' : 'VACÍA'; 
-                fechaServicioAActualizar = null; // Limpia si dio vacía
+                fechaServicioAActualizar = null;
             }
         } 
         else if (tipoEventoInput === 'PARTO') {
@@ -203,7 +201,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
           if (pesoNacimiento) await supabase.from('eventos').insert({ animal_id: nuevoTernero.id, tipo: 'PESAJE', resultado: `${pesoNacimiento}kg`, detalle: 'Peso al nacer', fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
           
           nuevoEstado = 'EN LACTANCIA'; 
-          fechaServicioAActualizar = null; // Limpia porque ya parió
+          fechaServicioAActualizar = null; 
           if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
           resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; 
           if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo, estado: 'LACTANTE' }]);
@@ -302,8 +300,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
 
     async function confirmarBaja() { 
         if (!animalSel || !modoBaja || !campoId) return; 
-
-        // YA NO HAY RESTRICCIÓN DE SUSCRIPCIÓN PARA VENTAS EN RED. ¡Vía libre!
 
         if (modoBaja === 'VENDIDO') { if (!bajaPrecio) return alert("Ingresá el precio"); if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) return alert("Faltan los kilos totales"); }
         if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); 
@@ -437,16 +433,37 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         <Modal opened={opened} onClose={handleCloseModalVaca} title={<Group><Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : animalSel?.en_transito ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text> <RenderEstadoBadge estado={animalSel?.estado} /></Group>} size="lg" centered zIndex={2000}>
             <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal"><Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
             <Tabs.Panel value="historia">
-               {esActivo ? ( <Paper withBorder p="sm" bg="gray.0" mb="md"><Text size="sm" fw={700} mb="xs">Registrar Evento</Text><Group grow mb="sm"><TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} /><Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} /></Group>
+               {esActivo ? ( 
+                   <Paper withBorder p="sm" bg="gray.0" mb="md">
+                       <Text size="sm" fw={700} mb="xs">Registrar Evento</Text>
+                       <Group grow mb="sm">
+                           <TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} />
+                           <Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} />
+                       </Group>
                
-               {tipoEventoInput === 'TACTO' && ( <Group grow mb="sm" align="flex-start"> <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ zIndex: 200005 }}/> {tactoResultado === 'PREÑADA' && ( <Select label="Gestación (Meses)" placeholder="Opcional" data={opcionesGestacion} value={mesesGestacion} onChange={setMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>} comboboxProps={{ zIndex: 200005 }}/> )} </Group> )}
+                       {/* FIX DEL SELECT Y EL SWITCH DEL TACTO EN MOBILE USANDO SIMPLEGRID */}
+                       {tipoEventoInput === 'TACTO' && ( 
+                           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="sm">
+                               <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ zIndex: 200005 }}/> 
+                               {tactoResultado === 'PREÑADA' && ( 
+                                   <Select label="Gestación (Meses)" placeholder="Opcional" data={opcionesGestacion} value={mesesGestacion} onChange={setMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>} comboboxProps={{ zIndex: 200005 }}/> 
+                               )} 
+                           </SimpleGrid> 
+                       )}
                
-               {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}
-               {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
-               {!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO', 'DESTETE'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}
-               <TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>
-               {adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}
-               <Group grow align="flex-start"><Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/><Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button></Group></Paper> ) : ( <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está {animalSel?.en_transito ? 'en tránsito (bloqueado)' : 'archivado'}. Solo lectura.</Alert> )}
+                       {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}
+                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
+                       {!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO', 'DESTETE'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}
+                       <TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>
+                       {adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}
+                       <Group grow align="flex-start">
+                           <Textarea placeholder="Detalles / Observaciones..." rows={2} value={detalleInput} onChange={(e) => setDetalleInput(e.target.value)} style={{flex: 1}}/>
+                           <Button size="md" onClick={guardarEventoVaca} color="teal" loading={loading} style={{ maxWidth: 120 }}>Guardar</Button>
+                       </Group>
+                   </Paper> 
+               ) : ( 
+                   <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está {animalSel?.en_transito ? 'en tránsito (bloqueado)' : 'archivado'}. Solo lectura.</Alert> 
+               )}
                <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && <Badge size="xs" color="pink" variant="outline" ml="xs">Toro/s: {ev.datos_extra.toros_caravanas}</Badge>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
             </Tabs.Panel>
             <Tabs.Panel value="datos">

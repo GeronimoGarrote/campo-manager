@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem } from '@mantine/core';
+import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
@@ -36,7 +37,7 @@ function Th({ children, reversed, sorted, onSort }: any) {
 export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) => {
     if (!estado) return null;
     if (estado === 'PREÑADA Y LACTANDO') {
-        return ( <> <Badge color="teal">PREÑADA</Badge> <Badge color="grape">LACTANCIA</Badge> </> );
+        return ( <> <Badge color="teal">PREÑADA</Badge> <Badge color="grape" ml={5}>LACTANCIA</Badge> </> );
     }
     let color = 'blue';
     if (estado === 'PREÑADA') color = 'teal';
@@ -57,9 +58,11 @@ export default function Hacienda({
     const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterLote, setFilterLote] = useState<string | null>(null); 
     const [ordenEdad, setOrdenEdad] = useState<string | null>(null); 
-    const [ordenParto, setOrdenParto] = useState(false); // NUEVO ESTADO PARA ORDENAR POR PARTO
+    const [ordenParto, setOrdenParto] = useState(false);
     const [sortBy, setSortBy] = useState<string | null>(null); 
     const [reverseSortDirection, setReverseSortDirection] = useState(false);
+
+    const isMobile = useMediaQuery('(max-width: 48em)');
 
     const setSorting = (field: string) => {
         const reversed = field === sortBy ? !reverseSortDirection : false;
@@ -69,7 +72,7 @@ export default function Hacienda({
     const animalesFiltrados = useMemo(() => {
         return animales.filter((animal: any) => {
             const matchSeccion = activeSection === 'hacienda' 
-                ? (animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO')
+                ? (animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO')
                 : (animal.estado === 'VENDIDO' || animal.estado === 'MUERTO');
 
             const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
@@ -92,14 +95,13 @@ export default function Hacienda({
         }).sort((a: any, b: any) => {
             if (busqueda) { const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase(); const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase(); if (exactA && !exactB) return -1; if (!exactA && exactB) return 1; }
             
-            // LÓGICA DE ORDENAMIENTO POR PROXIMIDAD DE PARTO
             if (ordenParto) {
                 const diasA = calcularDiasFaltantesParto(a.fecha_servicio);
                 const diasB = calcularDiasFaltantesParto(b.fecha_servicio);
                 if (diasA === null && diasB === null) return 0;
-                if (diasA === null) return 1; // Las que no están preñadas van al fondo
+                if (diasA === null) return 1; 
                 if (diasB === null) return -1;
-                return diasA - diasB; // De menor a mayor (las más urgentes primero)
+                return diasA - diasB; 
             }
 
             if (ordenEdad) {
@@ -144,38 +146,94 @@ export default function Hacienda({
     };
 
     return (
-        <>
-            <Group justify="space-between" mb="lg" align="center">
-                <Group><Title order={3}>{activeSection === 'hacienda' ? 'Hacienda Activa' : 'Archivo de Bajas'}</Title><Badge size="xl" circle>{animalesFiltrados.length}</Badge></Group>
-                <Group gap="sm" mr="md">
-                    <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel}>Excel</Button>
-                    {activeSection === 'hacienda' && ( <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={180}>Nuevo Animal</Button> )}
+        <Stack gap="lg">
+            {/* Header: Título, Badge y Botones alineados al centro */}
+            <Group justify="space-between" align="center">
+                <Group gap="xs" align="center">
+                    <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda Activa' : 'Archivo de Bajas'}</Title>
+                    {/* Badge original: círculo azul */}
+                    <Badge size="xl" circle color="blue" variant="filled">{animalesFiltrados.length}</Badge>
+                </Group>
+                
+                <Group gap="xs" mr={{ base: 0, md: 'md' }}>
+                    <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel} px={{ base: 'xs', sm: 'md' }}>
+                        {/* fw={600} para devolverle el grosor en PC */}
+                        <Text visibleFrom="sm" fw={600}>Excel</Text>
+                    </Button>
+                    
+                    {activeSection === 'hacienda' && ( 
+                        <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={{ base: 'auto', sm: 180 }} px={{ base: 'xs', sm: 'md' }}>
+                            {/* fw={600} para devolverle el grosor en PC */}
+                            <Text visibleFrom="sm" fw={600}>Nuevo Animal</Text>
+                        </Button> 
+                    )}
                 </Group>
             </Group>
             
-            <Paper p="sm" radius="md" withBorder mb="lg" bg="gray.0">
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-                    <Group grow style={{ flex: 1 }}>
-                        <TextInput label="Buscar" placeholder="Caravana o Detalle..." leftSection={<IconSearch size={16}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-                        <Select label="Categoría" placeholder="Todas" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={filterCategoria} onChange={setFilterCategoria} clearable />
-                        <MultiSelect label="Estado" placeholder="Ej: Macho, Enferma..." data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={16}/>} clearable />
-                        <Select label="Lote" placeholder="Todos" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={16}/>} />
-                    </Group>
+            <Paper p="sm" radius="md" withBorder bg="gray.0">
+                <Group align="flex-start" wrap="nowrap">
+                    <div style={{ flex: 1 }}>
+                        <SimpleGrid cols={{ base: 2, sm: 2, md: 4 }} spacing="xs" verticalSpacing="xs">
+                            <TextInput 
+                                label={isMobile ? undefined : "Buscar"} 
+                                placeholder={isMobile ? "Buscar..." : "Caravana o Detalle..."} 
+                                leftSection={<IconSearch size={16}/>} 
+                                value={busqueda} 
+                                onChange={(e) => setBusqueda(e.target.value)} 
+                            />
+                            <Select 
+                                label={isMobile ? undefined : "Categoría"} 
+                                placeholder={isMobile ? "Cat." : "Todas"} 
+                                data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} 
+                                value={filterCategoria} 
+                                onChange={setFilterCategoria} 
+                                clearable 
+                            />
+                            <MultiSelect 
+                                label={isMobile ? undefined : "Estado"} 
+                                placeholder={isMobile ? "Estado..." : "Filtrar por estado..."} 
+                                data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']} 
+                                value={filterAtributos} 
+                                onChange={setFilterAtributos} 
+                                leftSection={<IconFilter size={16}/>} 
+                                clearable 
+                            />
+                            <Select 
+                                label={isMobile ? undefined : "Lote"} 
+                                placeholder={isMobile ? "Lote" : "Todos los lotes"} 
+                                data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} 
+                                value={filterLote} 
+                                onChange={setFilterLote} 
+                                clearable 
+                                leftSection={<IconTag size={16}/>} 
+                            />
+                        </SimpleGrid>
+                    </div>
+                    
                     <Menu shadow="md" width={220} position="bottom-end">
-                        <Menu.Target><Tooltip label="Opciones de Orden"><ActionIcon size={36} variant={(ordenEdad || ordenParto) ? "filled" : "default"} color={(ordenEdad || ordenParto) ? "blue" : "gray"} aria-label="Ordenar" mb={2}><IconSortAscending style={{ width: '60%', height: '60%' }} stroke={1.5} /></ActionIcon></Tooltip></Menu.Target>
+                        <Menu.Target>
+                            <Tooltip label="Opciones de Orden">
+                                <ActionIcon 
+                                    size={36} 
+                                    variant={(ordenEdad || ordenParto) ? "filled" : "default"} 
+                                    color={(ordenEdad || ordenParto) ? "blue" : "gray"} 
+                                    mt={isMobile ? 0 : 25}
+                                >
+                                    <IconSortAscending style={{ width: '60%', height: '60%' }} stroke={1.5} />
+                                </ActionIcon>
+                            </Tooltip>
+                        </Menu.Target>
                         <Menu.Dropdown>
                             <Menu.Label>Ordenar por fecha</Menu.Label>
                             <Menu.Item leftSection={<IconSortDescending size={14} />} onClick={() => { setOrdenEdad('desc'); setOrdenParto(false); setSortBy(null); }} bg={ordenEdad === 'desc' ? 'blue.0' : undefined}>Más viejos primero</Menu.Item>
                             <Menu.Item leftSection={<IconSortAscending size={14} />} onClick={() => { setOrdenEdad('asc'); setOrdenParto(false); setSortBy(null); }} bg={ordenEdad === 'asc' ? 'blue.0' : undefined}>Más jóvenes primero</Menu.Item>
-                            
                             <Menu.Divider />
                             <Menu.Label>Maternidad</Menu.Label>
                             <Menu.Item leftSection={<IconBabyCarriage size={14} />} onClick={() => { setOrdenParto(true); setOrdenEdad(null); setSortBy(null); }} bg={ordenParto ? 'blue.0' : undefined}>Próximas a parir</Menu.Item>
-                            
                             {(ordenEdad || ordenParto) && (<><Menu.Divider /><Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => { setOrdenEdad(null); setOrdenParto(false); }}>Quitar orden</Menu.Item></>)}
                         </Menu.Dropdown>
                     </Menu>
-                </div>
+                </Group>
             </Paper>
 
             <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
@@ -202,7 +260,7 @@ export default function Hacienda({
                                         {activeSection === 'bajas' ? (
                                             <Badge color={vaca.estado === 'VENDIDO' ? 'green' : 'red'}>{vaca.estado}</Badge>
                                         ) : (
-                                            <Group gap="xs">
+                                            <Group gap="xs" wrap="nowrap">
                                                 {vaca.en_transito ? (
                                                     <Badge color="#795548">EN TRÁNSITO</Badge>
                                                 ) : (
@@ -211,15 +269,12 @@ export default function Hacienda({
                                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
                                                         {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
                                                         
-                                                        {/* LÓGICA DE DÍAS DE PARTO DESPINTADA */}
                                                         {(vaca.estado === 'PREÑADA' || vaca.estado === 'PREÑADA Y LACTANDO') && vaca.fecha_servicio && (
                                                             (() => {
                                                                 const diasFaltantes = calcularDiasFaltantesParto(vaca.fecha_servicio);
                                                                 if (diasFaltantes === null) return null;
-                                                                
                                                                 let textoBadge = "";
                                                                 let colorBadge = "orange";
-
                                                                 if (diasFaltantes < 0) {
                                                                     textoBadge = `+${Math.abs(diasFaltantes)}d`;
                                                                     colorBadge = "red";
@@ -230,22 +285,24 @@ export default function Hacienda({
                                                                     textoBadge = `${Math.floor(diasFaltantes / 7)}s`;
                                                                     colorBadge = diasFaltantes <= 30 ? "red" : "orange";
                                                                 }
-
                                                                 return (
-                                                                    <Tooltip label={`Servicio estimado: ${formatDate(vaca.fecha_servicio)} (${diasFaltantes} días restantes)`} withArrow zIndex={3000}>
+                                                                    <Tooltip label={`Parto est.: ${formatDate(vaca.fecha_servicio)} (${diasFaltantes} d.)`} withArrow zIndex={3000}>
                                                                         <Badge variant="outline" color={colorBadge} size="sm" px={4}>{textoBadge}</Badge>
                                                                     </Tooltip>
                                                                 );
                                                             })()
                                                         )}
-
                                                         {renderCondicionBadges(vaca.condicion)}
                                                     </>
                                                 )}
                                             </Group>
                                         )}
                                     </Table.Td>
-                                    <Table.Td style={{ maxWidth: 150 }}><Tooltip label={vaca.detalles} disabled={!vaca.detalles} multiline w={200} withArrow zIndex={3000}><Text size="sm" c="dimmed" truncate="end">{vaca.detalles || '-'}</Text></Tooltip></Table.Td>
+                                    <Table.Td style={{ maxWidth: 150 }}>
+                                        <Tooltip label={vaca.detalles} disabled={!vaca.detalles} multiline w={200} withArrow zIndex={3000}>
+                                            <Text size="sm" c="dimmed" truncate="end">{vaca.detalles || '-'}</Text>
+                                        </Tooltip>
+                                    </Table.Td>
                                     {activeSection === 'hacienda' && (
                                         <>
                                             <Table.Td>{getUbicacionCompleta(vaca.potrero_id, vaca.parcela_id)}</Table.Td>
@@ -255,13 +312,17 @@ export default function Hacienda({
                                     {activeSection === 'bajas' && (
                                         <Table.Td>{vaca.estado === 'VENDIDO' ? <Text size="xs" c="dimmed">-</Text> : vaca.detalle_baja ? <Text size="sm" fw={500}>{vaca.detalle_baja}</Text> : <Text size="xs" c="dimmed">-</Text>}</Table.Td>
                                     )}
-                                    <Table.Td onClick={(e) => { e.stopPropagation(); toggleDestacado(vaca.id, !!vaca.destacado); }} align="right"><ActionIcon variant="subtle" color="yellow">{vaca.destacado ? <IconStarFilled size={18} /> : <IconStar size={18} />}</ActionIcon></Table.Td>
+                                    <Table.Td onClick={(e) => { e.stopPropagation(); toggleDestacado(vaca.id, !!vaca.destacado); }} align="right">
+                                        <ActionIcon variant="subtle" color="yellow">
+                                            {vaca.destacado ? <IconStarFilled size={18} /> : <IconStar size={18} />}
+                                        </ActionIcon>
+                                    </Table.Td>
                                 </Table.Tr>
                             ))}
                         </Table.Tbody>
                     </Table>
                 </div>
             </Paper>
-        </>
-    )
+        </Stack>
+    );
 }

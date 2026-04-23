@@ -245,7 +245,7 @@ export default function App() {
                     <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
                     
                     {/* Logo agrandado (pasó a height: 46) */}
-                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 46, width: 'auto', flexShrink: 0 }} />
+                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 56, width: 'auto', flexShrink: 0 }} />
                     
                     {/* Nombre de la app: Oculto en celu para dejar espacio */}
                     <Title order={3} visibleFrom="sm" style={{ flexShrink: 0 }}>RodeoControl</Title>
