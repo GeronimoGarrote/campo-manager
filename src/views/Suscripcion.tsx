@@ -20,29 +20,22 @@ const formatDate = (dateString?: string) => {
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
 };
 
-// Función pura para blindar la matemática. Devuelve SIEMPRE un entero de 0 a 100.
 const calcularProgresoSeguro = (actual: any, limite: any, esPremium: boolean) => {
     if (esPremium) return 100;
     const numActual = Number(actual) || 0;
-    const numLimite = Math.max(1, Number(limite) || 100); // Nunca divide por 0
+    const numLimite = Math.max(1, Number(limite) || 100);
     const porcentaje = Math.floor((numActual / numLimite) * 100);
     return (Number.isNaN(porcentaje) || porcentaje < 0) ? 0 : Math.min(porcentaje, 100);
 };
 
 export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion }: SuscripcionProps) {
+    // El selector de la derecha siempre arranca mostrando el BASICO para tentar al usuario
     const [planVisualizar, setPlanVisualizar] = useState<string>('BASICO');
-
-    useEffect(() => {
-        if (datosSuscripcion?.plan_nombre) {
-            setPlanVisualizar(datosSuscripcion.plan_nombre);
-        }
-    }, [datosSuscripcion]);
 
     if (!datosSuscripcion) return null; 
 
     const esPremium = datosSuscripcion.plan_nombre === 'PREMIUM';
 
-    // Cálculo de fechas limpio
     let diasRestantes = 0;
     if (datosSuscripcion.fecha_vencimiento) {
         const diff = new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59').getTime() - new Date().getTime();
@@ -50,7 +43,6 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
         diasRestantes = (Number.isNaN(diasCalc) || diasCalc < 0) ? 0 : diasCalc;
     }
 
-    // Cálculos de capacidades
     const numAnimales = Number(animalesTotales) || 0;
     const numLimAnimales = Number(datosSuscripcion.limite_animales) || 100;
     const porcentajeAnimales = calcularProgresoSeguro(animalesTotales, datosSuscripcion.limite_animales, esPremium);
@@ -63,6 +55,10 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
     const labelLimiteEstablecimientos = esPremium ? 'Ilimitados' : numLimEstablecimientos;
 
     const planesInfo: any = {
+        'PRUEBA': {
+            titulo: 'Plan de Prueba',
+            color: 'orange',
+        },
         'BASICO': {
             titulo: 'Plan Básico',
             precio: '$ 35.000 / mes',
@@ -85,13 +81,13 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
             titulo: 'Plan Profesional',
             precio: '$ 50.000 / mes',
             color: 'blue',
-            limites: 'Para productores que requieran mas espacio y mejor soporte',
+            limites: 'Para productores medianos',
             caracteristicas: [
                 'TODO lo incluido en el Plan Básico',
                 'Hasta 3 establecimientos',
                 'Hasta 300 animales por establecimiento',
                 'Soporte técnico',
-                'backup de datos mensual'
+                'Backup de datos mensual'
             ]
         },
         'PREMIUM': {
@@ -118,6 +114,9 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
         }
     };
 
+    // Fallback de seguridad por si la bdd manda fruta
+    const infoPlanActual = planesInfo[datosSuscripcion.plan_nombre] || planesInfo['BASICO'];
+
     return (
         <Stack gap="xl">
             <div>
@@ -126,19 +125,19 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
             </div>
 
             <Grid gutter="lg" align="stretch">
-                {/* COLUMNA IZQUIERDA */}
+                {/* COLUMNA IZQUIERDA: ESTADO ACTUAL */}
                 <Grid.Col span={{ base: 12, md: 6 }}>
                     <Stack gap="lg" style={{ height: '100%' }}>
                         <Card withBorder shadow="sm" radius="md" p="xl">
                             <Group justify="space-between" mb="lg">
                                 <div>
                                     <Text size="xs" fw={700} c="dimmed">PLAN ACTUAL</Text>
-                                    <Title order={3} c={`${planesInfo[datosSuscripcion.plan_nombre || 'BASICO'].color}.7`}>
-                                        {planesInfo[datosSuscripcion.plan_nombre || 'BASICO'].titulo}
+                                    <Title order={3} c={`${infoPlanActual.color}.7`}>
+                                        {infoPlanActual.titulo}
                                     </Title>
                                 </div>
                                 <Badge size="xl" color={diasRestantes > 7 ? 'teal' : diasRestantes > 0 ? 'orange' : 'red'} variant="light">
-                                    {datosSuscripcion.estado === 'ACTIVO' ? `${diasRestantes} días` : 'INACTIVO'}
+                                    {datosSuscripcion.estado === 'ACTIVO' ? `${diasRestantes} días restantes` : 'SUSCRIPCIÓN VENCIDA'}
                                 </Badge>
                             </Group>
 
@@ -185,14 +184,13 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                             </Stack>
                         </Card>
 
-                        {/* SECCIÓN DE PAGO (Widget Bancario) */}
                         <Card withBorder shadow="sm" radius="md" p="xl" bg="gray.0" style={{ flexGrow: 1 }}>
                             <Title order={4} mb="md" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <IconCreditCard size={22} color="var(--mantine-color-blue-6)" /> PAGAR E INFORMAR PAGO
                             </Title>
                             
                             <Text size="xs" c="dimmed" fs="italic" mb="lg">
-                                Transferí el monto de tu plan y envianos el comprobante junto con el id de cuenta para habilitarte el mes.
+                                Realizá la transferencia del monto del plan elegido y envianos el comprobante por WhatsApp o Mail.
                             </Text>
 
                             <Paper withBorder p="sm" radius="md" bg="white" mb="lg">
@@ -210,10 +208,7 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                             )}
                                         </CopyButton>
                                     </Group>
-                                    
-                                    {/* CORRECCIÓN ACÁ: variant="dashed" */}
                                     <Divider variant="dashed" />
-                                    
                                     <Group justify="space-between" wrap="nowrap">
                                         <Group gap="xs" wrap="nowrap">
                                             <Text size="sm" fw={700}>Alias:</Text>
@@ -245,20 +240,10 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                 </Group>
                                 
                                 <Group grow w="100%" mt="sm">
-                                    <Button 
-                                        color="green" 
-                                        variant="light"
-                                        size="sm"
-                                        onClick={() => handleContact('WA', planVisualizar)}
-                                    >
+                                    <Button color="green" variant="light" size="sm" onClick={() => handleContact('WA', planVisualizar)}>
                                         <IconBrandWhatsapp size={16} style={{ marginRight: 6 }} /> WhatsApp
                                     </Button>
-                                    <Button 
-                                        color="blue" 
-                                        variant="light"
-                                        size="sm"
-                                        onClick={() => handleContact('MAIL', planVisualizar)}
-                                    >
+                                    <Button color="blue" variant="light" size="sm" onClick={() => handleContact('MAIL', planVisualizar)}>
                                         <IconMail size={16} style={{ marginRight: 6 }} /> Mail
                                     </Button>
                                 </Group>
@@ -267,10 +252,10 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                     </Stack>
                 </Grid.Col>
 
-                {/* COLUMNA DERECHA */}
+                {/* COLUMNA DERECHA: SELECCIÓN DE PLANES COMPRABLES */}
                 <Grid.Col span={{ base: 12, md: 6 }}>
                     <Card withBorder shadow="sm" radius="md" p="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <Text fw={700} size="sm" mb="md" c="dimmed">VER PLANES DISPONIBLES</Text>
+                        <Text fw={700} size="sm" mb="md" c="dimmed">VER DETALLES DE PLANES</Text>
                         
                         <Group grow gap="xs" mb="lg">
                             {['BASICO', 'PRO', 'PREMIUM'].map((p) => (
