@@ -127,13 +127,25 @@ export default function App() {
           .single();
 
       if (data) {
-          setDatosSuscripcion(data);
+          // --- SANITIZACIÓN ANTI-NaN ---
+          // Forzamos a que siempre sean números válidos antes de mandarlos a los hijos
+          const dataLimpia = {
+              ...data,
+              limite_animales: Number(data.limite_animales) || 100,
+              limite_establecimientos: Number(data.limite_establecimientos) || 1
+          };
+          setDatosSuscripcion(dataLimpia);
       } else {
           // Default si aún no tiene registro en la tabla
-          setDatosSuscripcion({ plan_nombre: 'BASICO', limite_animales: 300, limite_establecimientos: 1, estado: 'ACTIVO' });
+          setDatosSuscripcion({ 
+              plan_nombre: 'BASICO', 
+              limite_animales: 100, // Lo bajo a 100 por defecto como el plan básico real
+              limite_establecimientos: 1, 
+              estado: 'ACTIVO' 
+          });
       }
   }
-
+  
   async function fetchAnimales() { if (!campoId) return; const { data } = await supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); setAnimales(data || []); }
   async function fetchPotreros() { if (!campoId) return; const { data } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setPotreros(data || []); }
   async function fetchParcelas() { if (!campoId) return; const { data } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setParcelas(data || []); }
@@ -335,7 +347,7 @@ export default function App() {
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} />}
               {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca}/>}
-              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} datosSuscripcion={datosSuscripcion} />}
+              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales}/>}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} />}
               {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} />}

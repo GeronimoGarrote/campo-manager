@@ -426,11 +426,32 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         let color = 'blue'; if (estado === 'PREÑADA') color = 'teal'; else if (estado === 'VACÍA') color = 'yellow'; else if (estado === 'EN LACTANCIA') color = 'grape'; else if (estado === 'LACTANTE') color = 'cyan';
         return <Badge size="sm" color={color}>{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
     };
+    
+    // Nueva función para parsear la condición sanitaria
+    const renderCondicionBadges = (condStr: string) => { 
+        if (!condStr || condStr === 'SANA') return null; 
+        return condStr.split(', ').map((c: any, i: number) => ( 
+            <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> 
+        )); 
+    };
 
     if (!animalSel) return null;
 
     return (
-        <Modal opened={opened} onClose={handleCloseModalVaca} title={<Group><Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : animalSel?.en_transito ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text> <RenderEstadoBadge estado={animalSel?.estado} /></Group>} size="lg" centered zIndex={2000}>
+        <Modal opened={opened} onClose={handleCloseModalVaca} title={<Group><Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : animalSel?.en_transito ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text> 
+        <Group gap="xs" wrap="nowrap">
+            {animalSel?.en_transito ? (
+                <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>
+            ) : (
+                <>
+                    {animalSel?.categoria === 'Ternero' && (<Badge color={animalSel.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animalSel.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                    {animalSel?.categoria === 'Ternero' && animalSel.castrado ? (<Badge color="cyan" size="sm">CAPADO</Badge>) : null}
+                    {(animalSel?.categoria !== 'Ternero' || animalSel.estado === 'LACTANTE') && <RenderEstadoBadge estado={animalSel.estado} />}
+                    {renderCondicionBadges(animalSel.condicion)}
+                </>
+            )}
+        </Group>
+        </Group>} size="lg" centered zIndex={2000}>
             <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal"><Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
             <Tabs.Panel value="historia">
                {esActivo ? ( 

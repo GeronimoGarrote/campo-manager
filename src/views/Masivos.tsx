@@ -3,30 +3,34 @@ import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox,
 import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
-// Helper local
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 
+// Nos traemos la lógica de Badges PRO que usamos en Hacienda
+export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) => {
+    if (!estado) return null;
+    if (estado === 'PREÑADA Y LACTANDO') {
+        return ( <> <Badge color="teal" size="sm">PREÑADA</Badge> <Badge color="grape" ml={5} size="sm">LACTANCIA</Badge> </> );
+    }
+    let color = 'blue';
+    if (estado === 'PREÑADA') color = 'teal';
+    else if (estado === 'VACÍA') color = 'yellow';
+    else if (estado === 'EN LACTANCIA') color = 'grape';
+    else if (estado === 'LACTANTE') color = 'cyan';
+    else if (estado === 'EN SERVICIO') color = 'pink'; 
+    else if (estado === 'APARTADO') color = 'orange'; 
+    return <Badge color={color} size="sm">{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
+};
+
 export default function Masivos({ 
-    campoId, 
-    animales = [], 
-    potreros = [], 
-    parcelas = [], 
-    lotes = [], 
-    establecimientos = [], 
-    fetchAnimales, 
-    fetchActividadGlobal, 
-    setActiveSection,
-    datosSuscripcion
+    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], fetchAnimales, fetchActividadGlobal, setActiveSection 
 }: any) {
     const [loading, setLoading] = useState(false);
     
-    // Filtros locales
     const [busqueda, setBusqueda] = useState('');
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterSexo, setFilterSexo] = useState<string | null>(null);
     const [filterLote, setFilterLote] = useState<string | null>(null);
 
-    // Estados Masivos
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [massActividad, setMassActividad] = useState<string | null>('VACUNACION');
     const [massFecha, setMassFecha] = useState<Date | null>(new Date());
@@ -46,7 +50,6 @@ export default function Masivos({
     const [massTorosIds, setMassTorosIds] = useState<string[]>([]);
     const [massEstablecimientoDestino, setMassEstablecimientoDestino] = useState<string | null>(null);
     
-    // Estados Red
     const [esVentaRedMasiva, setEsVentaRedMasiva] = useState(false);
     const [renspaDestinoMasiva, setRenspaDestinoMasiva] = useState('');
 
@@ -73,6 +76,13 @@ export default function Masivos({
         return <Badge size="sm" variant="outline" color="lime" leftSection={<IconMapPin size={10}/>}>{parcNom ? `${pNom} (${parcNom})` : pNom}</Badge>;
     }
 
+    const renderCondicionBadges = (condStr: string) => { 
+        if (!condStr || condStr === 'SANA') return null; 
+        return condStr.split(', ').map((c: any, i: number) => ( 
+            <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> 
+        )); 
+    };
+
     const desvincularToroDeVacas = async (toroId: string) => {
         const vacasAfectadas = animales.filter((a: any) => a.toros_servicio_ids && a.toros_servicio_ids.includes(toroId));
         for (const vaca of vacasAfectadas) { 
@@ -81,24 +91,9 @@ export default function Masivos({
         }
     };
 
-    // --- MAGIA PRO: Bloqueo Premium ---
-    const toggleRedPremium = (checked: boolean, setSwitch: any) => {
-        if (checked && datosSuscripcion?.plan_nombre !== 'PREMIUM') {
-            return alert("⭐ La venta directa por RENSPA a otros usuarios es una función exclusiva del Plan Premium. Contactanos para mejorar tu cuenta.");
-        }
-        setSwitch(checked);
-    };
-
     async function guardarEventoMasivo() {
         if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
         if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
-        
-        // --- CANDADO BACKEND PREMIUM ---
-        if (massActividad === 'VENTA' && esVentaRedMasiva) {
-            if (datosSuscripcion?.plan_nombre !== 'PREMIUM') {
-                return alert("⭐ Función exclusiva del Plan Premium.");
-            }
-        }
         
         if (massActividad === 'VENTA') {
             if (!massPrecioVenta) return alert("Falta especificar el monto de la venta.");
@@ -192,19 +187,24 @@ export default function Masivos({
         if (massActividad === 'VENTA' && esVentaRedMasiva) {
             if (!renspaDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
             
-            const { data } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestinoMasiva.trim() }).single();
-            const dest = data as any;
+            const { data, error: rpcErr } = await supabase.rpc('verificar_espacio_renspa', { 
+                p_renspa: renspaDestinoMasiva.trim(),
+                p_cantidad: idsParaProcesar.length
+            });
             
-            if (!dest) { setLoading(false); return alert("RENSPA no encontrado en el sistema."); }
-            if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+            if (rpcErr) { setLoading(false); return alert("Error de conexión al verificar el RENSPA."); }
+            if (!data.ok) { setLoading(false); return alert("❌ ERROR: " + data.error); }
+            if (data.dest_id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
 
+            const dest = { id: data.dest_id, nombre: data.dest_nombre };
             const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre || 'Campo Desconocido';
 
             const { error: errTransf } = await supabase.from('transferencias').insert({ campo_origen_id: campoId, campo_destino_id: dest.id, animales_ids: idsParaProcesar, precio_total: totalIngreso, detalles: `Venta masiva de ${idsParaProcesar.length} animales`, origen_nombre: nombreOrigen, estado: 'PENDIENTE' });
             errorGlobal = errTransf;
             
             if (!errorGlobal) {
-                await supabase.from('animales').update({ estado: 'EN TRÁNSITO', detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).in('id', idsParaProcesar);
+                // ACÁ ESTÁ EL FIX: Usamos en_transito: true y NO PISAMOS EL ESTADO!
+                await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).in('id', idsParaProcesar);
                 await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
                 for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
                 
@@ -333,7 +333,7 @@ export default function Masivos({
                     <Paper withBorder p="sm" mt="sm" bg="gray.0">
                         <Group justify="space-between" mb="md" p="xs" bg="blue.0" style={{ borderRadius: 8, border: '1px solid #74c0fc' }}>
                             <Text size="sm" fw={600} c="blue.9">Vender y transferir a otro usuario de RodeoControl</Text>
-                            <Switch checked={esVentaRedMasiva} onChange={(e) => toggleRedPremium(e.currentTarget.checked, setEsVentaRedMasiva)} color="blue" />
+                            <Switch checked={esVentaRedMasiva} onChange={(e) => setEsVentaRedMasiva(e.currentTarget.checked)} color="blue" />
                         </Group>
 
                         {esVentaRedMasiva && (
@@ -408,7 +408,20 @@ export default function Masivos({
                                 <Table.Td><Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} /></Table.Td>
                                 <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
                                 <Table.Td><Text fw={500}>{animal.categoria}</Text></Table.Td>
-                                <Table.Td><Badge size="sm" color={animal.estado.includes('PREÑADA') ? 'teal' : animal.estado === 'VACÍA' ? 'yellow' : animal.estado.includes('LACTANCIA') ? 'grape' : animal.estado === 'LACTANTE' ? 'cyan' : 'blue'}>{animal.estado}</Badge></Table.Td>
+                                <Table.Td>
+                                    <Group gap="xs" wrap="nowrap">
+                                        {animal.en_transito ? (
+                                            <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>
+                                        ) : (
+                                            <>
+                                                {animal.categoria === 'Ternero' && (<Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                {animal.categoria === 'Ternero' && animal.castrado ? (<Badge color="cyan" size="sm">CAPADO</Badge>) : null}
+                                                {(animal.categoria !== 'Ternero' || animal.estado === 'LACTANTE') && <RenderEstadoBadge estado={animal.estado} />}
+                                                {renderCondicionBadges(animal.condicion)}
+                                            </>
+                                        )}
+                                    </Group>
+                                </Table.Td>
                                 <Table.Td>{getUbicacionCompleta(animal.potrero_id, animal.parcela_id)}</Table.Td>
                             </Table.Tr>
                         ))}
