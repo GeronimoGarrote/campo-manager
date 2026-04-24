@@ -62,7 +62,7 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
                     <Divider my="xl" label="¿No tenés cuenta?" labelPosition="center" />
                     
                     <Paper withBorder bg="gray.0" p="md" radius="md" ta="center">
-                        <Text size="sm" fw={700} mb="xs">Solicitá una demo o alta de cuenta</Text>
+                        <Text size="sm" fw={700} mb="xs">Solicitá una prueba gratuita de 5 dias o alta de cuenta</Text>
                         <Text size="xs" c="dimmed" mb="md" px="sm">RodeoControl es un sistema de uso cerrado. Contactanos directamente para dar de alta tu establecimiento y configurar el sistema.</Text>
                         
                         <Group justify="center" gap="sm">
