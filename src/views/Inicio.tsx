@@ -3,7 +3,7 @@ import { Title, Grid, Card, Group, RingProgress, Center, Text, ThemeIcon, Badge,
 import { IconBabyCarriage, IconHeartbeat, IconCalendarEvent, IconCheck, IconActivity, IconChartDots, IconMapPin, IconCurrencyDollar, IconSkull } from '@tabler/icons-react';
 import { useMediaQuery } from '@mantine/hooks';
 
-const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
+const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
 
 const diasDiferencia = (fechaFuturaStr: string) => { 
     const hoy = new Date(); hoy.setHours(0,0,0,0); 
