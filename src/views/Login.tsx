@@ -5,6 +5,8 @@ import logoRodeo from '../assets/loggoblanco.png';
 export default function Login({ email, setEmail, password, setPassword, handleLogin, authLoading }: any) {
     return (
         <Box style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
+            
+            {/* LADO IZQUIERDO (PC) - Queda exactamente igual */}
             <Box visibleFrom="md" style={{ flex: 1, padding: '4rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: 'white', background: 'linear-gradient(135deg, #20c997 0%, #087f5b 50%, #042b1e 100%)' }}>
                 <div>
                     <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 105, width: 'auto' }} />
@@ -27,17 +29,36 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
                 </div>
             </Box>
 
-            <Box style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-                <Container size={420} w="100%" px={0}>
-                    <Group justify="center" mb="md" hiddenFrom="md">
-                        <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 48, width: 'auto' }} />
-                    </Group>
-                    <Title ta="center" order={2} hiddenFrom="md" c="teal" mb="xs">RodeoControl</Title>
-                    
-                    <Text size="lg" fw={700} ta="center" mb="xs">¡Bienvenido de vuelta!</Text>
-                    <Text size="sm" c="dimmed" ta="center" mb="xl">Ingresá tus credenciales para acceder a tu campo</Text>
+            {/* LADO DERECHO / MOBILE */}
+            <Box 
+                className="login-right-side"
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
+            >
+                {/* CSS Inyectado para que solo aplique el degradé en celular (max-width: 62em = breakpoint 'md') */}
+                <style>{`
+                    .login-right-side { background-color: #f8f9fa; }
+                    .login-bottom-card { background-color: var(--mantine-color-gray-0); }
+                    @media (max-width: 62em) {
+                        .login-right-side {
+                            background: linear-gradient(135deg, #20c997 0%, #087f5b 50%, #042b1e 100%) !important;
+                        }
+                        .login-bottom-card {
+                            background-color: rgba(255, 255, 255, 0.95) !important;
+                        }
+                    }
+                `}</style>
 
-                    <Paper withBorder shadow="md" p={30} radius="md">
+                <Container size={420} w="100%" px={0}>
+                    <Stack align="center" mb="xl" mt={-40} hiddenFrom="md" gap="xs">
+                        <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 130, width: 'auto' }} />
+                        <Title order={1} c="white" style={{ letterSpacing: '-1px' }}>RodeoControl</Title>
+                    </Stack>
+                    
+                    {/* Los colores de texto cambian automáticamente: blancos en celu, oscuros en PC */}
+                    <Text size="lg" fw={700} ta="center" mb="xs" c={{ base: 'white', md: 'dark' }}>¡Bienvenido de vuelta!</Text>
+                    <Text size="sm" ta="center" mb="xl" c={{ base: 'rgba(255,255,255,0.8)', md: 'dimmed' }}>Ingresá tus credenciales para acceder a tu campo</Text>
+
+                    <Paper withBorder shadow="xl" p={30} radius="md">
                         <TextInput 
                             label="Correo Electrónico" 
                             placeholder="usuario@campo.com" 
@@ -59,11 +80,11 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
                         </Button>
                     </Paper>
 
-                    <Divider my="xl" label="¿No tenés cuenta?" labelPosition="center" />
+                    <Divider my="xl" label={<Text size="sm" c={{ base: 'white', md: 'dimmed' }}>¿No tenés cuenta?</Text>} labelPosition="center" />
                     
-                    <Paper withBorder bg="gray.0" p="md" radius="md" ta="center">
-                        <Text size="sm" fw={700} mb="xs">Solicitá una prueba gratuita de 5 dias o alta de cuenta</Text>
-                        <Text size="xs" c="dimmed" mb="md" px="sm">RodeoControl es un sistema de uso cerrado. Contactanos directamente para dar de alta tu establecimiento y configurar el sistema.</Text>
+                    <Paper className="login-bottom-card" withBorder p="md" radius="md" ta="center">
+                        <Text size="sm" fw={700} mb="xs">Solicitá tu prueba gratuita de 5 dias o alta de tu cuenta</Text>
+                        <Text size="xs" c="dimmed" mb="md" px="sm">RodeoControl es un sistema de uso cerrado. Contactanos directamente para dar de alta tu establecimiento en menos de 5 minutos y configurar el sistema.</Text>
                         
                         <Group justify="center" gap="sm">
                             <Button 
