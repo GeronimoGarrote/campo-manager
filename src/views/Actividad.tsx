@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Group, TextInput, Select, Paper, Table, Text, Badge } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
 
-const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
+// ACÁ ESTÁ EL CAMBIO (slice(-2) al año)
+const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
 
 export default function Actividad({ eventosGlobales }: any) {
     const [busqueda, setBusqueda] = useState('');

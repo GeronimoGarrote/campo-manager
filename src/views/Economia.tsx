@@ -8,7 +8,8 @@ interface Establecimiento { id: string; nombre: string; renspa?: string; }
 interface EconomiaProps { campoId: string; establecimientos?: Establecimiento[]; }
 interface Movimiento { id: string; fecha: string; timestamp: string; tipo: 'INGRESO' | 'EGRESO'; categoria: string; detalle: string; monto: number; esManual: boolean; }
 
-const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
+// ACÁ ESTÁ EL CAMBIO (slice(-2) al año)
+const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 
 export default function Economia({ campoId, establecimientos = [] }: EconomiaProps) {
