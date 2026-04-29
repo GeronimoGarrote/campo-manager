@@ -1,12 +1,38 @@
-import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider } from '@mantine/core';
-import { IconCheck, IconMail, IconBrandWhatsapp } from '@tabler/icons-react';
+import { useState } from 'react';
+import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider, Alert } from '@mantine/core';
+import { IconCheck, IconMail, IconBrandWhatsapp, IconAlertCircle, IconInfoCircle } from '@tabler/icons-react';
 import logoRodeo from '../assets/loggoblanco.png'; 
 
-export default function Login({ email, setEmail, password, setPassword, handleLogin, authLoading }: any) {
+export default function Login({ 
+    email, setEmail, 
+    password, setPassword, 
+    handleLogin, handleSignUp, 
+    authLoading, 
+    authError, setAuthError,
+    authSuccess, setAuthSuccess
+}: any) {
+    const [isRegister, setIsRegister] = useState(false);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isRegister) {
+            handleSignUp(e);
+        } else {
+            handleLogin(e);
+        }
+    };
+
+    // Al cambiar de pestaña, limpiamos los mensajes
+    const toggleRegisterMode = (mode: boolean) => {
+        setIsRegister(mode);
+        setAuthError(null);
+        setAuthSuccess(null);
+    };
+
     return (
         <Box style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
             
-            {/* LADO IZQUIERDO (PC) - Queda exactamente igual */}
+            {/* LADO IZQUIERDO (PC) */}
             <Box visibleFrom="md" style={{ flex: 1, padding: '4rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: 'white', background: 'linear-gradient(135deg, #20c997 0%, #087f5b 50%, #042b1e 100%)' }}>
                 <div>
                     <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 105, width: 'auto' }} />
@@ -25,7 +51,7 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
                     </Stack>
                 </div>
                 <div>
-                    <Text size="sm" style={{ color: 'rgba(255,255,255,0.6)' }}>© 2026 RodeoControl. Desarrollado en Argentina.</Text>
+                    <Text size="sm" style={{ color: 'rgba(255,255,255,0.6)' }}>© {new Date().getFullYear()} RodeoControl. Desarrollado en Argentina.</Text>
                 </div>
             </Box>
 
@@ -34,7 +60,6 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
                 className="login-right-side"
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
             >
-                {/* CSS Inyectado para que solo aplique el degradé en celular (max-width: 62em = breakpoint 'md') */}
                 <style>{`
                     .login-right-side { background-color: #f8f9fa; }
                     .login-bottom-card { background-color: var(--mantine-color-gray-0); }
@@ -54,57 +79,95 @@ export default function Login({ email, setEmail, password, setPassword, handleLo
                         <Title order={1} c="white" style={{ letterSpacing: '-1px' }}>RodeoControl</Title>
                     </Stack>
                     
-                    {/* Los colores de texto cambian automáticamente: blancos en celu, oscuros en PC */}
-                    <Text size="lg" fw={700} ta="center" mb="xs" c={{ base: 'white', md: 'dark' }}>¡Bienvenido de vuelta!</Text>
-                    <Text size="sm" ta="center" mb="xl" c={{ base: 'rgba(255,255,255,0.8)', md: 'dimmed' }}>Ingresá tus credenciales para acceder a tu campo</Text>
+                    <Text size="lg" fw={700} ta="center" mb="xs" c={{ base: 'white', md: 'dark' }}>
+                        {isRegister ? '¡Probá gratis por 5 días!' : '¡Bienvenido de vuelta!'}
+                    </Text>
+                    <Text size="sm" ta="center" mb="xl" c={{ base: 'rgba(255,255,255,0.8)', md: 'dimmed' }}>
+                        {isRegister ? 'Ingresá un mail y contraseña para empezar' : 'Ingresá tus credenciales para acceder a tu campo'}
+                    </Text>
+
+                    {/* ACÁ ESTÁN LAS NOTIFICACIONES INTEGRADAS */}
+                    {authError && (
+                        <Alert icon={<IconAlertCircle size={16} />} title="Error" color="red" variant="light" mb="md" withCloseButton onClose={() => setAuthError(null)}>
+                            {authError}
+                        </Alert>
+                    )}
+
+                    {authSuccess && (
+                        <Alert icon={<IconInfoCircle size={16} />} title="¡Excelente!" color="blue" variant="light" mb="md" withCloseButton onClose={() => setAuthSuccess(null)}>
+                            {authSuccess}
+                        </Alert>
+                    )}
 
                     <Paper withBorder shadow="xl" p={30} radius="md">
-                        <TextInput 
-                            label="Correo Electrónico" 
-                            placeholder="usuario@campo.com" 
-                            required 
-                            value={email} 
-                            onChange={(e) => setEmail(e.target.value)} 
-                            leftSection={<IconMail size={16} />}
-                        />
-                        <PasswordInput 
-                            label="Contraseña" 
-                            placeholder="Tu contraseña" 
-                            required 
-                            mt="md" 
-                            value={password} 
-                            onChange={(e) => setPassword(e.target.value)} 
-                        />
-                        <Button fullWidth mt="xl" size="md" onClick={handleLogin} loading={authLoading} color="teal">
-                            Iniciar Sesión
-                        </Button>
+                        <form onSubmit={handleSubmit}>
+                            <TextInput 
+                                label="Correo Electrónico" 
+                                placeholder="usuario@campo.com" 
+                                required 
+                                value={email} 
+                                onChange={(e) => setEmail(e.target.value)} 
+                                leftSection={<IconMail size={16} />}
+                            />
+                            <PasswordInput 
+                                label="Contraseña" 
+                                placeholder="Tu contraseña" 
+                                required 
+                                mt="md" 
+                                value={password} 
+                                onChange={(e) => setPassword(e.target.value)} 
+                            />
+                            <Button fullWidth mt="xl" size="md" type="submit" loading={authLoading} color="teal">
+                                {isRegister ? 'Crear Cuenta y Probar Gratis' : 'Iniciar Sesión'}
+                            </Button>
+                        </form>
                     </Paper>
 
-                    <Divider my="xl" label={<Text size="sm" c={{ base: 'white', md: 'dimmed' }}>¿No tenés cuenta?</Text>} labelPosition="center" />
+                    <Divider my="xl" label={<Text size="sm" c={{ base: 'white', md: 'dimmed' }}>
+                        {isRegister ? '¿Ya tenés cuenta?' : '¿No tenés cuenta?'}
+                    </Text>} labelPosition="center" />
                     
                     <Paper className="login-bottom-card" withBorder p="md" radius="md" ta="center">
-                        <Text size="sm" fw={700} mb="xs">Solicitá tu prueba gratuita de 5 dias o alta de tu cuenta</Text>
-                        <Text size="xs" c="dimmed" mb="md" px="sm">RodeoControl es un sistema de uso cerrado. Contactanos directamente para dar de alta tu establecimiento en menos de 5 minutos y configurar el sistema.</Text>
+                        {isRegister ? (
+                            <>
+                                <Text size="sm" fw={700} mb="xs">Ingresá a tu campo</Text>
+                                <Text size="xs" c="dimmed" mb="md" px="sm">Si ya creaste tu cuenta anteriormente, podés iniciar sesión directamente.</Text>
+                                <Button variant="light" color="teal" size="sm" fullWidth onClick={() => toggleRegisterMode(false)}>
+                                    Ir a Iniciar Sesión
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Text size="sm" fw={700} mb="xs">Prueba Gratuita de 5 Días</Text>
+                                <Text size="xs" c="dimmed" mb="md" px="sm">Creá tu cuenta ahora mismo y probá el sistema sin límites por 5 días.</Text>
+                                <Button variant="light" color="blue" size="sm" fullWidth onClick={() => toggleRegisterMode(true)}>
+                                    Registrarse Gratis
+                                </Button>
+                            </>
+                        )}
                         
+                        <Divider my="sm" variant="dashed" />
+
+                        <Text size="xs" c="dimmed" mb="xs">¿Necesitás ayuda con tu cuenta?</Text>
                         <Group justify="center" gap="sm">
                             <Button 
                                 component="a" 
-                                href="https://wa.me/5492345505575?text=Hola,%20quiero%20solicitar%20info%20para%20registrar%20una%20cuenta%20en%20RodeoControl." 
+                                href="https://wa.me/5492345505575?text=Hola,%20quiero%20solicitar%20info." 
                                 target="_blank" 
                                 variant="light" 
                                 color="teal" 
-                                size="sm" 
-                                leftSection={<IconBrandWhatsapp size={16} />}
+                                size="xs" 
+                                leftSection={<IconBrandWhatsapp size={14} />}
                             >
                                 WhatsApp
                             </Button>
                             <Button 
                                 component="a" 
-                                href="mailto:rodeocontrol.app@gmail.com?subject=Solicitud%20de%20cuenta&body=Hola,%20quiero%20solicitar%20info%20para%20registrar%20una%20cuenta%20en%20RodeoControl." 
+                                href="mailto:rodeocontrol.app@gmail.com" 
                                 variant="light" 
                                 color="blue" 
-                                size="sm" 
-                                leftSection={<IconMail size={16} />}
+                                size="xs" 
+                                leftSection={<IconMail size={14} />}
                             >
                                 Email
                             </Button>

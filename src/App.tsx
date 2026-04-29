@@ -38,6 +38,10 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Estados para las notificaciones del Login
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+
   const [opened, { toggle }] = useDisclosure(); 
   const [activeSection, setActiveSection] = useState('inicio'); 
   const [bellOpened, setBellOpened] = useState(false);
@@ -108,8 +112,46 @@ export default function App() {
     if (activeSection === 'inicio' || activeSection === 'actividad') fetchActividadGlobal();
   }, [activeSection, campoId, session]); 
 
-  // Funciones de Autenticación
-  async function handleLogin() { setAuthLoading(true); const { error } = await supabase.auth.signInWithPassword({ email, password }); setAuthLoading(false); if (error) alert("Error: " + error.message); }
+  // --- FUNCIONES DE AUTH ---
+  async function handleLogin(e?: React.FormEvent) { 
+    if (e) e.preventDefault();
+    setAuthError(null); setAuthSuccess(null);
+    if (!email || !password) return setAuthError("Completá email y contraseña.");
+    setAuthLoading(true); 
+    const { error } = await supabase.auth.signInWithPassword({ email, password }); 
+    setAuthLoading(false); 
+    if (error) {
+        if (error.message.includes("Email not confirmed")) {
+            setAuthError("Por favor, confirmá tu cuenta haciendo clic en el link que te enviamos al correo.");
+        } else {
+            setAuthError("Credenciales incorrectas. Verificá tu correo y contraseña.");
+        }
+    }
+  }
+  
+  async function handleSignUp(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    setAuthError(null); setAuthSuccess(null);
+    if (!email || !password) return setAuthError("Completá email y contraseña.");
+    setAuthLoading(true);
+    
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    setAuthLoading(false);
+    
+    if (error) {
+        setAuthError(error.message);
+    } else if (data.user && data.user.identities && data.user.identities.length === 0) {
+        // TRAMPA ANTI-DUPLICADOS: Si identities viene vacío, el mail ya está registrado.
+        setAuthError("Este correo electrónico ya se encuentra registrado. Por favor, iniciá sesión.");
+    } else {
+        if (data.session === null) {
+            setAuthSuccess("¡Cuenta creada exitosamente! Te enviamos un link a tu correo (revisá la carpeta de Spam). Confirmalo para poder ingresar.");
+        } else {
+            setAuthSuccess("¡Bienvenido! Tu cuenta de prueba fue creada y ya podés comenzar a usar el sistema.");
+        }
+    }
+  }
+
   async function handleLogout() { await supabase.auth.signOut(); setSession(null); }
 
   // Funciones de Fetch de Datos
@@ -246,7 +288,14 @@ export default function App() {
   return (
     <MantineProvider>
         {!session ? (
-            <Login email={email} setEmail={setEmail} password={password} setPassword={setPassword} handleLogin={handleLogin} authLoading={authLoading} />
+            <Login 
+                email={email} setEmail={setEmail} 
+                password={password} setPassword={setPassword} 
+                handleLogin={handleLogin} handleSignUp={handleSignUp} 
+                authLoading={authLoading} 
+                authError={authError} setAuthError={setAuthError}
+                authSuccess={authSuccess} setAuthSuccess={setAuthSuccess}
+            />
         ) : (
           <AppShell header={{ height: 60 }} navbar={{ width: 250, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
             <AppShell.Header>
