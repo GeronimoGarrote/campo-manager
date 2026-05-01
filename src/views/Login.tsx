@@ -75,7 +75,7 @@ export default function Login({
 
                 <Container size={420} w="100%" px={0}>
                     <Stack align="center" mb="xl" mt={-40} hiddenFrom="md" gap="xs">
-                        <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 130, width: 'auto' }} />
+                        <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 115, width: 'auto' }} />
                         <Title order={1} c="white" style={{ letterSpacing: '-1px' }}>RodeoControl</Title>
                     </Stack>
                     
