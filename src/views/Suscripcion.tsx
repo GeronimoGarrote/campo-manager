@@ -148,8 +148,8 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                 {/* ACÁ ESTÁ EL FIX DEL CENTRADO (align="center") */}
                                 <Stack gap={5} ta="center" align="center">
                                     <Text fw={700} size="lg">Activá tu cuenta ahora</Text>
-                                    <Badge size="xl" variant="filled" color="teal" h={30} px="xl">PAGO ÚNICO: $ 95.000</Badge>
-                                    <Text size="xs" c="dimmed">Activá tu cuenta para siempre y llevá la gestión de tu campo a primera división.</Text>
+                                    <Badge size="xl" variant="filled" color="teal" h={30} px="xl">Suscripcion por promo lanzamiento: $ 50.000</Badge>
+                                    <Text size="xs" c="dimmed">Activá tu cuenta para siempre, selecciona tu plan y llevá la gestión de tu campo a primera división.</Text>
                                 </Stack>
                                 
                                 <Group grow w="100%" mt="sm">
@@ -232,7 +232,7 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
 
                 <Grid.Col span={{ base: 12, md: 6 }}>
                     <Card withBorder shadow="sm" radius="md" p="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <Text fw={700} size="sm" mb="md" c="dimmed">EXPLORAR OTROS PLANES</Text>
+                        <Text fw={700} size="sm" mb="md" c="dimmed">EXPLORAR PLANES</Text>
                         <Group grow gap="xs" mb="lg">
                             {['BASICO', 'PRO', 'PREMIUM'].map((p) => (
                                 <Button key={p} variant={planVisualizar === p ? 'filled' : 'light'} color={planesInfo[p].color} onClick={() => setPlanVisualizar(p)} size="xs">{p}</Button>
@@ -263,7 +263,7 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         <Title order={3} ta="center" c="blue.9">¡Traé un amigo y ganá un mes gratis!</Title>
                     </Group>
                     <Text size="md" c="dimmed" ta="center" maw={650}>
-                        Si un colega o conocido activa su cuenta de parte tuya, te regalamos automáticamente el siguiente mes de tu <b>Plan Básico</b>. ¡Sin vueltas ni letras chicas!
+                        Si un colega o conocido activa su cuenta de parte tuya, te <b>regalamos</b> automáticamente el siguiente mes de tu <b>Plan</b>. ¡Sin vueltas ni letras chicas!
                     </Text>
                 </Stack>
             </Card>
