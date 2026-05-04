@@ -4,7 +4,7 @@ import {
 } from '@mantine/core';
 import { 
     IconCheck, IconCopy, IconBrandWhatsapp, IconMail, IconCreditCard,
-    IconRocket, IconGift, IconChartBar
+    IconGift
 } from '@tabler/icons-react';
 import { useState } from 'react';
 
@@ -34,7 +34,6 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
     if (!datosSuscripcion) return null; 
 
     const esPremium = datosSuscripcion.plan_nombre === 'PREMIUM';
-    const esPrueba = datosSuscripcion.plan_nombre === 'PRUEBA';
 
     let diasRestantes = 0;
     if (datosSuscripcion.fecha_vencimiento) {
@@ -111,65 +110,9 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                 <Text c="dimmed" size="sm">Gestioná tu suscripción y visualizá los límites de tu plan actual.</Text>
             </div>
 
-            {/* TARJETA DE ALTA DIVIDIDA EN 2 COLUMNAS 50/50 (Solo en Prueba) */}
-            {esPrueba && (
-                <Card w="100%" withBorder shadow="md" radius="md" p={0} style={{ borderTop: '6px solid var(--mantine-color-teal-6)', overflow: 'hidden' }}>
-                    <Grid gutter={0}>
-                        {/* COLUMNA IZQUIERDA: VENTAJAS (Mitad del espacio: md={6}) */}
-                        <Grid.Col span={{ base: 12, md: 6 }} p="xl" bg="teal.0">
-                            <Stack gap="md" style={{ height: '100%', justifyContent: 'center' }}>
-                                <Group gap="xs">
-                                    <ThemeIcon size="lg" color="teal" variant="filled" radius="md"><IconChartBar size={20}/></ThemeIcon>
-                                    <Title order={3} c="teal.9">¿Por qué digitalizar tu campo?</Title>
-                                </Group>
-                                <Text size="sm" c="dark" fw={500}>
-                                    Manejar la información de forma profesional es la única manera de <b>EVITAR PÉRDIDAS</b> económicas por falta de control.
-                                </Text>
-                                <List
-                                    spacing="sm"
-                                    size="sm"
-                                    icon={<ThemeIcon color="teal" size={20} radius="xl"><IconCheck size={12} /></ThemeIcon>}
-                                >
-                                    <List.Item><b>Información en tiempo real:</b> Tomá decisiones basadas en datos, no en suposiciones.</List.Item>
-                                    <List.Item><b>Trazabilidad Sanitaria:</b> Control absoluto de vacunas y tratamientos para evitar muertes evitables.</List.Item>
-                                    <List.Item><b>Agenda Inteligente:</b> Alertas de partos y tareas para que nada se te pase por alto.</List.Item>
-                                    <List.Item><b>Control Financiero:</b> Seguimiento exacto de cada peso invertido en tu hacienda.</List.Item>
-                                </List>
-                            </Stack>
-                        </Grid.Col>
-
-                        {/* COLUMNA DERECHA: PAGO Y ACCIÓN (Mitad del espacio: md={6}) */}
-                        <Grid.Col span={{ base: 12, md: 6 }} p="xl">
-                            <Stack align="center" justify="center" h="100%" gap="md">
-                                <ThemeIcon size={50} radius="100%" color="teal" variant="light">
-                                    <IconRocket size={26} />
-                                </ThemeIcon>
-                                
-                                {/* ACÁ ESTÁ EL FIX DEL CENTRADO (align="center") */}
-                                <Stack gap={5} ta="center" align="center">
-                                    <Text fw={700} size="lg">Activá tu cuenta ahora</Text>
-                                    <Badge size="xl" variant="filled" color="teal" h={30} px="xl">Suscripcion por promo lanzamiento: $ 50.000</Badge>
-                                    <Text size="xs" c="dimmed">Activá tu cuenta para siempre, selecciona tu plan y llevá la gestión de tu campo a primera división.</Text>
-                                </Stack>
-                                
-                                <Group grow w="100%" mt="sm">
-                                    <Button variant="light" color="teal" size="md" leftSection={<IconBrandWhatsapp size={20}/>} onClick={() => handleContact('WA', '', "pagar el alta de mi cuenta")}>
-                                        WhatsApp
-                                    </Button>
-                                    <Button variant="light" color="blue" size="md" leftSection={<IconMail size={20}/>} onClick={() => handleContact('MAIL', '', "pagar el alta de mi cuenta")}>
-                                        Email
-                                    </Button>
-                                </Group>
-                            </Stack>
-                        </Grid.Col>
-                    </Grid>
-                </Card>
-            )}
-
             {/* GRILLA DE DOS COLUMNAS (ESTADO Y PLANES) */}
             <Grid gutter="lg" align="stretch">
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                    {/* El flexGrow: 1 se aplica al padre para que las tarjetas internas se estiren */}
                     <Stack gap="lg" style={{ height: '100%', flexGrow: 1 }}>
                         <Card withBorder shadow="sm" radius="md" p="xl">
                             <Group justify="space-between" mb="lg">
@@ -201,7 +144,6 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                             </Stack>
                         </Card>
 
-                        {/* Acá está el flexGrow: 1 para rellenar el espacio vertical en pantallas grandes */}
                         <Card withBorder shadow="sm" radius="md" p="xl" bg="gray.0" style={{ flexGrow: 1 }}>
                             <Title order={4} mb="md" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <IconCreditCard size={22} color="var(--mantine-color-blue-6)" /> INFORMACIÓN DE PAGO
@@ -219,8 +161,20 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                     </Group>
                                 </Stack>
                             </Paper>
+                            
                             <Stack gap="xs" align="center" style={{ marginTop: 'auto' }}>
-                                <Text size="xs" c="dimmed">ID DE CUENTA: <b>{datosSuscripcion.user_id?.substring(0, 18)}...</b></Text>
+                                <Group gap={6} justify="center">
+                                    <Text size="xs" c="dimmed">ID DE CUENTA:</Text>
+                                    <Text size="xs" fw={700} ff="monospace" c="dimmed">{datosSuscripcion.user_id?.substring(0, 15)}...</Text>
+                                    <CopyButton value={datosSuscripcion.user_id || ''}>
+                                        {({ copied, copy }) => (
+                                            <ActionIcon color={copied ? 'teal' : 'blue'} variant="subtle" onClick={copy} title="Copiar ID completo">
+                                                {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                                            </ActionIcon>
+                                        )}
+                                    </CopyButton>
+                                </Group>
+                                
                                 <Group grow w="100%">
                                     <Button color="green" variant="light" size="sm" leftSection={<IconBrandWhatsapp size={16}/>} onClick={() => handleContact('WA', planVisualizar)}>WhatsApp</Button>
                                     <Button color="blue" variant="light" size="sm" leftSection={<IconMail size={16}/>} onClick={() => handleContact('MAIL', planVisualizar)}>Email</Button>
