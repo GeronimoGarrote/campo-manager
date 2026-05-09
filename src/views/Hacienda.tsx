@@ -117,7 +117,14 @@ export default function Hacienda({
         });
     }, [animales, busqueda, filterCategoria, filterAtributos, filterLote, ordenEdad, ordenParto, sortBy, reverseSortDirection, activeSection]);
 
-    const renderCondicionBadges = (condStr: string) => { if (!condStr || condStr === 'SANA') return null; return condStr.split(', ').map((c: any, i: number) => ( <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> )); };
+    // AQUÍ ESTÁ EL CAMBIO A VIOLET PARA LASTIMADA
+    const renderCondicionBadges = (condStr: string) => { 
+        if (!condStr || condStr === 'SANA') return null; 
+        return condStr.split(', ').map((c: any, i: number) => ( 
+            <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'violet'} variant="filled" size="sm">{c}</Badge> 
+        )); 
+    };
+
     const getNombrePotrero = (id?: string) => { if(!id) return null; const p = potreros.find((pot: any) => pot.id === id); return p ? p.nombre : null; };
     const getNombreParcela = (id?: string) => { if(!id) return null; const p = parcelas.find((parc: any) => parc.id === id); return p ? p.nombre : null; };
     const getNombreLote = (id?: string) => { if(!id) return null; const l = lotes.find((lot: any) => lot.id === id); return l ? l.nombre : null; };
@@ -147,23 +154,19 @@ export default function Hacienda({
 
     return (
         <Stack gap="lg">
-            {/* Header: Título, Badge y Botones alineados al centro */}
             <Group justify="space-between" align="center">
                 <Group gap="xs" align="center">
                     <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda Activa' : 'Archivo de Bajas'}</Title>
-                    {/* Badge original: círculo azul */}
                     <Badge size="xl" circle color="blue" variant="filled">{animalesFiltrados.length}</Badge>
                 </Group>
                 
                 <Group gap="xs" mr={{ base: 0, md: 'md' }}>
                     <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel} px={{ base: 'xs', sm: 'md' }}>
-                        {/* fw={600} para devolverle el grosor en PC */}
                         <Text visibleFrom="sm" fw={600}>Excel</Text>
                     </Button>
                     
                     {activeSection === 'hacienda' && ( 
                         <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={{ base: 'auto', sm: 180 }} px={{ base: 'xs', sm: 'md' }}>
-                            {/* fw={600} para devolverle el grosor en PC */}
                             <Text visibleFrom="sm" fw={600}>Nuevo Animal</Text>
                         </Button> 
                     )}

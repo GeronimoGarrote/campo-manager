@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Group, Title, Badge, SimpleGrid, Paper, Text, ActionIcon, Tabs, Table, Stack, Alert, Tooltip } from '@mantine/core';
+import { Group, Title, Badge, SimpleGrid, Paper, Text, ActionIcon, Tabs, Table, Stack, Alert} from '@mantine/core';
 import { IconArrowLeft, IconArchive, IconList, IconChartDots, IconInfoCircle } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../../supabase';
@@ -9,16 +9,14 @@ const formatDate = (dateString: string) => { if (!dateString) return '-'; const 
 const CustomTooltipMulti = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
-        // Agregamos 'timestamp' a los filtros para que no lo cuente como animal
         const animalKeys = Object.keys(data).filter(k => k !== 'fecha' && k !== 'timestamp' && k !== '_meta' && k !== 'Promedio Lote');
-        const pesoTotal = animalKeys.reduce((acc: number, curr: string) => acc + (Number(data[curr]) || 0), 0);
         const cantAnimales = animalKeys.length;
         const promedioLote = data['Promedio Lote'];
 
         return (
             <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', minWidth: '220px' }}>
                 <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '8px', fontSize: '14px', color: '#343a40' }}>Fecha: {data.fecha}</p>
-                {cantAnimales > 0 && (<div style={{ marginBottom: '10px' }}><p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados: <b>{cantAnimales}</b></p><p style={{ margin: 0, fontSize: '13px', color: '#495057' }}>Sumatoria: <b>{pesoTotal} kg</b></p></div>)}
+                {cantAnimales > 0 && (<div style={{ marginBottom: '10px' }}><p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados en fecha: <b>{cantAnimales}</b></p></div>)}
                 {promedioLote && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Lote: {promedioLote} kg</p></div>)}
             </div>
         );
@@ -54,32 +52,52 @@ export default function VistaDetalleHistorico({ historialSel, onVolver, abrirFic
             if (pesajes && pesajes.length > 0) {
                 const fechasUnicas = [...new Set(pesajes.map((p: any) => p.fecha_evento.split('T')[0]))].sort();
                 const caravanasPresentes = new Set<string>();
-                const ultimoPesoConocido: Record<string, number> = {};
+                
+                const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date, adpv: number}> = {};
+                pesajes.forEach((p: any) => {
+                    const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00'); const w = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const c = (p.animales as any)?.caravana || 'Desc';
+                    if (!isNaN(w)) {
+                        if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d, adpv: 0 }; } 
+                        else { if (d < animalStats[c].firstD) { animalStats[c].firstW = w; animalStats[c].firstD = d; } if (d > animalStats[c].lastD) { animalStats[c].lastW = w; animalStats[c].lastD = d; } }
+                    }
+                });
+
+                Object.keys(animalStats).forEach(c => {
+                    const stats = animalStats[c];
+                    const days = (stats.lastD.getTime() - stats.firstD.getTime()) / (1000 * 60 * 60 * 24);
+                    stats.adpv = days > 0 ? (stats.lastW - stats.firstW) / days : 0;
+                });
+
+                const ultimoPesoConocido: Record<string, {w: number, d: Date}> = {};
 
                 const dataGraf = fechasUnicas.map((fechaStr: any) => {
                     const currentDate = new Date(fechaStr + 'T12:00:00');
                     const pesajesDelDia = pesajes.filter((p: any) => p.fecha_evento.startsWith(fechaStr));
-                    
-                    // AGREGAMOS EL TIMESTAMP ACÁ PARA LA ESCALA DE TIEMPO
-                    const objParaElGrafico: any = { 
-                        fecha: formatDate(fechaStr),
-                        timestamp: currentDate.getTime() 
-                    };
+                    const objParaElGrafico: any = { fecha: formatDate(fechaStr), timestamp: currentDate.getTime() };
                     
                     pesajesDelDia.forEach((p: any) => {
                         const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); 
                         const caravana = (p.animales as any)?.caravana || 'Desc';
-                        if(!isNaN(pesoNum)) { ultimoPesoConocido[caravana] = pesoNum; caravanasPresentes.add(caravana); objParaElGrafico[caravana] = pesoNum; }
+                        if(!isNaN(pesoNum)) { ultimoPesoConocido[caravana] = {w: pesoNum, d: currentDate}; caravanasPresentes.add(caravana); objParaElGrafico[caravana] = pesoNum; }
                     });
-                    const pesosActivos = Object.values(ultimoPesoConocido);
-                    if (pesosActivos.length > 0) { 
-                        const sumaTotal = pesosActivos.reduce((a: number, b: number) => a + b, 0); 
-                        objParaElGrafico['Promedio Lote'] = Math.round(sumaTotal / pesosActivos.length); 
-                    }
+
+                    let sumTotal = 0; let countActivos = 0;
+                    Object.keys(animalStats).forEach(caravana => {
+                        const stats = animalStats[caravana];
+                        if (currentDate >= stats.firstD) {
+                            const lastKnown = ultimoPesoConocido[caravana];
+                            if (lastKnown) {
+                                const daysSince = (currentDate.getTime() - lastKnown.d.getTime()) / 86400000;
+                                const estimatedW = lastKnown.w + (stats.adpv * Math.max(0, daysSince));
+                                sumTotal += estimatedW; countActivos++;
+                            }
+                        }
+                    });
+
+                    if (countActivos > 0) { objParaElGrafico['Promedio Lote'] = Math.round(sumTotal / countActivos); }
                     return objParaElGrafico;
                 });
-                setLineasAnimales(Array.from(caravanasPresentes));
-                setDatosGrafico(dataGraf);
+                setLineasAnimales(Array.from(caravanasPresentes)); setDatosGrafico(dataGraf);
             }
             setLoading(false);
         }
@@ -106,92 +124,43 @@ export default function VistaDetalleHistorico({ historialSel, onVolver, abrirFic
 
                     <Tabs.Panel value="resumen">
                         <SimpleGrid cols={{ base: 2, sm: 5 }} mt="sm" mb="xl">
-                            <Paper withBorder p="md" ta="center" radius="md">
-                                <Text size="sm" c="dimmed" fw={700} tt="uppercase">Peso Inicial (Total)</Text>
-                                <Text fw={700} size="xl">{historialSel.peso_inicial} kg</Text>
-                            </Paper>
-                            <Paper withBorder p="md" ta="center" radius="md">
-                                <Text size="sm" c="dimmed" fw={700} tt="uppercase">Peso Final (Total)</Text>
-                                <Text fw={700} size="xl">{historialSel.peso_final} kg</Text>
-                            </Paper>
-                            <Paper withBorder p="md" ta="center" radius="md">
-                                <Text size="sm" c="dimmed" fw={700} tt="uppercase">Ganancia Promedio</Text>
-                                <Text fw={700} size="xl" c="teal">+{historialSel.ganancia_promedio} kg</Text>
-                            </Paper>
-                            <Paper withBorder p="md" ta="center" radius="md">
-                                <Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text>
-                                <Text fw={700} size="xl" c="blue">{historialSel.adpv} kg/d</Text>
-                            </Paper>
-                            <Paper withBorder p="md" ta="center" radius="md" bg="gray.0">
-                                <Text size="sm" c="dimmed" fw={700} tt="uppercase">Inversión (Costos)</Text>
-                                <Text fw={700} size="xl" c="red">${Number(historialSel.costo_total || 0).toLocaleString('es-AR')}</Text>
-                            </Paper>
+                            <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Peso Inicial</Text><Text fw={700} size="xl">{historialSel.peso_inicial} kg</Text></Paper>
+                            <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Peso Final</Text><Text fw={700} size="xl">{historialSel.peso_final} kg</Text></Paper>
+                            <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Ganancia</Text><Text fw={700} size="xl" c="teal">+{historialSel.ganancia_promedio} kg</Text></Paper>
+                            <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV</Text><Text fw={700} size="xl" c="blue">{historialSel.adpv} kg/d</Text></Paper>
+                            <Paper withBorder p="md" ta="center" radius="md" bg="gray.0"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Inversión (Costos)</Text><Text fw={700} size="xl" c="red">${Number(historialSel.costo_total || 0).toLocaleString('es-AR')}</Text></Paper>
                         </SimpleGrid>
 
                         {loading ? (<Text ta="center" c="dimmed" my="xl">Reconstruyendo gráfico histórico...</Text>) : 
                          datosGrafico.length > 0 ? (
-                            <>
-                                <Group justify="flex-end" mb="md">
-                                    <Tooltip label="Línea morada: Peso promedio. Líneas grises: Evolución individual histórica de cada animal." multiline w={250} withArrow position="left" zIndex={3000}>
-                                        <Badge variant="light" color="gray" leftSection={<IconInfoCircle size={14}/>} style={{cursor: 'help'}}>¿Cómo leer este gráfico?</Badge>
-                                    </Tooltip>
-                                </Group>
-                                <div style={{ width: '100%', height: 400 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={datosGrafico} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            {/* ACÁ CAMBIAMOS EL EJE X */}
-                                            <XAxis 
-                                                dataKey="timestamp" 
-                                                type="number" 
-                                                scale="time" 
-                                                domain={['dataMin', 'dataMax']} 
-                                                tickFormatter={(tick) => {
-                                                    const d = new Date(tick);
-                                                    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}`;
-                                                }}
-                                            />
-                                            <YAxis domain={['auto', 'auto']} />
-                                            <RechartsTooltip content={<CustomTooltipMulti />} />
-                                            {lineasAnimales.map((caravana, idx) => (<Line key={idx} type="monotone" dataKey={caravana} stroke="#ced4da" strokeWidth={1.5} dot={{ r: 2 }} connectNulls />))}
-                                            <Line type="monotone" dataKey="Promedio Lote" stroke="#be4bdb" strokeWidth={4} activeDot={{ r: 8 }} connectNulls />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </>
+                            <div style={{ width: '100%', height: 400 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={datosGrafico} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(tick) => { const d = new Date(tick); return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}`; }} />
+                                        <YAxis domain={['auto', 'auto']} />
+                                        <RechartsTooltip content={<CustomTooltipMulti />} />
+                                        {lineasAnimales.map((caravana, idx) => (<Line key={idx} type="monotone" dataKey={caravana} stroke="#ced4da" strokeWidth={1.5} dot={{ r: 2 }} connectNulls />))}
+                                        <Line type="monotone" dataKey="Promedio Lote" stroke="#be4bdb" strokeWidth={4} activeDot={{ r: 8 }} connectNulls />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
                         ) : (<Alert color="grape" title="Sin datos de pesaje" mt="md" icon={<IconInfoCircle/>}>No se encontraron registros de pesaje para este ciclo.</Alert>)}
                     </Tabs.Panel>
 
                     <Tabs.Panel value="hacienda">
-                        {loading ? (<Text ta="center" c="dimmed" my="xl">Cargando animales...</Text>) : 
-                         animalesHist.length === 0 ? (
-                            <Alert color="gray" mt="md">No se pudo recuperar la lista de animales. Es posible que hayan sido eliminados definitivamente de la base de datos.</Alert>
-                        ) : (
-                            <Table striped highlightOnHover mt="md">
-                                <Table.Thead bg="gray.1">
-                                    <Table.Tr>
-                                        <Table.Th>Caravana</Table.Th>
-                                        <Table.Th>Categoría</Table.Th>
-                                        <Table.Th>Sexo</Table.Th>
-                                        <Table.Th>Estado Actual</Table.Th>
+                        <Table striped highlightOnHover mt="md">
+                            <Table.Thead bg="gray.1"><Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Sexo</Table.Th><Table.Th>Estado Actual</Table.Th></Table.Tr></Table.Thead>
+                            <Table.Tbody>
+                                {animalesHist.map((a: any) => (
+                                    <Table.Tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => abrirFichaVaca(a)}>
+                                        <Table.Td fw={700}>{a.caravana}</Table.Td><Table.Td>{a.categoria}</Table.Td>
+                                        <Table.Td><Badge color={a.sexo === 'M' ? 'blue' : 'pink'} variant="light">{a.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge></Table.Td>
+                                        <Table.Td><Badge color={a.estado === 'VENDIDO' ? 'green' : 'blue'}>{a.estado}</Badge></Table.Td>
                                     </Table.Tr>
-                                </Table.Thead>
-                                <Table.Tbody>
-                                    {animalesHist.map((a: any) => (
-                                        <Table.Tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => abrirFichaVaca(a)}>
-                                            <Table.Td fw={700}>{a.caravana}</Table.Td>
-                                            <Table.Td>{a.categoria}</Table.Td>
-                                            <Table.Td><Badge color={a.sexo === 'M' ? 'blue' : 'pink'} variant="light">{a.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge></Table.Td>
-                                            <Table.Td>
-                                                <Badge color={a.estado === 'VENDIDO' ? 'green' : a.estado === 'ACTIVO' ? 'blue' : 'gray'}>
-                                                    {a.estado}
-                                                </Badge>
-                                            </Table.Td>
-                                        </Table.Tr>
-                                    ))}
-                                </Table.Tbody>
-                            </Table>
-                        )}
+                                ))}
+                            </Table.Tbody>
+                        </Table>
                     </Tabs.Panel>
                 </Tabs>
             </Paper>

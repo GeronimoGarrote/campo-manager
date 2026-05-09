@@ -14,7 +14,6 @@ const CustomTooltipMulti = ({ active, payload }: any) => {
         const data = payload[0].payload;
         const meta = data._meta || {};
         const animalKeys = Object.keys(data).filter((k: string) => k !== 'fecha' && k !== 'timestamp' && k !== '_meta' && k !== 'Promedio Lote' && k !== 'Promedio Estimado');
-        const pesoTotal = animalKeys.reduce((acc: number, curr: string) => acc + (Number(data[curr]) || 0), 0);
         const cantAnimales = animalKeys.length;
         const promedioLote = data['Promedio Lote'];
         const promedioEst = data['Promedio Estimado'];
@@ -22,7 +21,7 @@ const CustomTooltipMulti = ({ active, payload }: any) => {
         return (
             <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', minWidth: '220px' }}>
                 <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '8px', fontSize: '14px', color: '#343a40' }}>Fecha: {data.fecha}</p>
-                {cantAnimales > 0 && (<div style={{ marginBottom: '10px' }}><p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados: <b>{cantAnimales}</b></p><p style={{ margin: 0, fontSize: '13px', color: '#495057' }}>Sumatoria: <b>{pesoTotal} kg</b></p></div>)}
+                {cantAnimales > 0 && (<div style={{ marginBottom: '10px' }}><p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados en fecha: <b>{cantAnimales}</b></p></div>)}
                 {promedioLote && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Lote: {promedioLote} kg</p>{meta['Promedio Lote'] && (<p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>Rendimiento: <span style={{color: meta['Promedio Lote'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Lote'].diff > 0 ? '+' : ''}{meta['Promedio Lote'].diff} kg</span> ({meta['Promedio Lote'].adpv} kg/día)</p>)}</div>)}
                 {promedioEst && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px', marginTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Estimado: {promedioEst} kg</p>{meta['Promedio Estimado'] && (<p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>Rendimiento: <span style={{color: meta['Promedio Estimado'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Estimado'].diff > 0 ? '+' : ''}{meta['Promedio Estimado'].diff} kg</span> ({meta['Promedio Estimado'].adpv} kg/día)</p>)}</div>)}
             </div>
@@ -109,28 +108,52 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
 
         const fechasUnicas = [...new Set(pesajesFiltrados.map((p: any) => p.fecha_evento.split('T')[0]))].sort();
         const caravanasPresentes = new Set<string>();
-        const ultimoPesoConocido: Record<string, number> = {};
+
+        const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date, adpv: number}> = {};
+        pesajesFiltrados.forEach((p: any) => {
+            const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00'); const w = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const c = (p.animales as any)?.caravana || 'Desc';
+            if (!isNaN(w)) {
+                if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d, adpv: 0 }; } 
+                else { if (d < animalStats[c].firstD) { animalStats[c].firstW = w; animalStats[c].firstD = d; } if (d > animalStats[c].lastD) { animalStats[c].lastW = w; animalStats[c].lastD = d; } }
+            }
+        });
+
+        Object.keys(animalStats).forEach(c => {
+            const stats = animalStats[c];
+            const days = (stats.lastD.getTime() - stats.firstD.getTime()) / (1000 * 60 * 60 * 24);
+            stats.adpv = days > 0 ? (stats.lastW - stats.firstW) / days : 0;
+        });
+
+        const ultimoPesoConocido: Record<string, {w: number, d: Date}> = {};
         const lastKnownForMeta: Record<string, { weight: number, date: Date }> = {}; 
 
         const dataGrafico = fechasUnicas.map((fechaStr: any) => {
             const currentDate = new Date(fechaStr + 'T12:00:00');
             const pesajesDelDia = pesajesFiltrados.filter((p: any) => p.fecha_evento.startsWith(fechaStr));
-            
-            const objParaElGrafico: any = { 
-                fecha: formatDate(fechaStr), 
-                timestamp: currentDate.getTime(),
-                _meta: {} 
-            };
+            const objParaElGrafico: any = { fecha: formatDate(fechaStr), timestamp: currentDate.getTime(), _meta: {} };
             
             pesajesDelDia.forEach((p: any) => {
                 const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const caravana = (p.animales as any)?.caravana || 'Desc';
-                if(!isNaN(pesoNum)) { ultimoPesoConocido[caravana] = pesoNum; caravanasPresentes.add(caravana); objParaElGrafico[caravana] = pesoNum; }
+                if(!isNaN(pesoNum)) { ultimoPesoConocido[caravana] = {w: pesoNum, d: currentDate}; caravanasPresentes.add(caravana); objParaElGrafico[caravana] = pesoNum; }
             });
-            const pesosActivos = Object.values(ultimoPesoConocido);
-            if (pesosActivos.length > 0) { const sumaTotal = pesosActivos.reduce((a: number, b: number) => a + b, 0); objParaElGrafico['Promedio Lote'] = Math.round(sumaTotal / pesosActivos.length); }
+
+            let sumTotal = 0; let countActivos = 0;
+            Object.keys(animalStats).forEach(caravana => {
+                const stats = animalStats[caravana];
+                if (currentDate >= stats.firstD) {
+                    const lastKnown = ultimoPesoConocido[caravana];
+                    if (lastKnown) {
+                        const daysSince = (currentDate.getTime() - lastKnown.d.getTime()) / 86400000;
+                        const estimatedW = lastKnown.w + (stats.adpv * Math.max(0, daysSince));
+                        sumTotal += estimatedW; countActivos++;
+                    }
+                }
+            });
+
+            if (countActivos > 0) { objParaElGrafico['Promedio Lote'] = Math.round(sumTotal / countActivos); }
             
             Object.keys(objParaElGrafico).forEach((key: string) => {
-                if (key === 'fecha' || key === 'timestamp' || key === '_meta') return;
+                if (key === 'fecha' || key === 'timestamp' || key === '_meta' || key === 'Promedio Lote') return;
                 const currentWeight = objParaElGrafico[key];
                 if (lastKnownForMeta[key]) {
                     const diffDays = (currentDate.getTime() - lastKnownForMeta[key].date.getTime()) / (1000 * 60 * 60 * 24);
@@ -150,55 +173,33 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             let labelProyeccion = fHasta && fHasta < hoy ? formatDate(targetDate.toISOString().split('T')[0]) + ' (Est.)' : 'Hoy (Est.)';
             let mostrarBadgeEstimado = diasDesdeUltimo >= 2;
 
-            // --- CORRECCIÓN ACÁ ---
             if (!fHasta && diasDesdeUltimo < 2) { 
                 targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000); 
                 labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy. 15d)'; 
-                diasDesdeUltimo = 15; // ESTO FALTABA PARA QUE FUNCIONE EL IF DE ABAJO
+                diasDesdeUltimo = 15; 
             }
 
-            const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date}> = {};
-            pesajesFiltrados.forEach((p: any) => {
-                const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00'); const w = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const c = (p.animales as any)?.caravana || 'Desc';
-                if (!isNaN(w)) {
-                    if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d }; } 
-                    else { if (d < animalStats[c].firstD) { animalStats[c].firstW = w; animalStats[c].firstD = d; } if (d > animalStats[c].lastD) { animalStats[c].lastW = w; animalStats[c].lastD = d; } }
-                }
-            });
-
-            let pesoTotalInicio = 0;
-            let pesoTotalActual = 0;
-            let countEst = 0;
-            let sumEst = 0;
-
+            let pesoTotalInicio = 0; let pesoTotalActual = 0; let sumEst = 0; let countEst = 0;
             Object.keys(ultimoPesoConocido).forEach((caravana: string) => {
-                const stats = animalStats[caravana]; let pesoProyectado = ultimoPesoConocido[caravana];
-                if (stats && stats.lastD > stats.firstD) { 
-                    const daysDiff = (stats.lastD.getTime() - stats.firstD.getTime()) / (1000 * 60 * 60 * 24);
-                    if (daysDiff > 0) { const adpv = (stats.lastW - stats.firstW) / daysDiff; const daysSinceAnimalLastWeighing = (targetDate.getTime() - stats.lastD.getTime()) / (1000 * 60 * 60 * 24); if (daysSinceAnimalLastWeighing > 0) pesoProyectado += (adpv * daysSinceAnimalLastWeighing); }
+                const stats = animalStats[caravana]; const lastKnown = ultimoPesoConocido[caravana];
+                if (stats && lastKnown) {
+                    let pesoProyectado = lastKnown.w;
+                    const daysSinceAnimalLastWeighing = (targetDate.getTime() - lastKnown.d.getTime()) / 86400000; 
+                    if (daysSinceAnimalLastWeighing > 0) pesoProyectado += (stats.adpv * daysSinceAnimalLastWeighing); 
+                    sumEst += pesoProyectado; countEst++;
+                    pesoTotalInicio += stats.firstW; pesoTotalActual += stats.lastW;
                 }
-                
-                if (stats) {
-                    pesoTotalInicio += stats.firstW;
-                    pesoTotalActual += stats.lastW;
-                }
-                sumEst += pesoProyectado; countEst++;
             });
 
             if (countEst > 0 && diasDesdeUltimo >= 2) {
-                const promedioEstTarget = Math.round(sumEst / countEst); ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
-                const diffWeight = promedioEstTarget - ultimoDiaReal['Promedio Lote']; const adpv = diasDesdeUltimo > 0 ? (diffWeight / diasDesdeUltimo).toFixed(3) : '0';
-                dataGrafico.push({ 
-                    fecha: labelProyeccion, 
-                    timestamp: targetDate.getTime(),
-                    'Promedio Estimado': promedioEstTarget, 
-                    _meta: { 'Promedio Estimado': { diff: diffWeight, adpv } } 
-                });
+                const promedioEstTarget = Math.round(sumEst / countEst); 
+                ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
+                const diffWeight = promedioEstTarget - (ultimoDiaReal['Promedio Lote'] || 0); const adpv = diasDesdeUltimo > 0 ? (diffWeight / diasDesdeUltimo).toFixed(3) : '0';
+                dataGrafico.push({ fecha: labelProyeccion, timestamp: targetDate.getTime(), 'Promedio Estimado': promedioEstTarget, _meta: { 'Promedio Estimado': { diff: diffWeight, adpv } } });
             }
 
             const pesoInicio = dataGrafico[0]['Promedio Lote'] || 0; const pesoActualReal = ultimoDiaReal['Promedio Lote'] || 0;
             const gananciaReal = pesoActualReal - pesoInicio; const diffDaysReal = Math.ceil(Math.abs(fechaUltimoPesaje.getTime() - new Date(fechasUnicas[0] + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24));
-
             setStatsGraficoLote({ inicio: pesoInicio, actual: pesoActualReal, totalInicio: pesoTotalInicio, totalActual: pesoTotalActual, ganancia: gananciaReal, dias: diffDaysReal, adpv: diffDaysReal > 0 ? (gananciaReal / diffDaysReal).toFixed(3) : '0' });
             setIsLoteEstimated(mostrarBadgeEstimado); 
         } else {
@@ -249,33 +250,10 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
     async function cerrarLoteFinal() {
         if (animalesEnEsteLote.length === 0) return alert("El lote está vacío.");
         if (!confirm(`¿Estás seguro de FINALIZAR el ciclo del lote "${loteSel.nombre}"?\nSe guardará en el historial y el lote será eliminado.`)) return;
-        setLoading(true);
-        const idsAnimales = animalesEnEsteLote.map((a: any) => a.id);
-        
-        const nuevoHistorico = {
-            establecimiento_id: campoId, 
-            lote_id: null, 
-            nombre_lote: loteSel.nombre, 
-            cantidad_animales: animalesEnEsteLote.length,
-            peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0, 
-            peso_final: statsGraficoLote.totalActual || statsGraficoLote.actual || 0, 
-            ganancia_promedio: statsGraficoLote.ganancia || 0, 
-            adpv: statsGraficoLote.adpv || '0',
-            dias_ciclo: statsGraficoLote.dias || 0, 
-            vendido: false,
-            animales_ids: idsAnimales
-        };
+        setLoading(true); const idsAnimales = animalesEnEsteLote.map((a: any) => a.id);
+        const nuevoHistorico = { establecimiento_id: campoId, lote_id: null, nombre_lote: loteSel.nombre, cantidad_animales: animalesEnEsteLote.length, peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0, peso_final: statsGraficoLote.totalActual || statsGraficoLote.actual || 0, ganancia_promedio: statsGraficoLote.ganancia || 0, adpv: statsGraficoLote.adpv || '0', dias_ciclo: statsGraficoLote.dias || 0, vendido: false, animales_ids: idsAnimales };
         const { error } = await supabase.from('lotes_historicos').insert([nuevoHistorico]);
-        
-        if (!error) {
-            await supabase.from('animales').update({ lote_id: null }).in('id', idsAnimales);
-            await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id);
-            await supabase.from('lotes').delete().eq('id', loteSel.id);
-
-            fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); 
-            alert("Ciclo finalizado con éxito.");
-        } else alert("Error al cerrar: " + error.message);
-        
+        if (!error) { await supabase.from('animales').update({ lote_id: null }).in('id', idsAnimales); await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id); await supabase.from('lotes').delete().eq('id', loteSel.id); fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); alert("Ciclo finalizado con éxito."); } else alert("Error al cerrar: " + error.message);
         setLoading(false);
     }
 
@@ -359,7 +337,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                             </Group>
                         </Paper>
                         <Group justify="flex-end" mb="md">
-                            <Tooltip label="Línea morada continua: Peso promedio real. Línea morada punteada: Proyección según el ritmo de engorde (ADPV). Líneas grises: Evolución individual de cada animal." multiline w={250} withArrow position="left" zIndex={3000}><Badge variant="light" color="gray" leftSection={<IconInfoCircle size={14}/>} style={{cursor: 'help'}}>¿Cómo leer este gráfico?</Badge></Tooltip>
+                            <Tooltip label="Línea morada continua: Peso promedio corregido (ADPV). Línea morada punteada: Proyección según el ritmo de engorde. Líneas grises: Evolución individual de cada animal." multiline w={250} withArrow position="left" zIndex={3000}><Badge variant="light" color="gray" leftSection={<IconInfoCircle size={14}/>} style={{cursor: 'help'}}>¿Cómo leer este gráfico?</Badge></Tooltip>
                         </Group>
                         {loadingGraficoLote ? (<Text ta="center" c="dimmed" my="xl">Calculando promedios y proyecciones...</Text>) : datosGraficoLote.length > 0 ? (
                             <>
@@ -367,16 +345,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart data={datosGraficoLote} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                                             <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis 
-                                                dataKey="timestamp" 
-                                                type="number" 
-                                                scale="time" 
-                                                domain={['dataMin', 'dataMax']} 
-                                                tickFormatter={(tick) => {
-                                                    const d = new Date(tick);
-                                                    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}`;
-                                                }}
-                                            />
+                                            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(tick) => { const d = new Date(tick); return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}`; }} />
                                             <YAxis domain={['auto', 'auto']} />
                                             <RechartsTooltip content={<CustomTooltipMulti />} />
                                             {lineasAnimalesLote.map((caravana: string, idx: number) => (<Line key={idx} type="monotone" dataKey={caravana} stroke="#ced4da" strokeWidth={1.5} dot={{ r: 2, fill: '#ced4da' }} connectNulls={true} />))}
@@ -390,7 +359,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                                     <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Ganancia Promedio</Text><Text fw={700} size="xl" c={statsGraficoLote.ganancia > 0 ? 'teal' : 'red'}>{statsGraficoLote.ganancia > 0 ? '+' : ''}{statsGraficoLote.ganancia} kg</Text></Paper>
                                     <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text><Text fw={700} size="xl" c="blue">{statsGraficoLote.adpv} kg/día</Text></Paper>
                                     <Paper withBorder p="md" ta="center" radius="md">
-                                        <Group justify="center" gap={6}><Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Actual</Text>{isLoteEstimated && (<Tooltip label="Al menos un animal no tiene pesajes recientes. El gráfico proyecta matemáticamente su peso (línea punteada) hasta el final del periodo." multiline w={250} withArrow zIndex={3000}><ThemeIcon size="sm" variant="light" color="grape" style={{ cursor: 'help' }} radius="xl"><IconInfoCircle size={14} /></ThemeIcon></Tooltip>)}</Group>
+                                        <Group justify="center" gap={6}><Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Actual</Text>{isLoteEstimated && (<Tooltip label="El gráfico proyecta matemáticamente el peso (línea punteada) de los animales sin pesajes recientes basándose en su ritmo de engorde individual." multiline w={250} withArrow zIndex={3000}><ThemeIcon size="sm" variant="light" color="grape" style={{ cursor: 'help' }} radius="xl"><IconInfoCircle size={14} /></ThemeIcon></Tooltip>)}</Group>
                                         <Text fw={700} size="xl" c="dark">{statsGraficoLote.actual} kg {isLoteEstimated && <Text span size="sm" c="grape" fw={500}>(Est.)</Text>}</Text>
                                     </Paper>
                                 </SimpleGrid>

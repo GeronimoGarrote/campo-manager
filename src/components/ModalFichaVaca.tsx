@@ -453,10 +453,11 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         return <Badge size="sm" color={color}>{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
     };
     
+    // AQUÍ ESTÁ EL CAMBIO A VIOLET PARA LASTIMADA
     const renderCondicionBadges = (condStr: string) => { 
         if (!condStr || condStr === 'SANA') return null; 
         return condStr.split(', ').map((c: any, i: number) => ( 
-            <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'grape'} variant="filled" size="sm">{c}</Badge> 
+            <Badge key={i} color={c === 'ENFERMA' ? 'red' : 'violet'} variant="filled" size="sm">{c}</Badge> 
         )); 
     };
 
