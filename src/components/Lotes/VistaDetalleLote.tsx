@@ -146,8 +146,16 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             const fechaUltimoPesaje = new Date(fechasUnicas[fechasUnicas.length - 1] + 'T12:00:00');
             let targetDate = fHasta || new Date(hoy); if (fHasta && fHasta < hoy) targetDate = fHasta;
             let diasDesdeUltimo = Math.floor((targetDate.getTime() - fechaUltimoPesaje.getTime()) / (1000 * 60 * 60 * 24)); if (isNaN(diasDesdeUltimo)) diasDesdeUltimo = 0;
+            
             let labelProyeccion = fHasta && fHasta < hoy ? formatDate(targetDate.toISOString().split('T')[0]) + ' (Est.)' : 'Hoy (Est.)';
-            if (!fHasta && diasDesdeUltimo < 2) { targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000); labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy.)'; }
+            let mostrarBadgeEstimado = diasDesdeUltimo >= 2;
+
+            // --- CORRECCIÓN ACÁ ---
+            if (!fHasta && diasDesdeUltimo < 2) { 
+                targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000); 
+                labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy. 15d)'; 
+                diasDesdeUltimo = 15; // ESTO FALTABA PARA QUE FUNCIONE EL IF DE ABAJO
+            }
 
             const animalStats: Record<string, {firstW: number, firstD: Date, lastW: number, lastD: Date}> = {};
             pesajesFiltrados.forEach((p: any) => {
@@ -192,7 +200,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             const gananciaReal = pesoActualReal - pesoInicio; const diffDaysReal = Math.ceil(Math.abs(fechaUltimoPesaje.getTime() - new Date(fechasUnicas[0] + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24));
 
             setStatsGraficoLote({ inicio: pesoInicio, actual: pesoActualReal, totalInicio: pesoTotalInicio, totalActual: pesoTotalActual, ganancia: gananciaReal, dias: diffDaysReal, adpv: diffDaysReal > 0 ? (gananciaReal / diffDaysReal).toFixed(3) : '0' });
-            setIsLoteEstimated(diasDesdeUltimo >= 2); 
+            setIsLoteEstimated(mostrarBadgeEstimado); 
         } else {
             const pesoUnico = dataGrafico.length > 0 ? (dataGrafico[0]['Promedio Lote'] || 0) : 0;
             setStatsGraficoLote({ inicio: pesoUnico, actual: pesoUnico, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setIsLoteEstimated(false);
@@ -261,7 +269,6 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         
         if (!error) {
             await supabase.from('animales').update({ lote_id: null }).in('id', idsAnimales);
-            
             await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id);
             await supabase.from('lotes').delete().eq('id', loteSel.id);
 
@@ -271,6 +278,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         
         setLoading(false);
     }
+
     return (
         <>
             <Group justify="space-between" mb="lg">
@@ -359,7 +367,6 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart data={datosGraficoLote} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                                             <CartesianGrid strokeDasharray="3 3" />
-                                            {/* ACÁ CAMBIAMOS EL EJE X */}
                                             <XAxis 
                                                 dataKey="timestamp" 
                                                 type="number" 
