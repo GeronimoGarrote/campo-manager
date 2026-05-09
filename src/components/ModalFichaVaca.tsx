@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'; 
 import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack, SimpleGrid } from '@mantine/core'; 
+import { useDisclosure } from '@mantine/hooks';
 import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp } from '@tabler/icons-react'; 
 import { supabase } from '../supabase';
 
@@ -15,12 +16,11 @@ interface ModalFichaVacaProps {
     establecimientos: any[]; 
     onUpdate: () => void; 
     abrirGraficoPeso: (id: string) => void; 
-    iniciarEdicionEvento: (ev: any) => void; 
     setAnimalSelId: (id: string | null) => void; 
     datosSuscripcion: any; 
 }
 
-export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, iniciarEdicionEvento, setAnimalSelId, datosSuscripcion }: ModalFichaVacaProps) {
+export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, setAnimalSelId, datosSuscripcion }: ModalFichaVacaProps) {
     const [loading, setLoading] = useState(false);
     const [activeTabVaca, setActiveTabVaca] = useState<string | null>('historia'); 
     const [fichaAnterior, setFichaAnterior] = useState<any>(null); 
@@ -68,10 +68,16 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [esVentaRed, setEsVentaRed] = useState(false);
     const [renspaDestino, setRenspaDestino] = useState('');
 
+    // --- ESTADOS PARA EDICIÓN DE EVENTOS ---
+    const [modalEditOpen, { open: openEdit, close: closeEdit }] = useDisclosure(false);
+    const [editEvId, setEditEvId] = useState<string | null>(null);
+    const [editEvFecha, setEditEvFecha] = useState<Date | null>(new Date());
+    const [editEvRes, setEditEvRes] = useState('');
+    const [editEvDet, setEditEvDet] = useState('');
+
     const animalSel = animales.find(a => a.id === animalSelId) || null;
     const esActivo = animalSel?.estado !== 'VENDIDO' && animalSel?.estado !== 'MUERTO' && animalSel?.estado !== 'ELIMINADO' && animalSel?.en_transito === false;
 
-    // ACÁ ESTÁ EL CAMBIO (slice(-2) al año)
     const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
     const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
     const opcionesGestacion = [ { value: '0.5', label: '15 días' }, { value: '1', label: '1 mes' }, { value: '2', label: '2 meses' }, { value: '3', label: '3 meses' }, { value: '4', label: '4 meses' }, { value: '5', label: '5 meses' }, { value: '6', label: '6 meses' }, { value: '7', label: '7 meses' }, { value: '8', label: '8 meses' }, { value: '9', label: '9 meses (A parir)' } ];
@@ -148,6 +154,25 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             await supabase.from('animales').update({ toros_servicio_ids: nuevosIds.length > 0 ? nuevosIds : null }).eq('id', vaca.id); 
         }
     };
+
+    // --- NUEVA LÓGICA DE EDICIÓN LOCAL ---
+    function handleIniciarEdicionEvento(ev: any) {
+        setEditEvId(ev.id); 
+        const partes = ev.fecha_evento.split('T')[0].split('-'); 
+        setEditEvFecha(new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]), 12, 0, 0)); 
+        setEditEvRes(ev.resultado); 
+        setEditEvDet(ev.detalle || ''); 
+        openEdit(); 
+    }
+
+    async function handleGuardarEdicionEvento() { 
+        if(!editEvId || !editEvFecha) return; 
+        await supabase.from('eventos').update({ fecha_evento: editEvFecha.toISOString(), resultado: editEvRes, detalle: editEvDet }).eq('id', editEvId); 
+        closeEdit(); 
+        if(animalSelId) recargarEventos(animalSelId); 
+        onUpdate(); 
+    }
+    // ------------------------------------
 
     async function guardarEventoVaca() {
         if (!animalSel || !tipoEventoInput || !fechaEvento || !campoId) return alert("Faltan datos");
@@ -307,7 +332,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         if (!confirm(`¿Confirmar ${modoBaja === 'TRASLADO' ? 'traslado' : 'salida'}?`)) return; 
         
         setLoading(true); const fechaStr = new Date().toISOString();
-  
+ 
         if (['Vaca', 'Vaquillona'].includes(animalSel.categoria) && animalSel.estado.includes('LACTANCIA')) {
             const { data: crias } = await supabase.from('animales').select('id, caravana').eq('madre_id', animalSel.id).eq('estado', 'LACTANTE');
             if (crias && crias.length > 0) {
@@ -329,7 +354,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 animalSel.estado = 'ACTIVO';
             }
         }
-  
+ 
         if (modoBaja === 'TRASLADO') {
             if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
             const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre; const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
@@ -345,7 +370,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         } else if (modoBaja === 'VENDIDO') {
             const precioNum = Number(bajaPrecio); let totalIngreso = 0; if (bajaModalidadVenta === 'TOTAL') totalIngreso = precioNum; else if (bajaModalidadVenta === 'KILO') totalIngreso = precioNum * Number(bajaKilosTotales);
             const gastosTotales = Number(bajaGastosVenta) || 0;
-  
+ 
             if (esVentaRed) {
                 if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA."); }
                 const { data, error: rpcErr } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
@@ -354,10 +379,10 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 if (rpcErr || !dest) { setLoading(false); return alert("No se encontró RENSPA."); }
                 if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
                 const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Campo Desconocido';
-  
+ 
                 const { error: errTransf } = await supabase.from('transferencias').insert({ campo_origen_id: campoId, campo_destino_id: dest.id, animales_ids: [animalSel.id], precio_total: totalIngreso, detalles: `Venta animal ${animalSel.caravana}`, origen_nombre: nombreOrigen, estado: 'PENDIENTE' });
                 if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
-  
+ 
                 await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSel.id);
                 await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
@@ -428,7 +453,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         return <Badge size="sm" color={color}>{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
     };
     
-    // Nueva función para parsear la condición sanitaria
     const renderCondicionBadges = (condStr: string) => { 
         if (!condStr || condStr === 'SANA') return null; 
         return condStr.split(', ').map((c: any, i: number) => ( 
@@ -463,7 +487,6 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                            <Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} />
                        </Group>
                
-                       {/* FIX DEL SELECT Y EL SWITCH DEL TACTO EN MOBILE USANDO SIMPLEGRID */}
                        {tipoEventoInput === 'TACTO' && ( 
                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="sm">
                                <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ zIndex: 200005 }}/> 
@@ -486,7 +509,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                ) : ( 
                    <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está {animalSel?.en_transito ? 'en tránsito (bloqueado)' : 'archivado'}. Solo lectura.</Alert> 
                )}
-               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && <Badge size="xs" color="pink" variant="outline" ml="xs">Toro/s: {ev.datos_extra.toros_caravanas}</Badge>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => iniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
+               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && <Badge size="xs" color="pink" variant="outline" ml="xs">Toro/s: {ev.datos_extra.toros_caravanas}</Badge>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => handleIniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
             </Tabs.Panel>
             <Tabs.Panel value="datos">
                <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={() => abrirGraficoPeso(animalSel.id)}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>
@@ -589,6 +612,17 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                ) : ( <Paper p="md" bg="gray.1" ta="center"><Text c="dimmed" size="sm" mb="md">Este animal se encuentra {animalSel?.en_transito ? 'en tránsito hacia el comprador' : 'archivado'}.</Text>{!animalSel?.en_transito && <Button fullWidth variant="outline" color="blue" leftSection={<IconArrowBackUp/>} onClick={restaurarAnimal}>Restaurar a Hacienda Activa</Button>}</Paper> )}
             </Tabs.Panel>
         </Tabs>
+
+        {/* MODAL INTERNO PARA EDITAR EL EVENTO (Ahora es autónomo) */}
+        <Modal opened={modalEditOpen} onClose={closeEdit} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
+            <Stack>
+                <TextInput label="Fecha" type="date" value={getLocalDateForInput(editEvFecha)} onChange={(e) => setEditEvFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
+                <TextInput label="Resultado" value={editEvRes} onChange={(e) => setEditEvRes(e.target.value)}/>
+                <Textarea label="Detalle" value={editEvDet} onChange={(e) => setEditEvDet(e.target.value)}/>
+                <Button onClick={handleGuardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button>
+            </Stack>
+        </Modal>
+
     </Modal>
     );
 }

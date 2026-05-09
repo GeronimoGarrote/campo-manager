@@ -9,11 +9,11 @@ import ModalVentaLote from './ModalVentaLote';
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 
-const CustomTooltipMulti = ({ active, payload, label }: any) => {
+const CustomTooltipMulti = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         const meta = data._meta || {};
-        const animalKeys = Object.keys(data).filter((k: string) => k !== 'fecha' && k !== '_meta' && k !== 'Promedio Lote' && k !== 'Promedio Estimado');
+        const animalKeys = Object.keys(data).filter((k: string) => k !== 'fecha' && k !== 'timestamp' && k !== '_meta' && k !== 'Promedio Lote' && k !== 'Promedio Estimado');
         const pesoTotal = animalKeys.reduce((acc: number, curr: string) => acc + (Number(data[curr]) || 0), 0);
         const cantAnimales = animalKeys.length;
         const promedioLote = data['Promedio Lote'];
@@ -21,7 +21,7 @@ const CustomTooltipMulti = ({ active, payload, label }: any) => {
 
         return (
             <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', minWidth: '220px' }}>
-                <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '8px', fontSize: '14px', color: '#343a40' }}>Fecha: {label}</p>
+                <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '8px', fontSize: '14px', color: '#343a40' }}>Fecha: {data.fecha}</p>
                 {cantAnimales > 0 && (<div style={{ marginBottom: '10px' }}><p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados: <b>{cantAnimales}</b></p><p style={{ margin: 0, fontSize: '13px', color: '#495057' }}>Sumatoria: <b>{pesoTotal} kg</b></p></div>)}
                 {promedioLote && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Lote: {promedioLote} kg</p>{meta['Promedio Lote'] && (<p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>Rendimiento: <span style={{color: meta['Promedio Lote'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Lote'].diff > 0 ? '+' : ''}{meta['Promedio Lote'].diff} kg</span> ({meta['Promedio Lote'].adpv} kg/día)</p>)}</div>)}
                 {promedioEst && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px', marginTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Estimado: {promedioEst} kg</p>{meta['Promedio Estimado'] && (<p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>Rendimiento: <span style={{color: meta['Promedio Estimado'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Estimado'].diff > 0 ? '+' : ''}{meta['Promedio Estimado'].diff} kg</span> ({meta['Promedio Estimado'].adpv} kg/día)</p>)}</div>)}
@@ -113,8 +113,15 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         const lastKnownForMeta: Record<string, { weight: number, date: Date }> = {}; 
 
         const dataGrafico = fechasUnicas.map((fechaStr: any) => {
+            const currentDate = new Date(fechaStr + 'T12:00:00');
             const pesajesDelDia = pesajesFiltrados.filter((p: any) => p.fecha_evento.startsWith(fechaStr));
-            const objParaElGrafico: any = { fecha: formatDate(fechaStr), _meta: {} };
+            
+            const objParaElGrafico: any = { 
+                fecha: formatDate(fechaStr), 
+                timestamp: currentDate.getTime(),
+                _meta: {} 
+            };
+            
             pesajesDelDia.forEach((p: any) => {
                 const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const caravana = (p.animales as any)?.caravana || 'Desc';
                 if(!isNaN(pesoNum)) { ultimoPesoConocido[caravana] = pesoNum; caravanasPresentes.add(caravana); objParaElGrafico[caravana] = pesoNum; }
@@ -122,9 +129,8 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             const pesosActivos = Object.values(ultimoPesoConocido);
             if (pesosActivos.length > 0) { const sumaTotal = pesosActivos.reduce((a: number, b: number) => a + b, 0); objParaElGrafico['Promedio Lote'] = Math.round(sumaTotal / pesosActivos.length); }
             
-            const currentDate = new Date(fechaStr + 'T12:00:00');
             Object.keys(objParaElGrafico).forEach((key: string) => {
-                if (key === 'fecha' || key === '_meta') return;
+                if (key === 'fecha' || key === 'timestamp' || key === '_meta') return;
                 const currentWeight = objParaElGrafico[key];
                 if (lastKnownForMeta[key]) {
                     const diffDays = (currentDate.getTime() - lastKnownForMeta[key].date.getTime()) / (1000 * 60 * 60 * 24);
@@ -152,7 +158,6 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                 }
             });
 
-            // ACÁ CALCULAMOS LA SUMA TOTAL
             let pesoTotalInicio = 0;
             let pesoTotalActual = 0;
             let countEst = 0;
@@ -175,7 +180,12 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             if (countEst > 0 && diasDesdeUltimo >= 2) {
                 const promedioEstTarget = Math.round(sumEst / countEst); ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
                 const diffWeight = promedioEstTarget - ultimoDiaReal['Promedio Lote']; const adpv = diasDesdeUltimo > 0 ? (diffWeight / diasDesdeUltimo).toFixed(3) : '0';
-                dataGrafico.push({ fecha: labelProyeccion, 'Promedio Estimado': promedioEstTarget, _meta: { 'Promedio Estimado': { diff: diffWeight, adpv } } });
+                dataGrafico.push({ 
+                    fecha: labelProyeccion, 
+                    timestamp: targetDate.getTime(),
+                    'Promedio Estimado': promedioEstTarget, 
+                    _meta: { 'Promedio Estimado': { diff: diffWeight, adpv } } 
+                });
             }
 
             const pesoInicio = dataGrafico[0]['Promedio Lote'] || 0; const pesoActualReal = ultimoDiaReal['Promedio Lote'] || 0;
@@ -236,7 +246,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         
         const nuevoHistorico = {
             establecimiento_id: campoId, 
-            lote_id: null, // <-- LA CLAVE: Null para evitar borrado en cascada
+            lote_id: null, 
             nombre_lote: loteSel.nombre, 
             cantidad_animales: animalesEnEsteLote.length,
             peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0, 
@@ -348,7 +358,20 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                                 <div style={{ width: '100%', height: 400 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart data={datosGraficoLote} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="fecha" /><YAxis domain={['auto', 'auto']} /><RechartsTooltip content={<CustomTooltipMulti />} />
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            {/* ACÁ CAMBIAMOS EL EJE X */}
+                                            <XAxis 
+                                                dataKey="timestamp" 
+                                                type="number" 
+                                                scale="time" 
+                                                domain={['dataMin', 'dataMax']} 
+                                                tickFormatter={(tick) => {
+                                                    const d = new Date(tick);
+                                                    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}`;
+                                                }}
+                                            />
+                                            <YAxis domain={['auto', 'auto']} />
+                                            <RechartsTooltip content={<CustomTooltipMulti />} />
                                             {lineasAnimalesLote.map((caravana: string, idx: number) => (<Line key={idx} type="monotone" dataKey={caravana} stroke="#ced4da" strokeWidth={1.5} dot={{ r: 2, fill: '#ced4da' }} connectNulls={true} />))}
                                             <Line type="monotone" dataKey="Promedio Lote" stroke="#be4bdb" strokeWidth={4} activeDot={{ r: 8 }} connectNulls={true} />
                                             <Line type="monotone" dataKey="Promedio Estimado" stroke="#be4bdb" strokeWidth={4} strokeDasharray="5 5" activeDot={{ r: 8 }} connectNulls={true} />

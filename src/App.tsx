@@ -1,5 +1,5 @@
 import { useEffect, useState} from 'react';
-import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, Textarea, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover } from '@mantine/core';
+import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard} from '@tabler/icons-react';
 import '@mantine/core/styles.css';
@@ -30,7 +30,6 @@ interface Animal { id: string; caravana: string; categoria: string; sexo: string
 interface Evento { id: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; costo?: number; datos_extra?: any; animales?: { caravana: string } }
 
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
-const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -70,16 +69,10 @@ export default function App() {
   const [modalGraficoOpen, { open: openModalGrafico, close: closeModalGrafico }] = useDisclosure(false);
   const [graficoAnimalId, setGraficoAnimalId] = useState<string | null>(null);
 
-  // Modales Internos (Configuración y Edición rápida de eventos)
+  // Modales Internos (Configuración)
   const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false); 
   const [nuevoCampoNombre, setNuevoCampoNombre] = useState('');
   const [nuevoCampoRenspa, setNuevoCampoRenspa] = useState('');
-  
-  const [modalEditEventOpen, { open: openModalEditEvent, close: closeModalEditEvent }] = useDisclosure(false);
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [editingEventDate, setEditingEventDate] = useState<Date | null>(new Date());
-  const [editingEventRes, setEditingEventRes] = useState('');
-  const [editingEventDet, setEditingEventDet] = useState('');
 
   // Estado de la suscripción agregado
   const [datosSuscripcion, setDatosSuscripcion] = useState<any>(null);
@@ -170,7 +163,6 @@ export default function App() {
 
       if (data) {
           // --- SANITIZACIÓN ANTI-NaN ---
-          // Forzamos a que siempre sean números válidos antes de mandarlos a los hijos
           const dataLimpia = {
               ...data,
               limite_animales: Number(data.limite_animales) || 100,
@@ -181,7 +173,7 @@ export default function App() {
           // Default si aún no tiene registro en la tabla
           setDatosSuscripcion({ 
               plan_nombre: 'BASICO', 
-              limite_animales: 100, // Lo bajo a 100 por defecto como el plan básico real
+              limite_animales: 100, 
               limite_establecimientos: 1, 
               estado: 'ACTIVO' 
           });
@@ -232,7 +224,6 @@ export default function App() {
       else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } 
   }
   
-  // --- FUNCIÓN BORRAR CAMPO MEJORADA ---
   async function borrarCampo(id: string) { 
       const confirmacion = prompt("⚠️ PELIGRO EXTREMO ⚠️\nEstás por borrar este campo y TODAS sus vacas, eventos, caja y potreros para siempre. Esta acción NO se puede deshacer.\n\nEscribí la palabra ELIMINAR en mayúsculas para confirmar:");
       
@@ -276,10 +267,6 @@ export default function App() {
     openModalGrafico();
   };
 
-  // Edición rápida de Eventos (Desde la ficha)
-  function iniciarEdicionEvento(ev: Evento) { setEditingEventId(ev.id); const partes = ev.fecha_evento.split('T')[0].split('-'); setEditingEventDate(new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]), 12, 0, 0)); setEditingEventRes(ev.resultado); setEditingEventDet(ev.detalle || ''); openModalEditEvent(); }
-  async function guardarEdicionEvento() { if(!editingEventId || !editingEventDate) return; await supabase.from('eventos').update({ fecha_evento: editingEventDate.toISOString(), resultado: editingEventRes, detalle: editingEventDet }).eq('id', editingEventId); closeModalEditEvent(); fetchActividadGlobal(); } 
-
   const hoyFormateado = getHoyIso();
   const tareasPendientesUrgentes = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
   const tareasParaHoy = agenda.filter(t => !t.completado && t.fecha_programada === hoyFormateado);
@@ -305,17 +292,16 @@ export default function App() {
                 <Group gap="sm" align="center" style={{ flex: 1, minWidth: 0, flexWrap: 'nowrap' }}>
                     <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
                     
-                    {/* Logo agrandado (pasó a height: 46) */}
+                    {/* Logo agrandado */}
                     <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 56, width: 'auto', flexShrink: 0 }} />
                     
                     {/* Nombre de la app: Oculto en celu para dejar espacio */}
                     <Title order={3} visibleFrom="sm" style={{ flexShrink: 0 }}>RodeoControl</Title>
                     
-                    {/* Nombre del Establecimiento: Restaurado al estilo original, pero fluido para mobile */}
+                    {/* Nombre del Establecimiento */}
                     {campoId && establecimientos.length > 0 && (
                         <Group gap="sm" align="center" style={{ flex: 1, minWidth: 0, flexWrap: 'nowrap' }}>
                             <Text size="xl" c="dimmed" visibleFrom="sm" style={{ fontWeight: 300, userSelect: 'none', flexShrink: 0 }}>|</Text>
-                            {/* Vuelve a ser un Title order={4} como querías, con truncate para que no rompa */}
                             <Title 
                                 order={4} 
                                 c="dimmed" 
@@ -454,15 +440,10 @@ export default function App() {
           establecimientos={establecimientos} 
           onUpdate={() => { fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }} 
           abrirGraficoPeso={handleAbrirGrafico}
-          iniciarEdicionEvento={iniciarEdicionEvento}
           datosSuscripcion={datosSuscripcion}
       />
 
       {/* --- MODALES INTERNOS --- */}
-      <Modal opened={modalEditEventOpen} onClose={closeModalEditEvent} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
-          <Stack><TextInput label="Fecha" type="date" value={getLocalDateForInput(editingEventDate)} onChange={(e) => setEditingEventDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/><TextInput label="Resultado" value={editingEventRes} onChange={(e) => setEditingEventRes(e.target.value)}/><Textarea label="Detalle" value={editingEventDet} onChange={(e) => setEditingEventDet(e.target.value)}/><Button onClick={guardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button></Stack>
-      </Modal>
-      
       <Modal opened={modalConfigOpen} onClose={closeModalConfig} title={<Text fw={700} size="lg">Mis Establecimientos</Text>} centered size="lg">
          <Group align="flex-end" mb="lg"><TextInput label="Nuevo Campo" placeholder="Nombre" value={nuevoCampoNombre} onChange={(e) => setNuevoCampoNombre(e.target.value)} style={{flex: 1}}/><TextInput label="Nro RENSPA" placeholder="Opcional" value={nuevoCampoRenspa} onChange={(e) => setNuevoCampoRenspa(e.target.value)} style={{flex: 1}}/><Button onClick={crearCampo} leftSection={<IconPlus size={16}/>}>Crear</Button></Group>
          <Stack>{establecimientos.map(e => (<Group key={e.id} justify="space-between" p="sm" bg="gray.0" style={{borderRadius: 8}}><Group><IconBuilding size={18} color="gray"/><div><Text fw={500}>{e.nombre} {e.id === campoId && <Badge color="teal" size="sm" ml="xs">ACTIVO</Badge>}</Text><Text size="sm" c="dimmed">RENSPA: {e.renspa || 'Sin cargar'}</Text></div></Group><Group gap="xs"><ActionIcon variant="subtle" color="blue" onClick={() => editarCampo(e.id, e.nombre, e.renspa)}><IconEdit size={16}/></ActionIcon><ActionIcon variant="subtle" color="red" onClick={() => borrarCampo(e.id)}><IconTrash size={16}/></ActionIcon></Group></Group>))}</Stack>
