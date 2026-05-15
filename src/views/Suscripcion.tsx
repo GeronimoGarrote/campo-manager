@@ -1,10 +1,10 @@
 import { 
     Title, Card, Group, Text, Badge, Progress, Button, Paper, 
-    Stack, Divider, ActionIcon, CopyButton, Grid, ThemeIcon, List
+    Stack, Divider, ActionIcon, CopyButton, Grid, ThemeIcon, List, Alert
 } from '@mantine/core';
 import { 
     IconCheck, IconCopy, IconBrandWhatsapp, IconMail, IconCreditCard,
-    IconGift
+    IconGift, IconInfoCircle
 } from '@tabler/icons-react';
 import { useState } from 'react';
 
@@ -148,6 +148,12 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                             <Title order={4} mb="md" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <IconCreditCard size={22} color="var(--mantine-color-blue-6)" /> INFORMACIÓN DE PAGO
                             </Title>
+                            
+                            {/* NUEVO CARTEL DE INSTRUCCIONES */}
+                            <Alert variant="light" color="blue" title="¿Cómo activar o renovar tu plan?" icon={<IconInfoCircle />} mb="md">
+                                Realizá la transferencia del monto correspondiente a la cuenta detallada abajo y envianos el comprobante por WhatsApp o Email indicando tu <b>ID de Cuenta</b> para que la activemos.
+                            </Alert>
+
                             <Paper withBorder p="sm" radius="md" bg="white" mb="md">
                                 <Stack gap="xs">
                                     <Group justify="space-between" wrap="nowrap">
@@ -156,7 +162,7 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                     </Group>
                                     <Divider variant="dashed" />
                                     <Group justify="space-between" wrap="nowrap">
-                                        <Text size="sm" ff="monospace">Alias: <Text span fw={700} c="blue.8">ggeroo</Text></Text>
+                                        <Text size="sm" ff="monospace">Alias: <Text span fw={700} c="blue.8">Rodeocontrol</Text></Text>
                                         <CopyButton value="ggeroo">{({ copied, copy }) => (<ActionIcon color={copied ? 'teal' : 'blue'} variant="subtle" onClick={copy}>{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}</ActionIcon>)}</CopyButton>
                                     </Group>
                                 </Stack>
