@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet } from '@tabler/icons-react';
 import { supabase } from '../supabase';
+import ModalImportarExcel from '../components/Hacienda/ModalImportarExcel';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 
@@ -50,10 +51,12 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
 };
 
 export default function Hacienda({
-    animales, potreros, parcelas, lotes, activeSection, 
-    abrirFichaVaca, openModalAlta, setAnimales
+    animales, potreros, parcelas, lotes, activeSection,
+    abrirFichaVaca, openModalAlta, setAnimales,
+    datosSuscripcion, campoId, fetchAnimales
 }: any) {
     const [busqueda, setBusqueda] = useState('');
+    const [importarExcelAbierto, setImportarExcelAbierto] = useState(false);
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterLote, setFilterLote] = useState<string | null>(null); 
@@ -165,10 +168,15 @@ export default function Hacienda({
                         <Text visibleFrom="sm" fw={600}>Excel</Text>
                     </Button>
                     
-                    {activeSection === 'hacienda' && ( 
-                        <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={{ base: 'auto', sm: 180 }} px={{ base: 'xs', sm: 'md' }}>
-                            <Text visibleFrom="sm" fw={600}>Nuevo Animal</Text>
-                        </Button> 
+                    {activeSection === 'hacienda' && (
+                        <>
+                            <Button variant="outline" color="teal" leftSection={<IconFileSpreadsheet size={18}/>} onClick={() => setImportarExcelAbierto(true)} px={{ base: 'xs', sm: 'md' }}>
+                                <Text visibleFrom="sm" fw={600}>Importar Excel</Text>
+                            </Button>
+                            <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={{ base: 'auto', sm: 180 }} px={{ base: 'xs', sm: 'md' }}>
+                                <Text visibleFrom="sm" fw={600}>Nuevo Animal</Text>
+                            </Button>
+                        </>
                     )}
                 </Group>
             </Group>
@@ -326,6 +334,18 @@ export default function Hacienda({
                     </Table>
                 </div>
             </Paper>
+
+            {campoId && (
+                <ModalImportarExcel
+                    opened={importarExcelAbierto}
+                    onClose={() => setImportarExcelAbierto(false)}
+                    establecimientoId={campoId}
+                    animalesActivos={animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length}
+                    datosSuscripcion={datosSuscripcion}
+                    animalesExistentes={animales.filter((a: any) => !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado))}
+                    onImportComplete={fetchAnimales}
+                />
+            )}
         </Stack>
     );
 }

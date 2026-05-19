@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Group, TextInput, Select, Paper, Table, Text, Badge } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
 
-// ACÁ ESTÁ EL CAMBIO (slice(-2) al año)
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
 
 export default function Actividad({ eventosGlobales }: any) {
@@ -45,7 +44,7 @@ export default function Actividad({ eventosGlobales }: any) {
                                     {ev.datos_extra?.toros_caravanas && <Text size="xs" c="dimmed">Toro/s: {ev.datos_extra.toros_caravanas}</Text>}
                                     {ev.datos_extra?.potrero_destino && <Text size="xs" c="dimmed">Destino: {ev.datos_extra.potrero_destino} {ev.datos_extra.parcela_destino ? `(${ev.datos_extra.parcela_destino})` : ''}</Text>}
                                     
-                                    {/* Si es cambio de lote, ocultamos la etiqueta redundante "Grupo: X" */}
+                                    
                                     {ev.tipo !== 'CAMBIO_LOTE' && ev.datos_extra?.lote_destino && <Text size="xs" c="dimmed">Grupo: {ev.datos_extra.lote_destino}</Text>}
                                 </Table.Td>
                             </Table.Tr>

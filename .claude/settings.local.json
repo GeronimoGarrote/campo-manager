@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Remove-Item \"c:\\\\Users\\\\Gero\\\\Desktop\\\\RodeoControl\\\\src\\\\components\\\\ModalImportarExcel.tsx\")",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)"
+    ]
+  }
+}
