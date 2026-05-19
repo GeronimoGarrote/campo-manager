@@ -23,13 +23,13 @@ interface ParsedRow {
     categoriaRaw: string;
     categoriaNorm: string;
     sexoRaw: string;
+    sexoFinal: string;
     status: RowStatus;
     statusLabel: string;
     statusColor: string;
 }
 
 const CATEGORIAS_VALIDAS = ['Vaca', 'Vaquillona', 'Ternera', 'Ternero', 'Novillo', 'Toro'];
-const SEXOS_VALIDOS = ['H', 'M', 'HEMBRA', 'MACHO'];
 
 function normalizarCategoria(raw: string): string {
     const s = raw.trim();
@@ -37,11 +37,15 @@ function normalizarCategoria(raw: string): string {
 }
 
 function normalizarSexo(sexoRaw: string, categoriaNorm: string): string {
+    // categorías con sexo fijo, ignorar columna Sexo
     if (['Vaca', 'Vaquillona', 'Ternera'].includes(categoriaNorm)) return 'H';
-    if (['Toro', 'Novillo', 'Ternero'].includes(categoriaNorm)) return 'M';
-    const s = sexoRaw.toString().trim().toUpperCase();
-    if (s === 'HEMBRA') return 'H';
-    if (s === 'MACHO') return 'M';
+    if (categoriaNorm === 'Toro') return 'M';
+    // Ternero y Novillo: respetar columna Sexo, fallback por nombre si está vacío
+    const s = sexoRaw.trim().toUpperCase();
+    if (s === 'H' || s === 'HEMBRA') return 'H';
+    if (s === 'M' || s === 'MACHO') return 'M';
+    if (categoriaNorm === 'Ternero') return 'M';
+    if (categoriaNorm === 'Novillo') return 'M';
     return s;
 }
 
@@ -56,6 +60,7 @@ function parseRows(rawRows: unknown[][], animalesExistentes: { caravana: string 
         const categoriaRaw = row[1] != null ? String(row[1]).trim() : '';
         const sexoRaw = row[2] != null ? String(row[2]).trim() : '';
         const categoriaNorm = normalizarCategoria(categoriaRaw);
+        const sexoFinal = normalizarSexo(sexoRaw, categoriaNorm);
 
         let status: RowStatus = 'OK';
         let statusLabel = 'OK';
@@ -76,7 +81,7 @@ function parseRows(rawRows: unknown[][], animalesExistentes: { caravana: string 
             status = 'CATEGORIA_INVALIDA';
             statusLabel = 'Categoría inválida';
             statusColor = 'red';
-        } else if (!SEXOS_VALIDOS.includes(sexoRaw.toUpperCase())) {
+        } else if (!['H', 'M'].includes(sexoFinal)) {
             status = 'SEXO_INVALIDO';
             statusLabel = 'Sexo inválido';
             statusColor = 'red';
@@ -84,7 +89,7 @@ function parseRows(rawRows: unknown[][], animalesExistentes: { caravana: string 
 
         if (status === 'OK') caravanasEnLote.add(caravana);
 
-        parsed.push({ rowIndex: idx + 2, caravana, categoriaRaw, categoriaNorm, sexoRaw, status, statusLabel, statusColor });
+        parsed.push({ rowIndex: idx + 2, caravana, categoriaRaw, categoriaNorm, sexoRaw, sexoFinal, status, statusLabel, statusColor });
     });
 
     return parsed;
@@ -183,7 +188,7 @@ export default function ModalImportarExcel({
             const payload = filasImportables.map(row => ({
                 caravana: row.caravana,
                 categoria: row.categoriaNorm,
-                sexo: normalizarSexo(row.sexoRaw, row.categoriaNorm),
+                sexo: row.sexoFinal,
                 origen: 'COMPRADO',
                 estado: 'ACTIVO',
                 condicion: 'SANA',
@@ -306,7 +311,7 @@ export default function ModalImportarExcel({
                                                 <Text size="sm">{row.categoriaRaw || '-'}</Text>
                                             </Table.Td>
                                             <Table.Td>
-                                                <Text size="sm">{row.sexoRaw || '-'}</Text>
+                                                <Text size="sm">{row.sexoFinal || '-'}</Text>
                                             </Table.Td>
                                             <Table.Td>
                                                 <Badge color={row.statusColor} size="sm">
