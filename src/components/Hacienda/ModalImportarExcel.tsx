@@ -40,25 +40,42 @@ function normalizarSexo(sexoRaw: string, categoriaNorm: string): string {
     // categorías con sexo fijo, ignorar columna Sexo
     if (['Vaca', 'Vaquillona', 'Ternera'].includes(categoriaNorm)) return 'H';
     if (categoriaNorm === 'Toro') return 'M';
-    // Ternero y Novillo: respetar columna Sexo, fallback por nombre si está vacío
-    const s = sexoRaw.trim().toUpperCase();
-    if (s === 'H' || s === 'HEMBRA') return 'H';
-    if (s === 'M' || s === 'MACHO') return 'M';
-    if (categoriaNorm === 'Ternero') return 'M';
-    if (categoriaNorm === 'Novillo') return 'M';
+    // Ternero y Novillo: respetar columna Sexo, fallback a M si está vacío
+    const s = sexoRaw.trim().toUpperCase().replace(/\s+/g, '');
+    if (s === 'H' || s === 'HEMBRA' || s === 'FEM' || s === 'FEMALE' || s === 'F') return 'H';
+    if (s === 'M' || s === 'MACHO' || s === 'MALE' || s === 'MAC') return 'M';
+    if (s === '') {
+        if (categoriaNorm === 'Ternero') return 'M';
+        if (categoriaNorm === 'Novillo') return 'M';
+    }
     return s;
+}
+
+function detectarColumnas(headerRow: unknown[]): { idxCaravana: number; idxCategoria: number; idxSexo: number } {
+    let idxCaravana = 0, idxCategoria = 1, idxSexo = 2;
+    headerRow.forEach((cell, i) => {
+        if (cell == null) return;
+        const h = String(cell).trim().toUpperCase();
+        if (h === 'CARAVANA') idxCaravana = i;
+        else if (h === 'CATEGORIA' || h === 'CATEGORÍA') idxCategoria = i;
+        else if (h === 'SEXO') idxSexo = i;
+    });
+    return { idxCaravana, idxCategoria, idxSexo };
 }
 
 function parseRows(rawRows: unknown[][], animalesExistentes: { caravana: string }[]): ParsedRow[] {
     const caravanasEnLote = new Set<string>();
     const parsed: ParsedRow[] = [];
 
+    if (rawRows.length === 0) return parsed;
+    const { idxCaravana, idxCategoria, idxSexo } = detectarColumnas(rawRows[0] as unknown[]);
+
     rawRows.slice(1).forEach((row, idx) => {
         if (!row || (row as unknown[]).every((cell) => cell === undefined || cell === null || cell === '')) return;
 
-        const caravana = row[0] != null ? String(row[0]).trim().toUpperCase() : '';
-        const categoriaRaw = row[1] != null ? String(row[1]).trim() : '';
-        const sexoRaw = row[2] != null ? String(row[2]).trim() : '';
+        const caravana = row[idxCaravana] != null ? String(row[idxCaravana]).trim().toUpperCase() : '';
+        const categoriaRaw = row[idxCategoria] != null ? String(row[idxCategoria]).trim() : '';
+        const sexoRaw = row[idxSexo] != null ? String(row[idxSexo]).trim() : '';
         const categoriaNorm = normalizarCategoria(categoriaRaw);
         const sexoFinal = normalizarSexo(sexoRaw, categoriaNorm);
 
