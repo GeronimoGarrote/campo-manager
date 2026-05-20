@@ -60,8 +60,8 @@ export default function Agricultura({
 
     async function abrirFicha(potrero: any) { 
         setPotreroSel(potrero); setLaboresFicha([]); setNuevaParcelaNombre(''); setNuevaParcelaHas('');
-        const { data } = await supabase.from('labores').select('*').eq('potrero_id', potrero.id).order('fecha', { ascending: false }); 
-        if (data) setLaboresFicha(data); 
+        const { data } = await supabase.from('labores').select('*').eq('potrero_id', potrero.id).order('fecha', { ascending: false }).order('created_at', { ascending: false });
+        if (data) setLaboresFicha(data);
     }
 
     // --- FUNCIONES LABORES ---
@@ -77,7 +77,7 @@ export default function Agricultura({
                 await supabase.from('potreros').update({ estado: 'DESCANSO', cultivo_actual: null }).eq('id', potreroSel.id); 
                 setPotreroSel({...potreroSel, estado: 'DESCANSO', cultivo_actual: ''}); fetchPotreros(); 
             } 
-            const { data } = await supabase.from('labores').select('*').eq('potrero_id', potreroSel.id).order('fecha', { ascending: false }); 
+            const { data } = await supabase.from('labores').select('*').eq('potrero_id', potreroSel.id).order('fecha', { ascending: false }).order('created_at', { ascending: false });
             if (data) setLaboresFicha(data); setDetalleLabor(''); setCostoLabor('');
         } 
     }

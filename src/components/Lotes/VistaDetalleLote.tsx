@@ -58,7 +58,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         setStatsGraficoLote({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setFiltroTiempo('TODOS'); setFechaDesde(null); setFechaHasta(null);
         
         async function loadFicha() {
-            const { data: evData } = await supabase.from('lotes_eventos').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false });
+            const { data: evData } = await supabase.from('lotes_eventos').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false }).order('created_at', { ascending: false });
             if (evData) setEventosLoteFicha(evData);
             generarGraficoLote(loteSel.id, null, null);
         }
@@ -237,7 +237,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         const { error } = await supabase.from('lotes_eventos').insert([{ lote_id: loteSel.id, fecha: loteEvFecha.toISOString().split('T')[0], tipo: loteEvTipo, detalle: loteEvDetalle, cantidad: loteEvCantidad, costo: Number(loteEvCosto), establecimiento_id: campoId }]);
         if (!error) {
             setLoteEvDetalle(''); setLoteEvCantidad(''); setLoteEvCosto(''); fetchEventosLotesGlobal();
-            const { data } = await supabase.from('lotes_eventos').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false });
+            const { data } = await supabase.from('lotes_eventos').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false }).order('created_at', { ascending: false });
             if (data) setEventosLoteFicha(data);
         }
     }
