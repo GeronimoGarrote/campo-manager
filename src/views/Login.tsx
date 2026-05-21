@@ -80,7 +80,7 @@ export default function Login({
                     </Stack>
                     
                     <Text size="lg" fw={700} ta="center" mb="xs" c={{ base: 'white', md: 'dark' }}>
-                        {isRegister ? '¡Probá gratis por 5 días!' : '¡Bienvenido de vuelta!'}
+                        {isRegister ? '¡Probá gratis por 30 días!' : '¡Bienvenido de vuelta!'}
                     </Text>
                     <Text size="sm" ta="center" mb="xl" c={{ base: 'rgba(255,255,255,0.8)', md: 'dimmed' }}>
                         {isRegister ? 'Ingresá un mail y contraseña para empezar' : 'Ingresá tus credenciales para acceder a tu campo'}
@@ -138,8 +138,8 @@ export default function Login({
                             </>
                         ) : (
                             <>
-                                <Text size="sm" fw={700} mb="xs">Prueba Gratuita de 5 Días</Text>
-                                <Text size="xs" c="dimmed" mb="md" px="sm">Creá tu cuenta ahora mismo y probá el sistema sin límites por 5 días.</Text>
+                                <Text size="sm" fw={700} mb="xs">Prueba Gratuita de 30 Días</Text>
+                                <Text size="xs" c="dimmed" mb="md" px="sm">Creá tu cuenta ahora mismo y probá el sistema sin límites por 30 días.</Text>
                                 <Button variant="light" color="blue" size="sm" fullWidth onClick={() => toggleRegisterMode(true)}>
                                     Registrarse Gratis
                                 </Button>
