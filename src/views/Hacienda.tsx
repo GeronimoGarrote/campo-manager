@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
-import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack } from '@mantine/core';
+import { useState, useMemo, useRef } from 'react';
+import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet, IconScan } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 import ModalImportarExcel from '../components/Hacienda/ModalImportarExcel';
 
@@ -57,6 +57,10 @@ export default function Hacienda({
 }: any) {
     const [busqueda, setBusqueda] = useState('');
     const [importarExcelAbierto, setImportarExcelAbierto] = useState(false);
+    const [animalParaEid, setAnimalParaEid] = useState<any>(null);
+    const [eidInputVal, setEidInputVal] = useState('');
+    const [savingEid, setSavingEid] = useState(false);
+    const eidInputRef = useRef<HTMLInputElement>(null);
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterLote, setFilterLote] = useState<string | null>(null); 
@@ -143,6 +147,26 @@ export default function Hacienda({
         setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: !estadoActual } : a)); 
         const { error } = await supabase.from('animales').update({ destacado: !estadoActual }).eq('id', id);
         if (error) { console.error("Error:", error); setAnimales((prev: any) => prev.map((a: any) => a.id === id ? { ...a, destacado: estadoActual } : a)); }
+    }
+
+    function abrirVincularEid(e: React.MouseEvent, animal: any) {
+        e.stopPropagation();
+        setAnimalParaEid(animal);
+        setEidInputVal(animal.caravana_electronica || '');
+        setTimeout(() => eidInputRef.current?.focus(), 100);
+    }
+
+    async function guardarEid() {
+        if (!animalParaEid) return;
+        setSavingEid(true);
+        const { error } = await supabase.from('animales')
+            .update({ caravana_electronica: eidInputVal.trim() || null })
+            .eq('id', animalParaEid.id);
+        setSavingEid(false);
+        if (error) { alert('Error: ' + error.message); return; }
+        fetchAnimales();
+        setAnimalParaEid(null);
+        setEidInputVal('');
     }
 
     const exportarAExcel = () => {
@@ -265,7 +289,27 @@ export default function Hacienda({
                         <Table.Tbody>
                             {animalesFiltrados.map((vaca: any) => (
                                 <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }} bg={vaca.condicion && vaca.condicion.includes('ENFERMA') ? 'red.0' : undefined}>
-                                    <Table.Td><Text fw={700}>{vaca.caravana}</Text></Table.Td>
+                                    <Table.Td>
+                                        <Group gap={6} wrap="nowrap">
+                                            <Text fw={700}>{vaca.caravana}</Text>
+                                            {activeSection === 'hacienda' && (
+                                                <Tooltip
+                                                    label={vaca.caravana_electronica ? `EID: ${vaca.caravana_electronica}` : 'Vincular EID del bastón'}
+                                                    withArrow
+                                                    zIndex={3000}
+                                                >
+                                                    <ActionIcon
+                                                        size="xs"
+                                                        variant={vaca.caravana_electronica ? 'filled' : 'subtle'}
+                                                        color={vaca.caravana_electronica ? 'teal' : 'gray'}
+                                                        onClick={(e) => abrirVincularEid(e, vaca)}
+                                                    >
+                                                        <IconScan size={11} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+                                            )}
+                                        </Group>
+                                    </Table.Td>
                                     <Table.Td><Text fw={500}>{vaca.categoria}</Text></Table.Td>
                                     <Table.Td>
                                         {activeSection === 'bajas' ? (
@@ -334,6 +378,58 @@ export default function Hacienda({
                     </Table>
                 </div>
             </Paper>
+
+            <Modal
+                opened={!!animalParaEid}
+                onClose={() => { setAnimalParaEid(null); setEidInputVal(''); }}
+                title={
+                    <Group gap="xs">
+                        <IconScan size={18} />
+                        <Text fw={700}>Vincular EID — {animalParaEid?.caravana}</Text>
+                    </Group>
+                }
+                centered
+                size="sm"
+            >
+                <Text size="sm" c="dimmed" mb="md">
+                    Hacé clic en el campo y escaneá con el bastón, o ingresá el número manualmente.
+                </Text>
+                <TextInput
+                    ref={eidInputRef}
+                    label="Caravana Electrónica (EID)"
+                    placeholder="Escaneá o escribí el EID..."
+                    value={eidInputVal}
+                    onChange={(e) => setEidInputVal(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); guardarEid(); } }}
+                    leftSection={<IconScan size={16} />}
+                    rightSection={animalParaEid?.caravana_electronica && !eidInputVal
+                        ? <Badge color="teal" size="xs">Vinculado</Badge>
+                        : null}
+                    description={animalParaEid?.caravana_electronica
+                        ? `EID actual: ${animalParaEid.caravana_electronica}`
+                        : 'Sin EID vinculado'}
+                />
+                <Group mt="lg" justify="space-between">
+                    {animalParaEid?.caravana_electronica && (
+                        <Button
+                            variant="subtle"
+                            color="red"
+                            size="xs"
+                            onClick={() => { setEidInputVal(''); guardarEid(); }}
+                        >
+                            Desvincular EID
+                        </Button>
+                    )}
+                    <Group ml="auto" gap="xs">
+                        <Button variant="default" onClick={() => { setAnimalParaEid(null); setEidInputVal(''); }}>
+                            Cancelar
+                        </Button>
+                        <Button color="teal" loading={savingEid} onClick={guardarEid} leftSection={<IconScan size={16} />}>
+                            Guardar EID
+                        </Button>
+                    </Group>
+                </Group>
+            </Modal>
 
             {campoId && (
                 <ModalImportarExcel
