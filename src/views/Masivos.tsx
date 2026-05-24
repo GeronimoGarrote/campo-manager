@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { notifications } from '@mantine/notifications';
+import { IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
+import { useLectorAllflex } from '../hooks/useLectorAllflex';
+import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert } from '@mantine/core';
 import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle } from '@tabler/icons-react';
 import { supabase } from '../supabase';
@@ -21,11 +25,33 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
     return <Badge color={color} size="sm">{estado === 'EN LACTANCIA' ? 'LACTANCIA' : estado}</Badge>;
 };
 
-export default function Masivos({ 
-    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], fetchAnimales, fetchActividadGlobal, setActiveSection 
+export default function Masivos({
+    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, setActiveSection
 }: any) {
     const [loading, setLoading] = useState(false);
-    
+    const [lectorActivo, setLectorActivo] = useState(false);
+    const [eidPendiente, setEidPendiente] = useState('');
+    const [modalAltaBastonOpen, setModalAltaBastonOpen] = useState(false);
+
+    const manejarEscaneoBaston = useCallback((eid: string) => {
+        const eidNorm = eid.trim().toLowerCase();
+        const animal = animales.find((a: any) => a.caravana_electronica?.trim().toLowerCase() === eidNorm);
+        if (animal) {
+            setSelectedIds(prev => prev.includes(animal.id) ? prev : [...prev, animal.id]);
+            notifications.show({
+                title: 'Animal seleccionado',
+                message: `Caravana ${animal.caravana} agregada a la selección`,
+                color: 'teal',
+                autoClose: 2000,
+            });
+        } else {
+            setEidPendiente(eid);
+            setModalAltaBastonOpen(true);
+        }
+    }, [animales]);
+
+    useLectorAllflex({ isActive: lectorActivo, onScan: manejarEscaneoBaston });
+
     const [busqueda, setBusqueda] = useState('');
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterSexo, setFilterSexo] = useState<string | null>(null);
@@ -320,7 +346,19 @@ export default function Masivos({
         <>
             <Group justify="space-between" mb="lg">
                 <Title order={2}>Carga de Eventos Masivos</Title>
-                <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
+                <Group gap="md">
+                    <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
+                    <Switch
+                        checked={lectorActivo}
+                        onChange={(e) => setLectorActivo(e.currentTarget.checked)}
+                        color="teal"
+                        size="md"
+                        label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
+                        thumbIcon={lectorActivo
+                            ? <IconBluetooth size={12} color="white" />
+                            : <IconBluetoothOff size={12} />}
+                    />
+                </Group>
             </Group>
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
@@ -430,6 +468,25 @@ export default function Masivos({
                 </ScrollArea>
             </Paper>
             {selectedIds.length > 0 && ( <Paper shadow="xl" p="md" radius="md" withBorder bg="gray.0" style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}><Group><Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>CONFIRMAR {massActividad}</Button></Group></Paper> )}
+
+            <ModalAltaDesdeBaston
+                opened={modalAltaBastonOpen}
+                onClose={() => setModalAltaBastonOpen(false)}
+                caravanaElectronica={eidPendiente}
+                campoId={campoId}
+                animales={animales}
+                datosSuscripcion={datosSuscripcion}
+                onSuccess={(newAnimalId) => {
+                    setSelectedIds(prev => [...prev, newAnimalId]);
+                    fetchAnimales();
+                    notifications.show({
+                        title: 'Animal registrado',
+                        message: 'El animal fue dado de alta y seleccionado automáticamente',
+                        color: 'teal',
+                        autoClose: 3000,
+                    });
+                }}
+            />
         </>
     );
 }
