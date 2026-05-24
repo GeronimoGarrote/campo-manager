@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
 import { useLectorAllflex } from '../hooks/useLectorAllflex';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
+import AllflexScanner from '../components/AllflexScanner';
 import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert } from '@mantine/core';
 import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle } from '@tabler/icons-react';
 import { supabase } from '../supabase';
@@ -368,6 +369,9 @@ export default function Masivos({
                     />
                 </Group>
             </Group>
+            {/* Panel Web Serial — para conexión vía puerto COM Bluetooth */}
+            <AllflexScanner onScan={manejarEscaneoBaston} />
+
             {lectorActivo && (
                 <Alert
                     color={ultimoEidLeido ? 'teal' : 'blue'}

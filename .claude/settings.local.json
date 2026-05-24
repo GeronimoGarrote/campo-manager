@@ -19,7 +19,9 @@
       "Bash(kill %1)",
       "Bash(curl *)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('error_description'\\) or d.get\\('error'\\) or d.get\\('message'\\) or d\\)\")",
-      "mcp__supabase__get_publishable_keys"
+      "mcp__supabase__get_publishable_keys",
+      "Bash(xargs cat)",
+      "Bash(git *)"
     ]
   },
   "enableAllProjectMcpServers": true,
