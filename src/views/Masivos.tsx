@@ -32,15 +32,23 @@ export default function Masivos({
     const [lectorActivo, setLectorActivo] = useState(false);
     const [eidPendiente, setEidPendiente] = useState('');
     const [modalAltaBastonOpen, setModalAltaBastonOpen] = useState(false);
+    const [ultimoEidLeido, setUltimoEidLeido] = useState<string | null>(null);
 
     const manejarEscaneoBaston = useCallback((eid: string) => {
         const eidNorm = eid.trim().toLowerCase();
-        const animal = animales.find((a: any) => a.caravana_electronica?.trim().toLowerCase() === eidNorm);
+        setUltimoEidLeido(eid);
+
+        // Busca primero por caravana electrónica (EID), luego por caravana visual
+        const animal = animales.find((a: any) =>
+            a.caravana_electronica?.trim().toLowerCase() === eidNorm ||
+            a.caravana?.trim().toLowerCase() === eidNorm
+        );
+
         if (animal) {
             setSelectedIds(prev => prev.includes(animal.id) ? prev : [...prev, animal.id]);
             notifications.show({
                 title: 'Animal seleccionado',
-                message: `Caravana ${animal.caravana} agregada a la selección`,
+                message: `${animal.caravana} agregado a la selección`,
                 color: 'teal',
                 autoClose: 2000,
             });
@@ -344,13 +352,13 @@ export default function Masivos({
 
     return (
         <>
-            <Group justify="space-between" mb="lg">
+            <Group justify="space-between" mb="lg" wrap="nowrap">
                 <Title order={2}>Carga de Eventos Masivos</Title>
-                <Group gap="md">
+                <Group gap="md" wrap="nowrap">
                     <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
                     <Switch
                         checked={lectorActivo}
-                        onChange={(e) => setLectorActivo(e.currentTarget.checked)}
+                        onChange={(e) => { setLectorActivo(e.currentTarget.checked); setUltimoEidLeido(null); }}
                         color="teal"
                         size="md"
                         label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
@@ -360,6 +368,21 @@ export default function Masivos({
                     />
                 </Group>
             </Group>
+            {lectorActivo && (
+                <Alert
+                    color={ultimoEidLeido ? 'teal' : 'blue'}
+                    variant="light"
+                    mb="md"
+                    icon={<IconBluetooth size={16} />}
+                    p="xs"
+                >
+                    <Text size="sm">
+                        {ultimoEidLeido
+                            ? <>Último EID recibido: <Text span fw={700} ff="monospace">{ultimoEidLeido}</Text></>
+                            : 'Lector activo — apuntá el bastón y escaneá un animal'}
+                    </Text>
+                </Alert>
+            )}
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
                 <Group grow align="flex-start">
