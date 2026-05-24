@@ -353,39 +353,46 @@ export default function Masivos({
 
     return (
         <>
-            <Group justify="space-between" mb="lg" wrap="nowrap">
-                <Title order={2}>Carga de Eventos Masivos</Title>
-                <Group gap="md" wrap="nowrap">
-                    <Badge size="xl" color="violet">{selectedIds.length} Seleccionados</Badge>
-                    <Switch
-                        checked={lectorActivo}
-                        onChange={(e) => { setLectorActivo(e.currentTarget.checked); setUltimoEidLeido(null); }}
-                        color="teal"
-                        size="md"
-                        label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
-                        thumbIcon={lectorActivo
-                            ? <IconBluetooth size={12} color="white" />
-                            : <IconBluetoothOff size={12} />}
-                    />
+            <Group justify="space-between" mb={lectorActivo ? 'xs' : 'lg'} align="center">
+                <Group gap="sm" align="center">
+                    <Title order={2}>Carga de Eventos Masivos</Title>
+                    <Badge size="lg" color="violet" variant="filled">
+                        {selectedIds.length} Seleccionados
+                    </Badge>
                 </Group>
+                <Switch
+                    checked={lectorActivo}
+                    onChange={(e) => { setLectorActivo(e.currentTarget.checked); setUltimoEidLeido(null); }}
+                    color="teal"
+                    size="md"
+                    label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
+                    thumbIcon={lectorActivo
+                        ? <IconBluetooth size={12} color="white" />
+                        : <IconBluetoothOff size={12} />}
+                />
             </Group>
-            {/* Panel Web Serial — para conexión vía puerto COM Bluetooth */}
-            <AllflexScanner onScan={manejarEscaneoBaston} />
 
             {lectorActivo && (
-                <Alert
-                    color={ultimoEidLeido ? 'teal' : 'blue'}
-                    variant="light"
-                    mb="md"
-                    icon={<IconBluetooth size={16} />}
-                    p="xs"
-                >
-                    <Text size="sm">
-                        {ultimoEidLeido
-                            ? <>Último EID recibido: <Text span fw={700} ff="monospace">{ultimoEidLeido}</Text></>
-                            : 'Lector activo — apuntá el bastón y escaneá un animal'}
-                    </Text>
-                </Alert>
+                <Paper withBorder p="sm" radius="md" mb="lg" bg="teal.0"
+                    style={{ borderColor: 'var(--mantine-color-teal-4)' }}>
+                    <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                        <Group gap="md" align="center" wrap="nowrap">
+                            <Badge color="teal" variant="light" size="sm"
+                                leftSection={<IconBluetooth size={11} />}>
+                                HID activo
+                            </Badge>
+                            <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-teal-3)', paddingLeft: 12 }}>
+                                SPP:
+                            </Text>
+                            <AllflexScanner onScan={manejarEscaneoBaston} />
+                        </Group>
+                        <Text size="xs" c={ultimoEidLeido ? 'teal.8' : 'dimmed'}>
+                            {ultimoEidLeido
+                                ? <>Último: <Text span ff="monospace" fw={700}>{ultimoEidLeido}</Text></>
+                                : 'Apuntá el bastón y escaneá'}
+                        </Text>
+                    </Group>
+                </Paper>
             )}
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>

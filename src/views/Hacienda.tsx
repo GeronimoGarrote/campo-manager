@@ -1,7 +1,11 @@
-import { useState, useMemo, useRef } from 'react';
-import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal } from '@mantine/core';
+import { useState, useMemo, useRef, useCallback } from 'react';
+import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal, Switch, Alert } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet, IconScan } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet, IconScan, IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
+import { useLectorAllflex } from '../hooks/useLectorAllflex';
+import AllflexScanner from '../components/AllflexScanner';
+import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import { supabase } from '../supabase';
 import ModalImportarExcel from '../components/Hacienda/ModalImportarExcel';
 
@@ -61,6 +65,27 @@ export default function Hacienda({
     const [eidInputVal, setEidInputVal] = useState('');
     const [savingEid, setSavingEid] = useState(false);
     const eidInputRef = useRef<HTMLInputElement>(null);
+
+    // ── Lector RFID ──────────────────────────────────────────────────────────
+    const [lectorActivo, setLectorActivo] = useState(false);
+    const [eidPendiente, setEidPendiente] = useState('');
+    const [modalAltaBastonOpen, setModalAltaBastonOpen] = useState(false);
+
+    const manejarEscaneoHacienda = useCallback((eid: string) => {
+        const eidNorm = eid.trim().toLowerCase();
+        const animal = animales.find((a: any) =>
+            a.caravana_electronica?.trim().toLowerCase() === eidNorm ||
+            a.caravana?.trim().toLowerCase() === eidNorm
+        );
+        if (animal) {
+            abrirFichaVaca(animal);
+        } else {
+            setEidPendiente(eid);
+            setModalAltaBastonOpen(true);
+        }
+    }, [animales, abrirFichaVaca]);
+
+    useLectorAllflex({ isActive: lectorActivo, onScan: manejarEscaneoHacienda });
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterLote, setFilterLote] = useState<string | null>(null); 
@@ -191,7 +216,7 @@ export default function Hacienda({
                     <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel} px={{ base: 'xs', sm: 'md' }}>
                         <Text visibleFrom="sm" fw={600}>Excel</Text>
                     </Button>
-                    
+
                     {activeSection === 'hacienda' && (
                         <>
                             <Button variant="outline" color="teal" leftSection={<IconFileSpreadsheet size={18}/>} onClick={() => setImportarExcelAbierto(true)} px={{ base: 'xs', sm: 'md' }}>
@@ -200,11 +225,45 @@ export default function Hacienda({
                             <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={{ base: 'auto', sm: 180 }} px={{ base: 'xs', sm: 'md' }}>
                                 <Text visibleFrom="sm" fw={600}>Nuevo Animal</Text>
                             </Button>
+                            <Switch
+                                checked={lectorActivo}
+                                onChange={(e) => setLectorActivo(e.currentTarget.checked)}
+                                color="teal"
+                                size="md"
+                                label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
+                                thumbIcon={lectorActivo
+                                    ? <IconBluetooth size={12} color="white" />
+                                    : <IconBluetoothOff size={12} />}
+                            />
                         </>
                     )}
                 </Group>
             </Group>
             
+            {activeSection === 'hacienda' && lectorActivo && (
+                <Paper withBorder p="sm" radius="md" bg="teal.0"
+                    style={{ borderColor: 'var(--mantine-color-teal-4)' }}>
+                    <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                        <Group gap="md" align="center" wrap="nowrap">
+                            <Badge color="teal" variant="light" size="sm"
+                                leftSection={<IconBluetooth size={11} />}>
+                                HID activo
+                            </Badge>
+                            <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-teal-3)', paddingLeft: 12 }}>
+                                SPP:
+                            </Text>
+                            <AllflexScanner onScan={manejarEscaneoHacienda} />
+                        </Group>
+                        <Alert color="teal" variant="light" p="xs" icon={<IconScan size={14} />}
+                            style={{ flex: 1, maxWidth: 320 }}>
+                            <Text size="xs">
+                                Escaneá una caravana para <b>abrir su ficha</b> o <b>registrar un animal nuevo</b>.
+                            </Text>
+                        </Alert>
+                    </Group>
+                </Paper>
+            )}
+
             <Paper p="sm" radius="md" withBorder bg="gray.0">
                 <Group align="flex-start" wrap="nowrap">
                     <div style={{ flex: 1 }}>
@@ -378,6 +437,29 @@ export default function Hacienda({
                     </Table>
                 </div>
             </Paper>
+
+            <ModalAltaDesdeBaston
+                opened={modalAltaBastonOpen}
+                onClose={() => setModalAltaBastonOpen(false)}
+                caravanaElectronica={eidPendiente}
+                campoId={campoId}
+                animales={animales}
+                datosSuscripcion={datosSuscripcion}
+                onSuccess={(animalId) => {
+                    const existente = animales.find((a: any) => a.id === animalId);
+                    if (existente) {
+                        abrirFichaVaca(existente);
+                    } else {
+                        fetchAnimales();
+                        notifications.show({
+                            title: 'Animal registrado',
+                            message: 'El animal fue dado de alta. Podés buscarlo en la tabla.',
+                            color: 'teal',
+                            autoClose: 3000,
+                        });
+                    }
+                }}
+            />
 
             <Modal
                 opened={!!animalParaEid}

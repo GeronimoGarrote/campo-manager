@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Alert, Badge, Button, Group, Paper, Text, ActionIcon, Tooltip } from '@mantine/core';
-import { IconBluetooth, IconBluetoothOff, IconPlugConnected, IconPlugConnectedX, IconAlertCircle } from '@tabler/icons-react';
+import { Alert, Button, Group, Text, ActionIcon, Tooltip, ThemeIcon } from '@mantine/core';
+import { IconBluetooth, IconBluetoothOff, IconPlugConnected, IconX, IconAlertCircle } from '@tabler/icons-react';
 import { useWebSerialAllflex } from '../hooks/useWebSerialAllflex';
 
 interface Props {
@@ -11,76 +11,55 @@ interface Props {
 export default function AllflexScanner({ onScan, baudRate }: Props) {
     const { isConectado, error, conectarPuerto, desconectar } = useWebSerialAllflex({ onScan, baudRate });
     const [errorDismissed, setErrorDismissed] = useState(false);
-
-    // Cuando cambia el error (nuevo intento) volvemos a mostrar el Alert
     const errorVisible = !!error && !errorDismissed;
 
     return (
-        <Paper
-            withBorder
-            p="xs"
-            radius="md"
-            style={{
-                borderColor: isConectado
-                    ? 'var(--mantine-color-teal-5)'
-                    : 'var(--mantine-color-gray-3)',
-                background: isConectado
-                    ? 'var(--mantine-color-teal-0)'
-                    : 'var(--mantine-color-gray-0)',
-                transition: 'all 0.2s ease',
-            }}
-        >
-            <Group gap="sm" wrap="nowrap">
-                <Badge
-                    size="md"
-                    color={isConectado ? 'teal' : 'gray'}
-                    variant="dot"
-                    leftSection={
-                        isConectado
-                            ? <IconBluetooth size={11} />
-                            : <IconBluetoothOff size={11} />
-                    }
-                >
-                    {isConectado ? 'SPP conectado' : 'Sin conexión SPP'}
-                </Badge>
-
-                {isConectado ? (
-                    <Tooltip label="Cerrar puerto y desconectar" withArrow>
-                        <ActionIcon
-                            color="red"
-                            variant="light"
-                            size="sm"
-                            onClick={desconectar}
-                        >
-                            <IconPlugConnectedX size={14} />
+        <Group gap="xs" wrap="nowrap" align="center">
+            {isConectado ? (
+                <>
+                    <ThemeIcon color="teal" variant="light" size="sm" radius="xl">
+                        <IconBluetooth size={12} />
+                    </ThemeIcon>
+                    <Text size="sm" c="teal" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                        COM conectado
+                    </Text>
+                    <Tooltip label="Desconectar puerto COM" withArrow>
+                        <ActionIcon size="sm" color="red" variant="subtle" onClick={desconectar}>
+                            <IconX size={12} />
                         </ActionIcon>
                     </Tooltip>
-                ) : (
+                </>
+            ) : (
+                <Group gap="xs" wrap="nowrap" align="center">
+                    <ThemeIcon color="gray" variant="light" size="sm" radius="xl">
+                        <IconBluetoothOff size={12} />
+                    </ThemeIcon>
                     <Button
                         size="xs"
+                        variant="outline"
                         color="teal"
-                        variant="filled"
-                        leftSection={<IconPlugConnected size={14} />}
+                        leftSection={<IconPlugConnected size={13} />}
                         onClick={() => { setErrorDismissed(false); conectarPuerto(); }}
+                        style={{ whiteSpace: 'nowrap' }}
                     >
-                        Conectar bastón (COM)
+                        Conectar COM
                     </Button>
-                )}
-            </Group>
+                </Group>
+            )}
 
             {errorVisible && (
                 <Alert
-                    icon={<IconAlertCircle size={14} />}
+                    icon={<IconAlertCircle size={12} />}
                     color="red"
                     variant="light"
-                    mt="xs"
                     p="xs"
                     withCloseButton
                     onClose={() => setErrorDismissed(true)}
+                    style={{ flex: 1 }}
                 >
-                    <Text size="xs">{error}</Text>
+                    <Text size="xs" lineClamp={2}>{error}</Text>
                 </Alert>
             )}
-        </Paper>
+        </Group>
     );
 }
