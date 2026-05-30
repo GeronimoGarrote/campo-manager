@@ -150,19 +150,20 @@ export default function App() {
   async function handleLogout() { await supabase.auth.signOut(); setSession(null); }
 
   // Funciones de Fetch de Datos
-  async function loadCampos() { const { data } = await supabase.from('establecimientos').select('*').order('created_at'); if (data && data.length > 0) { setEstablecimientos(data); const guardado = localStorage.getItem('campoId'); if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado); else if (!campoId) setCampoId(data[0].id); } }
+  async function loadCampos() { const { data, error } = await supabase.from('establecimientos').select('*').order('created_at'); if (error) { console.error('[loadCampos]', error); return; } if (data && data.length > 0) { setEstablecimientos(data); const guardado = localStorage.getItem('campoId'); if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado); else if (!campoId) setCampoId(data[0].id); } }
   
   async function fetchSuscripcion() {
       // 1. Verificamos que haya alguien logueado
       if (!session?.user.id) return;
 
       // 2. Buscamos el plan usando el ID del usuario
-      const { data } = await supabase
+      const { data, error } = await supabase
           .from('suscripciones')
           .select('*')
           .eq('user_id', session.user.id)
           .single();
 
+      if (error && error.code !== 'PGRST116') { console.error('[fetchSuscripcion]', error); return; }
       if (data) {
           // --- SANITIZACIÓN ANTI-NaN ---
           const dataLimpia = {
@@ -182,20 +183,22 @@ export default function App() {
       }
   }
   
-  async function fetchAnimales() { if (!campoId) return; const { data } = await supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); setAnimales(data || []); }
-  async function fetchPotreros() { if (!campoId) return; const { data } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setPotreros(data || []); }
-  async function fetchParcelas() { if (!campoId) return; const { data } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setParcelas(data || []); }
-  async function fetchLotes() { if (!campoId) return; const { data } = await supabase.from('lotes').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); setLotes(data || []); }
+  async function fetchAnimales() { if (!campoId) return; const { data, error } = await supabase.from('animales').select('*').eq('establecimiento_id', campoId).neq('estado', 'ELIMINADO').order('created_at', { ascending: false }); if (error) { console.error('[fetchAnimales]', error); return; } setAnimales(data || []); }
+  async function fetchPotreros() { if (!campoId) return; const { data, error } = await supabase.from('potreros').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); if (error) { console.error('[fetchPotreros]', error); return; } setPotreros(data || []); }
+  async function fetchParcelas() { if (!campoId) return; const { data, error } = await supabase.from('parcelas').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); if (error) { console.error('[fetchParcelas]', error); return; } setParcelas(data || []); }
+  async function fetchLotes() { if (!campoId) return; const { data, error } = await supabase.from('lotes').select('*').eq('establecimiento_id', campoId).order('created_at', { ascending: false }); if (error) { console.error('[fetchLotes]', error); return; } setLotes(data || []); }
   
   async function fetchActividadGlobal() { 
       if (!campoId) return; 
-      const { data } = await supabase.from('eventos').select('*, animales(caravana)').eq('establecimiento_id', campoId).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }); 
-      
+      const { data, error } = await supabase.from('eventos').select('*, animales(caravana)').eq('establecimiento_id', campoId).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false });
+      if (error) { console.error('[fetchActividadGlobal]', error); return; }
+
       let eventos = data || [];
       const perdidos = eventos.filter((e: any) => !e.animales).map((e: any) => e.animal_id);
-      
+
       if (perdidos.length > 0) {
-          const { data: nombres } = await supabase.rpc('obtener_caravanas_perdidas', { ids: perdidos });
+          const { data: nombres, error: errorRpc } = await supabase.rpc('obtener_caravanas_perdidas', { ids: perdidos });
+          if (errorRpc) { console.error('[fetchActividadGlobal] rpc', errorRpc); return; }
           eventos = eventos.map((ev: any) => {
               if (!ev.animales) {
                   const match = nombres?.find((n: any) => n.id === ev.animal_id);
@@ -208,9 +211,9 @@ export default function App() {
       setEventosGlobales(eventos as any); 
   }
 
-  async function fetchEventosLotesGlobal() { if (!campoId) return; const { data } = await supabase.from('lotes_eventos').select('*').eq('establecimiento_id', campoId).order('fecha', { ascending: false }).order('created_at', { ascending: false }); setEventosLotesGlobal(data || []); }
-  async function fetchAgenda() { if(!campoId) return; const { data } = await supabase.from('agenda').select('*').eq('establecimiento_id', campoId).order('fecha_programada', { ascending: true }); if (data) setAgenda(data); }
-  async function fetchTransferencias() { if (!campoId) return; const { data: transData } = await supabase.from('transferencias').select('*').eq('campo_destino_id', campoId).eq('estado', 'PENDIENTE'); setTransferencias(transData || []); }
+  async function fetchEventosLotesGlobal() { if (!campoId) return; const { data, error } = await supabase.from('lotes_eventos').select('*').eq('establecimiento_id', campoId).order('fecha', { ascending: false }).order('created_at', { ascending: false }); if (error) { console.error('[fetchEventosLotesGlobal]', error); return; } setEventosLotesGlobal(data || []); }
+  async function fetchAgenda() { if(!campoId) return; const { data, error } = await supabase.from('agenda').select('*').eq('establecimiento_id', campoId).order('fecha_programada', { ascending: true }); if (error) { console.error('[fetchAgenda]', error); return; } if (data) setAgenda(data); }
+  async function fetchTransferencias() { if (!campoId) return; const { data: transData, error } = await supabase.from('transferencias').select('*').eq('campo_destino_id', campoId).eq('estado', 'PENDIENTE'); if (error) { console.error('[fetchTransferencias]', error); return; } setTransferencias(transData || []); }
 
   // Gestión de Establecimientos con Candado de Suscripción
   async function crearCampo() { 
