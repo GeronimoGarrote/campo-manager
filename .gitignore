@@ -26,4 +26,6 @@ desktop.ini
 
 .env
 .mcp.json
+
+# config de claude
 .claude/settings.local.json

@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider, Alert } from '@mantine/core';
-import { IconCheck, IconMail, IconBrandWhatsapp, IconAlertCircle, IconInfoCircle } from '@tabler/icons-react';
-import logoRodeo from '../assets/loggoblanco.png'; 
+import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider, Alert, Anchor } from '@mantine/core';
+import { IconCheck, IconMail, IconBrandWhatsapp, IconAlertCircle, IconInfoCircle, IconArrowLeft } from '@tabler/icons-react';
+import logoRodeo from '../assets/loggoblanco.png';
 
-export default function Login({ 
-    email, setEmail, 
-    password, setPassword, 
-    handleLogin, handleSignUp, 
-    authLoading, 
+export default function Login({
+    email, setEmail,
+    password, setPassword,
+    handleLogin, handleSignUp, handleForgotPassword,
+    authLoading,
     authError, setAuthError,
     authSuccess, setAuthSuccess
 }: any) {
     const [isRegister, setIsRegister] = useState(false);
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [forgotLoading, setForgotLoading] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -22,11 +25,36 @@ export default function Login({
         }
     };
 
-    // Al cambiar de pestaña, limpiamos los mensajes
     const toggleRegisterMode = (mode: boolean) => {
         setIsRegister(mode);
+        setIsForgotPassword(false);
         setAuthError(null);
         setAuthSuccess(null);
+    };
+
+    const enterForgotPassword = () => {
+        setForgotEmail(email);
+        setIsForgotPassword(true);
+        setAuthError(null);
+        setAuthSuccess(null);
+    };
+
+    const exitForgotPassword = () => {
+        setIsForgotPassword(false);
+        setAuthError(null);
+        setAuthSuccess(null);
+    };
+
+    const submitForgotPassword = async () => {
+        setForgotLoading(true);
+        const { error } = await handleForgotPassword(forgotEmail);
+        setForgotLoading(false);
+        if (error) {
+            setAuthError(error);
+        } else {
+            setAuthSuccess('¡Listo! Si el correo existe en el sistema, recibirás un link para restablecer tu contraseña. Revisá también la carpeta de Spam.');
+            setIsForgotPassword(false);
+        }
     };
 
     return (
@@ -80,13 +108,12 @@ export default function Login({
                     </Stack>
                     
                     <Text size="lg" fw={700} ta="center" mb="xs" c={{ base: 'white', md: 'dark' }}>
-                        {isRegister ? '¡Probá gratis por 30 días!' : '¡Bienvenido de vuelta!'}
+                        {isForgotPassword ? 'Recuperar contraseña' : isRegister ? '¡Probá gratis por 30 días!' : '¡Bienvenido de vuelta!'}
                     </Text>
                     <Text size="sm" ta="center" mb="xl" c={{ base: 'rgba(255,255,255,0.8)', md: 'dimmed' }}>
-                        {isRegister ? 'Ingresá un mail y contraseña para empezar' : 'Ingresá tus credenciales para acceder a tu campo'}
+                        {isForgotPassword ? 'Te enviaremos un link para restablecer tu contraseña' : isRegister ? 'Ingresá un mail y contraseña para empezar' : 'Ingresá tus credenciales para acceder a tu campo'}
                     </Text>
 
-                    {/* ACÁ ESTÁN LAS NOTIFICACIONES INTEGRADAS */}
                     {authError && (
                         <Alert icon={<IconAlertCircle size={16} />} title="Error" color="red" variant="light" mb="md" withCloseButton onClose={() => setAuthError(null)}>
                             {authError}
@@ -99,29 +126,55 @@ export default function Login({
                         </Alert>
                     )}
 
-                    <Paper withBorder shadow="xl" p={30} radius="md">
-                        <form onSubmit={handleSubmit}>
-                            <TextInput 
-                                label="Correo Electrónico" 
-                                placeholder="usuario@campo.com" 
-                                required 
-                                value={email} 
-                                onChange={(e) => setEmail(e.target.value)} 
+                    {isForgotPassword ? (
+                        <Paper withBorder shadow="xl" p={30} radius="md">
+                            <TextInput
+                                label="Correo Electrónico"
+                                placeholder="usuario@campo.com"
+                                required
+                                value={forgotEmail}
+                                onChange={(e) => setForgotEmail(e.target.value)}
                                 leftSection={<IconMail size={16} />}
                             />
-                            <PasswordInput 
-                                label="Contraseña" 
-                                placeholder="Tu contraseña" 
-                                required 
-                                mt="md" 
-                                value={password} 
-                                onChange={(e) => setPassword(e.target.value)} 
-                            />
-                            <Button fullWidth mt="xl" size="md" type="submit" loading={authLoading} color="teal">
-                                {isRegister ? 'Crear Cuenta y Probar Gratis' : 'Iniciar Sesión'}
+                            <Button fullWidth mt="xl" size="md" loading={forgotLoading} color="teal" onClick={submitForgotPassword}>
+                                Enviar link de recuperación
                             </Button>
-                        </form>
-                    </Paper>
+                            <Button fullWidth mt="sm" size="sm" variant="subtle" color="gray" leftSection={<IconArrowLeft size={14} />} onClick={exitForgotPassword}>
+                                Volver al inicio de sesión
+                            </Button>
+                        </Paper>
+                    ) : (
+                        <Paper withBorder shadow="xl" p={30} radius="md">
+                            <form onSubmit={handleSubmit}>
+                                <TextInput
+                                    label="Correo Electrónico"
+                                    placeholder="usuario@campo.com"
+                                    required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    leftSection={<IconMail size={16} />}
+                                />
+                                <PasswordInput
+                                    label="Contraseña"
+                                    placeholder="Tu contraseña"
+                                    required
+                                    mt="md"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                                {!isRegister && (
+                                    <Group justify="flex-end" mt="xs">
+                                        <Anchor size="xs" c="dimmed" onClick={enterForgotPassword} style={{ cursor: 'pointer' }}>
+                                            ¿Olvidaste tu contraseña?
+                                        </Anchor>
+                                    </Group>
+                                )}
+                                <Button fullWidth mt="md" size="md" type="submit" loading={authLoading} color="teal">
+                                    {isRegister ? 'Crear Cuenta y Probar Gratis' : 'Iniciar Sesión'}
+                                </Button>
+                            </form>
+                        </Paper>
+                    )}
 
                     <Divider my="xl" label={<Text size="sm" c={{ base: 'white', md: 'dimmed' }}>
                         {isRegister ? '¿Ya tenés cuenta?' : '¿No tenés cuenta?'}

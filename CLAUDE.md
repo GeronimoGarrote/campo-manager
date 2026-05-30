@@ -273,8 +273,8 @@ El patrón es: `App.tsx` fetcha → pasa como props → la vista renderiza.
 | Fase | Estado | Descripción |
 |------|--------|-------------|
 | 1 | ✅ Completo | Este archivo CLAUDE.md |
-| 2 | Pendiente | Crear `src/types.ts` con todas las interfaces |
-| 3 | Pendiente | Manejo de errores en fetches de App.tsx |
+| 2 | ✅ Completo | Crear `src/types.ts` con todas las interfaces |
+| 3 | ✅ Completo | Manejo de errores en fetches de App.tsx |
 | 4 | Pendiente | Extraer hooks: `useAnimales`, `useSuscripcion`, `useAuth` |
 
 Antes de avanzar a Fase 3, la Fase 2 debe estar completa.

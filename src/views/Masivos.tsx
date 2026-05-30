@@ -65,6 +65,7 @@ export default function Masivos({
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterSexo, setFilterSexo] = useState<string | null>(null);
     const [filterLote, setFilterLote] = useState<string | null>(null);
+    const [filterPotrero, setFilterPotrero] = useState<string | null>(null);
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [massActividad, setMassActividad] = useState<string | null>('VACUNACION');
@@ -95,9 +96,10 @@ export default function Masivos({
     const animalesFiltrados = animales.filter((animal: any) => {
         const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
         const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
-        const matchSexo = filterSexo ? animal.sexo === filterSexo : true; 
-        const matchLote = filterLote ? animal.lote_id === filterLote : true; 
-        return matchBusqueda && matchCategoria && matchSexo && matchLote && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && animal.estado !== 'EN TRÁNSITO';
+        const matchSexo = filterSexo ? animal.sexo === filterSexo : true;
+        const matchLote = filterLote ? animal.lote_id === filterLote : true;
+        const matchPotrero = filterPotrero ? animal.potrero_id === filterPotrero : true;
+        return matchBusqueda && matchCategoria && matchSexo && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && animal.estado !== 'EN TRÁNSITO';
     });
 
     const toggleSeleccion = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -464,11 +466,12 @@ export default function Masivos({
                 <Button variant="light" color="gray" size="xs" onClick={() => seleccionarGrupo(null)}>Seleccionar TODO lo visible</Button>
                 {selectedIds.length > 0 && <Button variant="outline" color="red" size="xs" onClick={limpiarSeleccion}>Borrar Selección</Button>}
             </Group>
-            <Group mb="md" grow>
-                <TextInput placeholder="Buscar por caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 1}}/>
-                <Select placeholder="Filtrar Vista" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
-                <Select placeholder="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{flex: 0.5}}/>
-                <Select placeholder="Filtrar Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>}/>
+            <Group mb="md" wrap="nowrap" gap="xs">
+                <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 2}}/>
+                <Select placeholder="Categoría" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
+                <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1.5}}/>
+                <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1.5}}/>
             </Group>
             <Paper withBorder radius="md" h={400} style={{ display: 'flex', flexDirection: 'column' }}>
                 <ScrollArea style={{ flex: 1 }}>

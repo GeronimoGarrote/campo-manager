@@ -147,6 +147,15 @@ export default function App() {
     }
   }
 
+  async function handleForgotPassword(emailToReset: string) {
+    if (!emailToReset) return { error: 'Ingresá tu correo electrónico.' };
+    const { error } = await supabase.auth.resetPasswordForEmail(emailToReset, {
+        redirectTo: window.location.origin,
+    });
+    if (error) return { error: 'No se pudo enviar el correo. Verificá el email ingresado.' };
+    return { error: null };
+  }
+
   async function handleLogout() { await supabase.auth.signOut(); setSession(null); }
 
   // Funciones de Fetch de Datos
@@ -224,9 +233,17 @@ export default function App() {
           return;
       }
 
-      const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]); 
-      if (error) alert("Error: " + error.message); 
-      else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); } 
+      if (nuevoCampoRenspa) {
+          const { data: camposConRenspa } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: nuevoCampoRenspa.trim() });
+          if (Array.isArray(camposConRenspa) && camposConRenspa.length > 0) {
+              alert(`El RENSPA "${nuevoCampoRenspa}" ya está registrado en el sistema.`);
+              return;
+          }
+      }
+
+      const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]);
+      if (error) alert("Error: " + error.message);
+      else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); }
   }
   
   async function borrarCampo(id: string) { 
@@ -284,8 +301,8 @@ export default function App() {
             <Login 
                 email={email} setEmail={setEmail} 
                 password={password} setPassword={setPassword} 
-                handleLogin={handleLogin} handleSignUp={handleSignUp} 
-                authLoading={authLoading} 
+                handleLogin={handleLogin} handleSignUp={handleSignUp} handleForgotPassword={handleForgotPassword}
+                authLoading={authLoading}
                 authError={authError} setAuthError={setAuthError}
                 authSuccess={authSuccess} setAuthSuccess={setAuthSuccess}
             />
