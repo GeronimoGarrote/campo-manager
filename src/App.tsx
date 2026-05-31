@@ -1,7 +1,7 @@
 import { useEffect, useState} from 'react';
 import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard} from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { Notifications } from '@mantine/notifications';
@@ -23,6 +23,8 @@ import Suscripcion from './views/Suscripcion';
 
 // Modales Refactorizados
 import ModalAltaAnimal from './components/ModalAltaAnimal';
+import OnboardingTour from './components/OnboardingTour';
+import HelpDrawer from './components/HelpDrawer';
 import ModalFichaVaca from './components/ModalFichaVaca';
 import ModalTransferencia from './components/ModalTransferencia';
 import ModalGraficoPeso from './components/ModalGraficoPeso';
@@ -72,7 +74,11 @@ export default function App() {
   const [graficoAnimalId, setGraficoAnimalId] = useState<string | null>(null);
 
   // Modales Internos (Configuración)
-  const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false); 
+  const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false);
+
+  // Onboarding y Ayuda
+  const [tourOpened, { open: openTour, close: closeTour }] = useDisclosure(false);
+  const [helpOpened, { open: openHelp, close: closeHelp }] = useDisclosure(false);
   const [nuevoCampoNombre, setNuevoCampoNombre] = useState('');
   const [nuevoCampoRenspa, setNuevoCampoRenspa] = useState('');
 
@@ -98,6 +104,13 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); if (session) { loadCampos(); } else { setEstablecimientos([]); setCampoId(null); } });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (session?.user.id) {
+      const done = localStorage.getItem(`rc_tour_done_${session.user.id}`);
+      if (!done) openTour();
+    }
+  }, [session?.user.id]);
 
   useEffect(() => {
     if (!campoId || !session) return;
@@ -342,8 +355,11 @@ export default function App() {
                     )}
                 </Group>
 
-                {/* GRUPO DERECHO (Notificaciones) */}
-                <Group style={{ flexShrink: 0 }}>
+                {/* GRUPO DERECHO (Ayuda + Notificaciones) */}
+                <Group gap="xs" style={{ flexShrink: 0 }}>
+                    <ActionIcon variant="light" color="blue" size="lg" radius="xl" onClick={openHelp} title="Ayuda">
+                      <IconQuestionMark size={22} />
+                    </ActionIcon>
                     {campoId && (
                         <Popover width={300} position="bottom-end" withArrow shadow="md" opened={bellOpened} onChange={setBellOpened}>
                             <Popover.Target>
@@ -471,6 +487,18 @@ export default function App() {
          <Group align="flex-end" mb="lg"><TextInput label="Nuevo Campo" placeholder="Nombre" value={nuevoCampoNombre} onChange={(e) => setNuevoCampoNombre(e.target.value)} style={{flex: 1}}/><TextInput label="Nro RENSPA" placeholder="Opcional" value={nuevoCampoRenspa} onChange={(e) => setNuevoCampoRenspa(e.target.value)} style={{flex: 1}}/><Button onClick={crearCampo} leftSection={<IconPlus size={16}/>}>Crear</Button></Group>
          <Stack>{establecimientos.map(e => (<Group key={e.id} justify="space-between" p="sm" bg="gray.0" style={{borderRadius: 8}}><Group><IconBuilding size={18} color="gray"/><div><Text fw={500}>{e.nombre} {e.id === campoId && <Badge color="teal" size="sm" ml="xs">ACTIVO</Badge>}</Text><Text size="sm" c="dimmed">RENSPA: {e.renspa || 'Sin cargar'}</Text></div></Group><Group gap="xs"><ActionIcon variant="subtle" color="blue" onClick={() => editarCampo(e.id, e.nombre, e.renspa)}><IconEdit size={16}/></ActionIcon><ActionIcon variant="subtle" color="red" onClick={() => borrarCampo(e.id)}><IconTrash size={16}/></ActionIcon></Group></Group>))}</Stack>
       </Modal>
+
+      <OnboardingTour
+        opened={tourOpened}
+        onClose={closeTour}
+        onCargarPrimerAnimal={openModalAlta}
+        userId={session?.user.id ?? ''}
+      />
+      <HelpDrawer
+        opened={helpOpened}
+        onClose={closeHelp}
+        activeSection={activeSection}
+      />
 
     </MantineProvider>
   );

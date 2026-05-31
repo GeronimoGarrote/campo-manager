@@ -75,6 +75,7 @@ export default function Login({
                         <Group><ThemeIcon color="teal.7" radius="xl" size="md"><IconCheck size={14}/></ThemeIcon><Text size="md">Seguimiento de peso individual y de lote con proyecciones</Text></Group>
                         <Group><ThemeIcon color="teal.7" radius="xl" size="md"><IconCheck size={14}/></ThemeIcon><Text size="md">Módulo financiero y libro mayor de caja</Text></Group>
                         <Group><ThemeIcon color="teal.7" radius="xl" size="md"><IconCheck size={14}/></ThemeIcon><Text size="md">Agenda inteligente y alertas de partos</Text></Group>
+                        <Group><ThemeIcon color="teal.7" radius="xl" size="md"><IconCheck size={14}/></ThemeIcon><Text size="md">Compatible con bastones electrónicos RFID</Text></Group>
                         <Group><ThemeIcon color="teal.7" radius="xl" size="md"><IconCheck size={14}/></ThemeIcon><Text size="md">Fácil de usar e intuitivo</Text></Group>
                     </Stack>
                 </div>
