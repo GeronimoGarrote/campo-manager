@@ -388,7 +388,22 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
             } else {
                 if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
-                await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso });
+                const { data: ventaData } = await supabase
+                    .from('ventas')
+                    .insert([{
+                        establecimiento_id: campoId,
+                        fecha: fechaStr.split('T')[0],
+                        tipo: 'INDIVIDUAL',
+                        destino: bajaMotivo || null,
+                        modalidad: bajaModalidadVenta,
+                        monto_total: totalIngreso,
+                        gastos_total: Number(bajaGastosVenta) || 0,
+                        kilos_totales: bajaKilosTotales ? Number(bajaKilosTotales) : null,
+                        animales_ids: [animalSel.id]
+                    }])
+                    .select('id')
+                    .single();
+                await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta animal ${animalSel.caravana} - ${bajaMotivo || 'Individual'}`, monto: totalIngreso, venta_id: ventaData?.id ?? null });
                 
                 if (gastosTotales > 0) {
                     await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Gastos de venta animal ${animalSel.caravana}`, monto: gastosTotales });

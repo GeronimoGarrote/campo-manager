@@ -63,7 +63,20 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
             await supabase.from('eventos').insert(eventosVenta);
             
             // 4. Ingreso en Caja (Aquí es donde queda el registro financiero privado)
-            await supabase.from('caja').insert([{ establecimiento_id: campoId, fecha: fechaIso, tipo: 'INGRESO', categoria: 'Venta Hacienda', detalle: `Venta Lote Completo: ${loteSel.nombre} (${animalesEnEsteLote.length} cabezas). Comprador: ${ventaComprador}`, monto: ventaPrecioTotal }]);
+            const { data: ventaData } = await supabase
+                .from('ventas')
+                .insert([{
+                    establecimiento_id: campoId,
+                    fecha: fechaIso,
+                    tipo: 'LOTE',
+                    destino: ventaComprador || null,
+                    comprador: ventaComprador || null,
+                    monto_total: ventaPrecioTotal,
+                    animales_ids: idsAnimales
+                }])
+                .select('id')
+                .single();
+            await supabase.from('caja').insert([{ establecimiento_id: campoId, fecha: fechaIso, tipo: 'INGRESO', categoria: 'Venta Hacienda', detalle: `Venta Lote Completo: ${loteSel.nombre} (${animalesEnEsteLote.length} cabezas). Comprador: ${ventaComprador}`, monto: ventaPrecioTotal, venta_id: ventaData?.id ?? null }]);
 
             // ELIMINAMOS EL LOTE Y SUS EVENTOS
             await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id);

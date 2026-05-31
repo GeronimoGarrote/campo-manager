@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton, Menu, Center, PasswordInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar, IconTruckDelivery, IconCheck, IconEye, IconEyeOff, IconLock, IconLockOpen } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar, IconTruckDelivery, IconCheck, IconEye, IconEyeOff, IconLock, IconLockOpen, IconInfoCircle } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 interface Establecimiento { id: string; nombre: string; renspa?: string; }
 interface EconomiaProps { campoId: string; establecimientos?: Establecimiento[]; }
-interface Movimiento { id: string; fecha: string; timestamp: string; tipo: 'INGRESO' | 'EGRESO'; categoria: string; detalle: string; monto: number; esManual: boolean; }
+interface Movimiento { id: string; fecha: string; timestamp: string; tipo: 'INGRESO' | 'EGRESO'; categoria: string; detalle: string; monto: number; esManual: boolean; venta_id?: string | null; }
 
 // ACÁ ESTÁ EL CAMBIO (slice(-2) al año)
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
@@ -28,6 +28,13 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   // -----------------------------------------------------
 
   const [opened, { open, close }] = useDisclosure(false);
+  const [ventaModalOpen, { open: openVentaModal, close: closeVentaModal }] = useDisclosure(false);
+  const [ventaDetalle, setVentaDetalle] = useState<{
+    animales: { caravana: string; categoria: string; sexo: string }[];
+    tipo: string;
+    destino: string | null;
+    monto_total: number;
+  } | null>(null);
   const [fechaInput, setFechaInput] = useState<string>(getHoyIso());
   const [tipoInput, setTipoInput] = useState<string | null>('EGRESO');
   const [categoriaInput, setCategoriaInput] = useState<string | null>('Infraestructura / Alambrados');
@@ -90,7 +97,7 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
 
   async function fetchTodosLosMovimientos() {
     if (!campoId) return; 
-    const pCaja = supabase.from('caja').select('*').eq('establecimiento_id', campoId);
+    const pCaja = supabase.from('caja').select('*, venta_id').eq('establecimiento_id', campoId);
     
     const pEventos = supabase.from('eventos').select('id, fecha_evento, tipo, detalle, resultado, costo, created_at, animales(caravana)')
         .eq('establecimiento_id', campoId)
@@ -105,8 +112,9 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
 
     if (resCaja.data) {
       todos = [...todos, ...resCaja.data.map(m => ({
-        id: m.id, fecha: m.fecha, timestamp: m.created_at || m.fecha, tipo: m.tipo, categoria: m.categoria, detalle: m.detalle, monto: m.monto, 
-        esManual: m.categoria !== 'Hacienda (Venta/Compra)' && !(m.categoria === 'Traslado Insumo' && m.tipo === 'INGRESO')
+        id: m.id, fecha: m.fecha, timestamp: m.created_at || m.fecha, tipo: m.tipo, categoria: m.categoria, detalle: m.detalle, monto: m.monto,
+        esManual: m.categoria !== 'Hacienda (Venta/Compra)' && !(m.categoria === 'Traslado Insumo' && m.tipo === 'INGRESO'),
+        venta_id: m.venta_id ?? null
       }))];
     }
     if (resEventos.data) {
@@ -166,6 +174,19 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
     }
     
     setLoading(false); setDetalleInput(''); setMontoInput(''); setCampoDestinoInsumo(null); close(); fetchTodosLosMovimientos();
+  }
+
+  async function verDetalleVenta(ventaId: string) {
+    const { data: venta } = await supabase.from('ventas').select('*').eq('id', ventaId).single();
+    if (!venta) return;
+    const { data: animalesVendidos } = await supabase.from('animales').select('caravana, categoria, sexo').in('id', venta.animales_ids);
+    setVentaDetalle({
+      animales: animalesVendidos || [],
+      tipo: venta.tipo,
+      destino: venta.destino,
+      monto_total: venta.monto_total
+    });
+    openVentaModal();
   }
 
   async function borrarMovimientoManual(mov: Movimiento) {
@@ -286,7 +307,16 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
                               {mov.esManual && (<Tooltip label="Cargado manualmente desde la caja" withArrow><Badge size="xs" color="blue" variant="filled">MANUAL</Badge></Tooltip>)}
                           </Group>
                       </Table.Td>
-                      <Table.Td><Text size="sm">{mov.detalle}</Text></Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" wrap="nowrap">
+                          <Text size="sm">{mov.detalle}</Text>
+                          {mov.venta_id && (
+                            <ActionIcon variant="subtle" color="blue" size="xs" onClick={() => verDetalleVenta(mov.venta_id!)}>
+                              <IconInfoCircle size={14} />
+                            </ActionIcon>
+                          )}
+                        </Group>
+                      </Table.Td>
                       <Table.Td ta="right" c="teal" fw={700}>{mov.tipo === 'INGRESO' ? `$${mov.monto.toLocaleString('es-AR')}` : '-'}</Table.Td>
                       <Table.Td ta="right" c="red" fw={700}>{mov.tipo === 'EGRESO' ? `$${mov.monto.toLocaleString('es-AR')}` : '-'}</Table.Td>
                       <Table.Td align="right">
@@ -320,6 +350,40 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
                   {nuevoPin ? "Guardar Clave" : "Eliminar Clave"}
               </Button>
           </Stack>
+      </Modal>
+
+      <Modal opened={ventaModalOpen} onClose={closeVentaModal} title={<Text fw={700}>Animales vendidos</Text>} centered>
+        {ventaDetalle && (
+          <Stack>
+            <Group>
+              <Badge color="teal">{ventaDetalle.tipo}</Badge>
+              {ventaDetalle.destino && <Text size="sm" c="dimmed">{ventaDetalle.destino}</Text>}
+            </Group>
+            <Text size="sm" fw={500}>
+              {ventaDetalle.animales.length} animales · Total: ${ventaDetalle.monto_total.toLocaleString('es-AR')}
+            </Text>
+            <ScrollArea h={300}>
+              <Table striped>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Caravana</Table.Th>
+                    <Table.Th>Categoría</Table.Th>
+                    <Table.Th>Sexo</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {ventaDetalle.animales.map((a, i) => (
+                    <Table.Tr key={i}>
+                      <Table.Td fw={700}>{a.caravana}</Table.Td>
+                      <Table.Td>{a.categoria}</Table.Td>
+                      <Table.Td>{a.sexo === 'M' ? 'Macho' : 'Hembra'}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          </Stack>
+        )}
       </Modal>
 
       <Modal opened={opened} onClose={close} title={<Text fw={700} size="lg">{tipoInput === 'TRASLADO' ? 'Traslado a Otro Campo' : 'Registrar en Caja'}</Text>} centered zIndex={2000}>

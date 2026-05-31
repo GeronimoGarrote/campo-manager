@@ -273,7 +273,22 @@ export default function Masivos({
 
             if (!errorGlobal) {
                 if (massActividad === 'VENTA') {
-                    await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: massFecha.toISOString().split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta de ${idsParaProcesar.length} animales - ${massDestino || 'Masiva'}`, monto: totalIngreso });
+                    const { data: ventaData } = await supabase
+                        .from('ventas')
+                        .insert([{
+                            establecimiento_id: campoId,
+                            fecha: massFecha.toISOString().split('T')[0],
+                            tipo: 'MASIVA',
+                            destino: massDestino || 'Masiva',
+                            modalidad: massModalidadVenta,
+                            monto_total: totalIngreso,
+                            gastos_total: Number(massGastosVenta) || 0,
+                            kilos_totales: massKilosTotales ? Number(massKilosTotales) : null,
+                            animales_ids: idsParaProcesar
+                        }])
+                        .select('id')
+                        .single();
+                    await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: massFecha.toISOString().split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta de ${idsParaProcesar.length} animales - ${massDestino || 'Masiva'}`, monto: totalIngreso, venta_id: ventaData?.id ?? null });
                     await supabase.from('animales').update({ estado: 'VENDIDO', detalle_baja: `Venta: ${massDestino || '-'} (Aprox $${Math.round(precioPorAnimal)})`, toros_servicio_ids: null }).in('id', idsParaProcesar);
                     await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
                     for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
