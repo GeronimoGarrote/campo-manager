@@ -244,7 +244,11 @@ export default function Masivos({
                 await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).in('id', idsParaProcesar);
                 await supabase.from('agenda').delete().in('animal_id', idsParaProcesar).eq('completado', false);
                 for (const id of idsParaProcesar) { const anim = animales.find((a: any) => a.id === id); if(anim?.categoria === 'Toro') await desvincularToroDeVacas(id); }
-                
+
+                const animalSnapshotRed = idsParaProcesar.map((id: string) => { const a = animales.find((x: any) => x.id === id); return { caravana: a?.caravana, categoria: a?.categoria, sexo: a?.sexo }; });
+                const { data: ventaRedData } = await supabase.from('ventas').insert([{ establecimiento_id: campoId, fecha: massFecha.toISOString().split('T')[0], tipo: 'RED', destino: dest.nombre, modalidad: massModalidadVenta, monto_total: totalIngreso, gastos_total: gastosTotales, animales_ids: idsParaProcesar, animales_detalle: animalSnapshotRed }]).select('id').single();
+                if (totalIngreso > 0) await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: massFecha.toISOString().split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta Red: ${idsParaProcesar.length} animales → ${dest.nombre}`, monto: totalIngreso, venta_id: ventaRedData?.id ?? null });
+
                 const insertsVenta = idsParaProcesar.map(animalId => {
                     const anim = animales.find((a: any) => a.id === animalId);
                     return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: anim?.caravana }, establecimiento_id: campoId, costo: precioPorAnimal }
@@ -273,6 +277,7 @@ export default function Masivos({
 
             if (!errorGlobal) {
                 if (massActividad === 'VENTA') {
+                    const animalSnapshotMasiva = idsParaProcesar.map((id: string) => { const a = animales.find((x: any) => x.id === id); return { caravana: a?.caravana, categoria: a?.categoria, sexo: a?.sexo }; });
                     const { data: ventaData } = await supabase
                         .from('ventas')
                         .insert([{
@@ -284,7 +289,8 @@ export default function Masivos({
                             monto_total: totalIngreso,
                             gastos_total: Number(massGastosVenta) || 0,
                             kilos_totales: massKilosTotales ? Number(massKilosTotales) : null,
-                            animales_ids: idsParaProcesar
+                            animales_ids: idsParaProcesar,
+                            animales_detalle: animalSnapshotMasiva
                         }])
                         .select('id')
                         .single();

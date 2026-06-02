@@ -179,9 +179,14 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   async function verDetalleVenta(ventaId: string) {
     const { data: venta } = await supabase.from('ventas').select('*').eq('id', ventaId).single();
     if (!venta) return;
-    const { data: animalesVendidos } = await supabase.from('animales').select('caravana, categoria, sexo').in('id', venta.animales_ids);
+    // Use the stored snapshot if available (animals may have moved to another field after a RED sale)
+    let animalesData: { caravana: string; categoria: string; sexo: string }[] = venta.animales_detalle || [];
+    if (animalesData.length === 0) {
+      const { data: animalesVendidos } = await supabase.from('animales').select('caravana, categoria, sexo').in('id', venta.animales_ids);
+      animalesData = animalesVendidos || [];
+    }
     setVentaDetalle({
-      animales: animalesVendidos || [],
+      animales: animalesData,
       tipo: venta.tipo,
       destino: venta.destino,
       monto_total: venta.monto_total
@@ -352,7 +357,7 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
           </Stack>
       </Modal>
 
-      <Modal opened={ventaModalOpen} onClose={closeVentaModal} title={<Text fw={700}>Animales vendidos</Text>} centered>
+      <Modal opened={ventaModalOpen} onClose={closeVentaModal} title={<Text fw={700}>{ventaDetalle?.tipo === 'COMPRA_RED' ? 'Animales comprados' : 'Animales vendidos'}</Text>} centered>
         {ventaDetalle && (
           <Stack>
             <Group>

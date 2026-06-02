@@ -382,7 +382,11 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
  
                 const { error: errTransf } = await supabase.from('transferencias').insert({ campo_origen_id: campoId, campo_destino_id: dest.id, animales_ids: [animalSel.id], precio_total: totalIngreso, detalles: `Venta animal ${animalSel.caravana}`, origen_nombre: nombreOrigen, estado: 'PENDIENTE' });
                 if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
- 
+
+                const animalSnapshot = [{ caravana: animalSel.caravana, categoria: animalSel.categoria, sexo: animalSel.sexo }];
+                const { data: ventaRedData } = await supabase.from('ventas').insert([{ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'RED', destino: dest.nombre, modalidad: bajaModalidadVenta, monto_total: totalIngreso, gastos_total: gastosTotales, animales_ids: [animalSel.id], animales_detalle: animalSnapshot }]).select('id').single();
+                if (totalIngreso > 0) await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'INGRESO', categoria: 'Hacienda (Venta/Compra)', detalle: `Venta Red: ${animalSel.caravana} → ${dest.nombre}`, monto: totalIngreso, venta_id: ventaRedData?.id ?? null });
+
                 await supabase.from('animales').update({ en_transito: true, detalle_baja: `En tránsito a: ${dest.nombre}`, toros_servicio_ids: null }).eq('id', animalSel.id);
                 await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
@@ -399,7 +403,8 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                         monto_total: totalIngreso,
                         gastos_total: Number(bajaGastosVenta) || 0,
                         kilos_totales: bajaKilosTotales ? Number(bajaKilosTotales) : null,
-                        animales_ids: [animalSel.id]
+                        animales_ids: [animalSel.id],
+                        animales_detalle: [{ caravana: animalSel.caravana, categoria: animalSel.categoria, sexo: animalSel.sexo }]
                     }])
                     .select('id')
                     .single();
