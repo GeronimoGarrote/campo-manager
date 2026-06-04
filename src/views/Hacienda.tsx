@@ -243,8 +243,8 @@ export default function Hacienda({
             {activeSection === 'hacienda' && lectorActivo && (
                 <Paper withBorder p="sm" radius="md" bg="teal.0"
                     style={{ borderColor: 'var(--mantine-color-teal-4)' }}>
-                    <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-                        <Group gap="md" align="center" wrap="nowrap">
+                    <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                        <Group gap="md" align="center" wrap="wrap">
                             <Badge color="teal" variant="light" size="sm"
                                 leftSection={<IconBluetooth size={11} />}>
                                 HID activo
@@ -255,7 +255,8 @@ export default function Hacienda({
                             <AllflexScanner onScan={manejarEscaneoHacienda} />
                         </Group>
                         <Alert color="teal" variant="light" p="xs" icon={<IconScan size={14} />}
-                            style={{ flex: 1, maxWidth: 320 }}>
+                            visibleFrom="sm"
+                            style={{ maxWidth: 320, flexShrink: 0 }}>
                             <Text size="xs">
                                 Escaneá una caravana para <b>abrir su ficha</b> o <b>registrar un animal nuevo</b>.
                             </Text>
