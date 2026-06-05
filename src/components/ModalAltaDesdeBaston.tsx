@@ -213,11 +213,10 @@ export default function ModalAltaDesdeBaston({
                     <>
                         <TextInput
                             label="Caravana Visual (caravana plástica)"
-                            placeholder="Ej: 1045"
-                            required
+                            placeholder="Ej: 1045 — opcional"
                             value={caravana}
                             onChange={(e) => setCaravana(e.target.value)}
-                            description="El número visible en la oreja del animal"
+                            description="Podés dejarlo vacío y se asignará un código SC automático"
                         />
                         <Group grow align="flex-start">
                             <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} allowDeselect={false} />
