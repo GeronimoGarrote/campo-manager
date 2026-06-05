@@ -134,7 +134,20 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         if (data && data.toros_servicio_ids && data.toros_servicio_ids.length > 0) { const nombres = animales.filter(a => data.toros_servicio_ids!.includes(a.id)).map(a => a.caravana).join(' - '); setNombresTorosCartel(nombres || null); }
     }
     
-    async function borrarEvento(id: string) { if(!confirm("¿Borrar evento?")) return; await supabase.from('eventos').delete().eq('id', id); if(animalSelId) recargarEventos(animalSelId); onUpdate(); }
+    async function borrarEvento(ev: { id: string; tipo: string; costo?: number }) {
+        if (!confirm("¿Borrar evento?")) return;
+        await supabase.from('eventos').delete().eq('id', ev.id);
+        // Si el evento tenía costo, borrar el egreso correspondiente en caja
+        if (ev.costo && ev.costo > 0 && animalSel && campoId) {
+            await supabase.from('caja')
+                .delete()
+                .eq('establecimiento_id', campoId)
+                .eq('detalle', `Costo ${ev.tipo} - Caravana ${animalSel.caravana}`)
+                .eq('monto', ev.costo);
+        }
+        if (animalSelId) recargarEventos(animalSelId);
+        onUpdate();
+    }
 
     const navegarAHijo = async (hijoId: string) => {
         if(animalSel) setFichaAnterior(animalSel); 
@@ -530,7 +543,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                ) : ( 
                    <Alert color="gray" icon={<IconArchive size={16}/>} mb="md">Este animal está {animalSel?.en_transito ? 'en tránsito (bloqueado)' : 'archivado'}. Solo lectura.</Alert> 
                )}
-               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && <Badge size="xs" color="pink" variant="outline" ml="xs">Toro/s: {ev.datos_extra.toros_caravanas}</Badge>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => handleIniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev.id)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
+               <ScrollArea h={300}><Table striped><Table.Tbody>{eventosFicha.map(ev => (<Table.Tr key={ev.id}><Table.Td><Text size="xs">{formatDate(ev.fecha_evento)}</Text></Table.Td><Table.Td><Text fw={700} size="sm">{ev.tipo}</Text></Table.Td><Table.Td><Text size="sm" fw={500}>{ev.resultado}</Text>{ev.detalle && <Text size="xs" c="dimmed">{ev.detalle}</Text>}{ev.datos_extra && ev.datos_extra.toros_caravanas && <Badge size="xs" color="pink" variant="outline" ml="xs">Toro/s: {ev.datos_extra.toros_caravanas}</Badge>}{ev.datos_extra && ev.datos_extra.precio_kg && <Badge size="xs" color="green" variant="outline" ml="xs">${ev.datos_extra.precio_kg}</Badge>}</Table.Td><Table.Td><Text size="xs" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon size="sm" variant="subtle" color="blue" onClick={() => handleIniciarEdicionEvento(ev)}><IconEdit size={14}/></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => borrarEvento(ev)}><IconTrash size={14}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody></Table></ScrollArea>
             </Tabs.Panel>
             <Tabs.Panel value="datos">
                <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={() => abrirGraficoPeso(animalSel.id)}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>

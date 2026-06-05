@@ -82,12 +82,22 @@ export default function ModalAltaDesdeBaston({
             alert(`Límite de tu plan alcanzado (${datosSuscripcion.limite_animales} animales). Mejorá tu plan para agregar más.`);
             return;
         }
-        if (!caravana.trim() || !campoId) { alert('La caravana visual es obligatoria.'); return; }
+        if (!campoId) return;
 
-        const yaExiste = animalesActivos.some(
-            a => a.caravana.toLowerCase() === caravana.trim().toLowerCase()
-        );
-        if (yaExiste) { alert('Ya existe un animal activo con esa caravana visual.'); return; }
+        let caravanaFinal = caravana.trim();
+        if (!caravanaFinal) {
+            const regex = /^SC-(\d+)$/i;
+            const nums = animalesActivos
+                .map(a => { const m = String(a.caravana).match(regex); return m ? parseInt(m[1]) : 0; })
+                .filter(n => n > 0);
+            const max = nums.length > 0 ? Math.max(...nums) : 0;
+            caravanaFinal = `SC-${String(max + 1).padStart(3, '0')}`;
+        } else {
+            const yaExiste = animalesActivos.some(
+                a => a.caravana.toLowerCase() === caravanaFinal.toLowerCase()
+            );
+            if (yaExiste) { alert('Ya existe un animal activo con esa caravana visual.'); return; }
+        }
 
         setLoading(true);
         const hoyStr = new Date().toISOString().split('T')[0];
@@ -113,7 +123,7 @@ export default function ModalAltaDesdeBaston({
         }
 
         const { data, error } = await supabase.from('animales').insert([{
-            caravana: caravana.trim(),
+            caravana: caravanaFinal,
             caravana_electronica: caravanaElectronica.trim(),
             categoria, sexo, estado: estadoInicial,
             condicion: 'SANA', origen,
@@ -133,7 +143,7 @@ export default function ModalAltaDesdeBaston({
             await supabase.from('agenda').insert({
                 establecimiento_id: campoId,
                 fecha_programada: fechaParto.toISOString().split('T')[0],
-                titulo: `Parto: ${caravana.trim()}`,
+                titulo: `Parto: ${caravanaFinal}`,
                 descripcion: `Parto estimado por alta desde bastón.`,
                 tipo: 'PARTO_ESTIMADO', animal_id: animalId,
             });
@@ -143,7 +153,7 @@ export default function ModalAltaDesdeBaston({
             await supabase.from('caja').insert({
                 establecimiento_id: campoId, fecha: hoyStr,
                 tipo: 'EGRESO', categoria: 'Hacienda (Venta/Compra)',
-                detalle: `Compra animal caravana: ${caravana.trim()}`, monto: Number(precioCompra),
+                detalle: `Compra animal caravana: ${caravanaFinal}`, monto: Number(precioCompra),
             });
         }
 
