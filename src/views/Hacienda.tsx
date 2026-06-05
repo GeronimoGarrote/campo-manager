@@ -213,10 +213,21 @@ export default function Hacienda({
                 </Group>
                 
                 <Group gap="xs" mr={{ base: 0, md: 'md' }}>
+                    {activeSection === 'hacienda' && (
+                        <Switch
+                            checked={lectorActivo}
+                            onChange={(e) => setLectorActivo(e.currentTarget.checked)}
+                            color="teal"
+                            size="md"
+                            label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
+                            thumbIcon={lectorActivo
+                                ? <IconBluetooth size={12} color="white" />
+                                : <IconBluetoothOff size={12} />}
+                        />
+                    )}
                     <Button variant="outline" color="blue" leftSection={<IconDownload size={18}/>} onClick={exportarAExcel} px={{ base: 'xs', sm: 'md' }}>
                         <Text visibleFrom="sm" fw={600}>Excel</Text>
                     </Button>
-
                     {activeSection === 'hacienda' && (
                         <>
                             <Button variant="outline" color="teal" leftSection={<IconFileSpreadsheet size={18}/>} onClick={() => setImportarExcelAbierto(true)} px={{ base: 'xs', sm: 'md' }}>
@@ -225,16 +236,6 @@ export default function Hacienda({
                             <Button leftSection={<IconPlus size={22}/>} color="teal" size="md" variant="filled" onClick={openModalAlta} w={{ base: 'auto', sm: 180 }} px={{ base: 'xs', sm: 'md' }}>
                                 <Text visibleFrom="sm" fw={600}>Nuevo Animal</Text>
                             </Button>
-                            <Switch
-                                checked={lectorActivo}
-                                onChange={(e) => setLectorActivo(e.currentTarget.checked)}
-                                color="teal"
-                                size="md"
-                                label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
-                                thumbIcon={lectorActivo
-                                    ? <IconBluetooth size={12} color="white" />
-                                    : <IconBluetoothOff size={12} />}
-                            />
                         </>
                     )}
                 </Group>
@@ -358,14 +359,21 @@ export default function Hacienda({
                                                     withArrow
                                                     zIndex={3000}
                                                 >
-                                                    <ActionIcon
-                                                        size="xs"
-                                                        variant={vaca.caravana_electronica ? 'filled' : 'subtle'}
-                                                        color={vaca.caravana_electronica ? 'teal' : 'gray'}
-                                                        onClick={(e) => abrirVincularEid(e, vaca)}
-                                                    >
-                                                        <IconScan size={11} />
-                                                    </ActionIcon>
+                                                    <Group gap={2} wrap="nowrap" style={{ cursor: 'pointer' }} onClick={(e) => abrirVincularEid(e, vaca)}>
+                                                        <ActionIcon
+                                                            size="xs"
+                                                            variant={vaca.caravana_electronica ? 'filled' : 'subtle'}
+                                                            color={vaca.caravana_electronica ? 'teal' : 'gray'}
+                                                            onClick={(e) => abrirVincularEid(e, vaca)}
+                                                        >
+                                                            <IconScan size={11} />
+                                                        </ActionIcon>
+                                                        {vaca.caravana_electronica && (
+                                                            <Text size="xs" c="teal" ff="monospace" style={{ userSelect: 'none' }}>
+                                                                …{vaca.caravana_electronica.slice(-4)}
+                                                            </Text>
+                                                        )}
+                                                    </Group>
                                                 </Tooltip>
                                             )}
                                         </Group>
@@ -447,18 +455,19 @@ export default function Hacienda({
                 animales={animales}
                 datosSuscripcion={datosSuscripcion}
                 onSuccess={(animalId) => {
-                    const existente = animales.find((a: any) => a.id === animalId);
-                    if (existente) {
-                        abrirFichaVaca(existente);
-                    } else {
-                        fetchAnimales();
-                        notifications.show({
-                            title: 'Animal registrado',
-                            message: 'El animal fue dado de alta. Podés buscarlo en la tabla.',
-                            color: 'teal',
-                            autoClose: 3000,
-                        });
-                    }
+                    fetchAnimales().then(() => {
+                        const existente = animales.find((a: any) => a.id === animalId);
+                        if (existente) {
+                            abrirFichaVaca(existente);
+                        } else {
+                            notifications.show({
+                                title: 'Animal registrado',
+                                message: 'El animal fue dado de alta. Podés buscarlo en la tabla.',
+                                color: 'teal',
+                                autoClose: 3000,
+                            });
+                        }
+                    });
                 }}
             />
 

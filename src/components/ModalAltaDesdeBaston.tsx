@@ -16,7 +16,7 @@ interface Props {
 export default function ModalAltaDesdeBaston({
     opened, onClose, caravanaElectronica, campoId, animales, datosSuscripcion, onSuccess,
 }: Props) {
-    const [modo, setModo] = useState<'nuevo' | 'existente'>('nuevo');
+    const [modo, setModo] = useState<'nuevo' | 'existente'>('existente');
 
     // --- Estado: Registrar nuevo ---
     const [loading, setLoading] = useState(false);
@@ -33,6 +33,7 @@ export default function ModalAltaDesdeBaston({
 
     // --- Estado: Asignar a existente ---
     const [animalExistenteId, setAnimalExistenteId] = useState<string | null>(null);
+    const [reemplazarCaravanaVisual, setReemplazarCaravanaVisual] = useState(false);
 
     const opcionesGestacion = [
         { value: '0.5', label: '15 días' }, { value: '1', label: '1 mes' },
@@ -65,11 +66,11 @@ export default function ModalAltaDesdeBaston({
 
     useEffect(() => {
         if (opened) {
-            setModo('nuevo');
+            setModo('existente');
             setCaravana(''); setCategoria('Vaca'); setSexo('H'); setOrigen('PROPIO');
             setPrecioCompra(''); setEstadoReproductivo('VACÍA'); setLactancia(false);
             setMesesGestacion(null); setEdadEstimada(null);
-            setAnimalExistenteId(null);
+            setAnimalExistenteId(null); setReemplazarCaravanaVisual(false);
         }
     }, [opened]);
 
@@ -157,8 +158,10 @@ export default function ModalAltaDesdeBaston({
     async function vincularAExistente() {
         if (!animalExistenteId) { alert('Seleccioná un animal de la lista.'); return; }
         setLoading(true);
+        const update: Record<string, string> = { caravana_electronica: caravanaElectronica.trim() };
+        if (reemplazarCaravanaVisual) update.caravana = caravanaElectronica.trim();
         const { error } = await supabase.from('animales')
-            .update({ caravana_electronica: caravanaElectronica.trim() })
+            .update(update)
             .eq('id', animalExistenteId);
         setLoading(false);
         if (error) { alert('Error: ' + error.message); return; }
@@ -188,8 +191,8 @@ export default function ModalAltaDesdeBaston({
                     value={modo}
                     onChange={(v) => setModo(v as 'nuevo' | 'existente')}
                     data={[
+                        { value: 'existente', label: <Group gap={6} justify="center"><IconLink size={15} /><Text size="sm">Vincular a caravana existente</Text></Group> },
                         { value: 'nuevo',     label: <Group gap={6} justify="center"><IconPlus size={15} /><Text size="sm">Registrar como nuevo</Text></Group> },
-                        { value: 'existente', label: <Group gap={6} justify="center"><IconLink size={15} /><Text size="sm">Asignar a uno existente</Text></Group> },
                     ]}
                     fullWidth
                     color="teal"
@@ -241,26 +244,36 @@ export default function ModalAltaDesdeBaston({
                 {modo === 'existente' && (
                     <>
                         <Select
-                            label="Buscar animal existente"
-                            placeholder="Escribí la caravana para buscar..."
+                            label="Caravana visual del animal"
+                            placeholder="Escribí el número de caravana (ej: 1045)..."
                             data={opcionesAnimalesExistentes}
                             value={animalExistenteId}
                             onChange={setAnimalExistenteId}
                             searchable
                             clearable
                             nothingFoundMessage="No se encontró ningún animal"
-                            description="El EID escaneado se vinculará a este animal"
+                            description="Buscá por la caravana plástica visible en la oreja"
                         />
 
                         {animalSeleccionado && (
-                            <Alert color={animalSeleccionado.caravana_electronica ? 'orange' : 'blue'} variant="light" p="xs">
-                                <Text size="sm">
-                                    {animalSeleccionado.caravana_electronica
-                                        ? <>Este animal ya tiene un EID asignado (<Text span ff="monospace" fw={700}>{animalSeleccionado.caravana_electronica}</Text>). Se va a reemplazar.</>
-                                        : <>Se vinculará el EID <Text span ff="monospace" fw={700}>{caravanaElectronica}</Text> a la caravana <Text span fw={700}>{animalSeleccionado.caravana}</Text>.</>
-                                    }
-                                </Text>
-                            </Alert>
+                            <>
+                                <Alert color={animalSeleccionado.caravana_electronica ? 'orange' : 'blue'} variant="light" p="xs">
+                                    <Text size="sm">
+                                        {animalSeleccionado.caravana_electronica
+                                            ? <>Este animal ya tiene un EID asignado (<Text span ff="monospace" fw={700}>{animalSeleccionado.caravana_electronica}</Text>). Se va a reemplazar.</>
+                                            : <>Se vinculará el EID <Text span ff="monospace" fw={700}>{caravanaElectronica}</Text> a la caravana <Text span fw={700}>{animalSeleccionado.caravana}</Text>.</>
+                                        }
+                                    </Text>
+                                </Alert>
+                                <Switch
+                                    size="sm"
+                                    label={<Text size="sm">Reemplazar también la caravana visual con el EID</Text>}
+                                    description={reemplazarCaravanaVisual ? `La caravana visual pasará a ser: ${caravanaElectronica.trim()}` : `La caravana visual queda como: ${animalSeleccionado.caravana}`}
+                                    checked={reemplazarCaravanaVisual}
+                                    onChange={(e) => setReemplazarCaravanaVisual(e.currentTarget.checked)}
+                                    color="orange"
+                                />
+                            </>
                         )}
 
                         <Group grow mt="sm">

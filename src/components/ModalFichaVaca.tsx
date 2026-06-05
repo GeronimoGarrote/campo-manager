@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'; 
 import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack, SimpleGrid } from '@mantine/core'; 
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp } from '@tabler/icons-react'; 
+import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp, IconScan } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 interface ModalFichaVacaProps { 
@@ -535,6 +535,9 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             <Tabs.Panel value="datos">
                <Paper withBorder p="sm" bg="gray.1" mb="md" radius="md"><Group justify="space-between"><Text size="sm" fw={700} c="dimmed">ÚLTIMO PESO:</Text><UnstyledButton onClick={() => abrirGraficoPeso(animalSel.id)}><Badge size="lg" variant="filled" color="blue" leftSection={<IconChartDots size={14}/>} style={{cursor: 'pointer'}}>{ultimoPeso}</Badge></UnstyledButton></Group></Paper>
                <TextInput label="Caravana" value={editCaravana} onChange={(e) => setEditCaravana(e.target.value)} mb="sm" disabled={!esActivo} />
+               {animalSel.caravana_electronica && (
+                   <TextInput label="Caravana Electrónica (EID)" value={animalSel.caravana_electronica} readOnly mb="sm" leftSection={<IconScan size={16}/>} ff="monospace" styles={{ input: { fontFamily: 'monospace', letterSpacing: '0.05em' } }} />
+               )}
                
                <Group grow mb="sm">
                    <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />
