@@ -107,7 +107,8 @@ export default function Hacienda({
                 ? (animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO')
                 : (animal.estado === 'VENDIDO' || animal.estado === 'MUERTO');
 
-            const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
+            const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase()) ||
+                (animal.caravana_electronica?.toLowerCase().includes(busqueda.toLowerCase()) ?? false);
             const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
             const matchLote = filterLote ? animal.lote_id === filterLote : true; 
             
@@ -352,7 +353,11 @@ export default function Hacienda({
                                 <Table.Tr key={vaca.id} onClick={() => abrirFichaVaca(vaca)} style={{ cursor: 'pointer' }} bg={vaca.condicion && vaca.condicion.includes('ENFERMA') ? 'red.0' : undefined}>
                                     <Table.Td>
                                         <Group gap={6} wrap="nowrap">
-                                            <Text fw={700}>{vaca.caravana}</Text>
+                                            {/* Si el EID reemplazó la caravana visual, mostrar solo los últimos 4 dígitos en negro */}
+                                            {vaca.caravana_electronica && vaca.caravana === vaca.caravana_electronica
+                                                ? <Text fw={700} ff="monospace">…{vaca.caravana.slice(-4)}</Text>
+                                                : <Text fw={700}>{vaca.caravana}</Text>
+                                            }
                                             {activeSection === 'hacienda' && (
                                                 <Tooltip
                                                     label={vaca.caravana_electronica ? `EID: ${vaca.caravana_electronica}` : 'Vincular EID del bastón'}
@@ -368,7 +373,8 @@ export default function Hacienda({
                                                         >
                                                             <IconScan size={11} />
                                                         </ActionIcon>
-                                                        {vaca.caravana_electronica && (
+                                                        {/* Solo mostrar teal si EID es distinto a la caravana visual */}
+                                                        {vaca.caravana_electronica && vaca.caravana !== vaca.caravana_electronica && (
                                                             <Text size="xs" c="teal" ff="monospace" style={{ userSelect: 'none' }}>
                                                                 …{vaca.caravana_electronica.slice(-4)}
                                                             </Text>
@@ -455,19 +461,18 @@ export default function Hacienda({
                 animales={animales}
                 datosSuscripcion={datosSuscripcion}
                 onSuccess={(animalId) => {
-                    fetchAnimales().then(() => {
-                        const existente = animales.find((a: any) => a.id === animalId);
-                        if (existente) {
-                            abrirFichaVaca(existente);
-                        } else {
-                            notifications.show({
-                                title: 'Animal registrado',
-                                message: 'El animal fue dado de alta. Podés buscarlo en la tabla.',
-                                color: 'teal',
-                                autoClose: 3000,
-                            });
-                        }
-                    });
+                    fetchAnimales();
+                    const existente = animales.find((a: any) => a.id === animalId);
+                    if (existente) {
+                        abrirFichaVaca(existente);
+                    } else {
+                        notifications.show({
+                            title: 'Animal registrado',
+                            message: 'El animal fue dado de alta. Podés buscarlo en la tabla.',
+                            color: 'teal',
+                            autoClose: 3000,
+                        });
+                    }
                 }}
             />
 
