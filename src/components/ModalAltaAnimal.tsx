@@ -10,9 +10,10 @@ interface ModalAltaAnimalProps {
     animales: any[];
     onSuccess: () => void;
     datosSuscripcion: any;
+    rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO';
 }
 
-export default function ModalAltaAnimal({ opened, onClose, campoId, animales, onSuccess, datosSuscripcion }: ModalAltaAnimalProps) {
+export default function ModalAltaAnimal({ opened, onClose, campoId, animales, onSuccess, datosSuscripcion, rolActual = 'DUENO' }: ModalAltaAnimalProps) {
     const [modoAlta, setModoAlta] = useState<'individual' | 'masivo'>('individual');
     const [loading, setLoading] = useState(false);
 

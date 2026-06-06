@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Group, Title, Badge, Button, SimpleGrid, Card, Paper, Text, ActionIcon, Tabs, TextInput, Select, Table, Modal, Stack } from '@mantine/core';
+import { Group, Title, Badge, Button, SimpleGrid, Card, Paper, Text, ActionIcon, Tabs, TextInput, Select, Table, Modal, Stack, Center, ThemeIcon } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPlus, IconTractor, IconEdit, IconArrowLeft, IconLeaf, IconMapPin, IconList, IconCurrencyDollar, IconCheck, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconTractor, IconEdit, IconArrowLeft, IconLeaf, IconMapPin, IconList, IconCurrencyDollar, IconCheck, IconTrash, IconLock } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 
-export default function Agricultura({ 
-    campoId, potreros, parcelas, animales, 
-    fetchPotreros, fetchParcelas, abrirFichaVaca 
+export default function Agricultura({
+    campoId, potreros, parcelas, animales,
+    fetchPotreros, fetchParcelas, abrirFichaVaca,
+    rolActual = 'DUENO'
 }: any) {
     const [loading, setLoading] = useState(false);
     

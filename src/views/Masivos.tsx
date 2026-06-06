@@ -27,7 +27,8 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
 };
 
 export default function Masivos({
-    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, setActiveSection
+    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, setActiveSection,
+    rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
 }: any) {
     const [loading, setLoading] = useState(false);
     const [lectorActivo, setLectorActivo] = useState(false);
@@ -423,7 +424,7 @@ export default function Masivos({
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
                 <Group grow align="flex-start">
-                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'TRATAMIENTO', 'TRASLADO', 'OTRO']} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
+                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'TRATAMIENTO', 'TRASLADO', 'OTRO'].filter(a => rolActual === 'DUENO' || a !== 'VENTA')} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
                     <TextInput label="Fecha" type="date" value={getLocalDateForInput(massFecha)} onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
                 </Group>
                 

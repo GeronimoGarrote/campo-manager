@@ -1,10 +1,10 @@
 import { useEffect, useState} from 'react';
-import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover } from '@mantine/core';
+import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover, Divider, Paper } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark } from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
-import { Notifications } from '@mantine/notifications';
+import { Notifications, notifications } from '@mantine/notifications';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
 import logoRodeo from './assets/logo.png'; 
@@ -19,7 +19,8 @@ import Lotes from './views/Lotes';
 import Agricultura from './views/Agricultura';
 import Hacienda from './views/Hacienda';
 import Actividad from './views/Actividad';
-import Suscripcion from './views/Suscripcion'; 
+import Suscripcion from './views/Suscripcion';
+import AceptarInvitacion from './views/AceptarInvitacion';
 
 // Modales Refactorizados
 import ModalAltaAnimal from './components/ModalAltaAnimal';
@@ -51,6 +52,7 @@ export default function App() {
   
   // Datos Globales
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
+  const [rolesPorCampo, setRolesPorCampo] = useState<Record<string, 'DUENO' | 'PEON' | 'VETERINARIO'>>({});
   const [campoId, setCampoId] = useState<string | null>(null);
   const [animales, setAnimales] = useState<Animal[]>([]);
   const [potreros, setPotreros] = useState<any[]>([]);
@@ -85,6 +87,23 @@ export default function App() {
   // Estado de la suscripción agregado
   const [datosSuscripcion, setDatosSuscripcion] = useState<any>(null);
 
+  // Token de invitación (leído una sola vez desde la URL)
+  const [invToken, setInvToken] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('token')
+  );
+
+  // Estado del equipo del campo (panel dentro de modalConfig)
+  const [miembros, setMiembros] = useState<any[]>([]);
+  const [invitaciones, setInvitaciones] = useState<any[]>([]);
+  const [rolNuevaInvitacion, setRolNuevaInvitacion] = useState('PEON');
+  const [linkGenerado, setLinkGenerado] = useState<string | null>(null);
+  const [loadingEquipo, setLoadingEquipo] = useState(false);
+  const [editandoApodo, setEditandoApodo] = useState<string | null>(null);
+  const [apodoInput, setApodoInput] = useState('');
+
+  // Rol del usuario en el campo activo
+  const rolActual: 'DUENO' | 'PEON' | 'VETERINARIO' = campoId ? (rolesPorCampo[campoId] ?? 'DUENO') : 'DUENO';
+
   // --- LÓGICA DE BLOQUEO (SOFT LOCK) ---
   const estaVencido = datosSuscripcion?.fecha_vencimiento 
       ? new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59') < new Date() 
@@ -112,13 +131,33 @@ export default function App() {
     }
   }, [session?.user.id]);
 
+  // Si hay token Y sesión activa → procesar invitación sin mostrar AceptarInvitacion
+  useEffect(() => {
+    if (!session || !invToken) return;
+    const token = invToken;
+    setInvToken(null);
+    window.history.replaceState({}, '', window.location.pathname);
+    supabase.rpc('aceptar_invitacion', { p_token: token }).then(({ data }) => {
+      if (data?.ok) {
+        notifications.show({ title: '¡Bienvenido al campo!', message: `Fuiste agregado como ${data.rol}.`, color: 'teal', autoClose: 5000 });
+        loadCampos();
+      } else {
+        notifications.show({ title: 'Invitación no procesada', message: data?.error || 'Invitación inválida o vencida.', color: 'orange', autoClose: 6000 });
+      }
+    });
+  }, [session, invToken]);
+
   useEffect(() => {
     if (!campoId || !session) return;
-    localStorage.setItem('campoId', campoId); 
+    localStorage.setItem('campoId', campoId);
     fetchSuscripcion();
     fetchAnimales(); fetchPotreros(); fetchParcelas(); fetchLotes(); fetchEventosLotesGlobal(); fetchAgenda(); fetchTransferencias();
     if (activeSection === 'inicio' || activeSection === 'actividad') fetchActividadGlobal();
-  }, [activeSection, campoId, session]); 
+    setMiembros([]);
+    setInvitaciones([]);
+    setLinkGenerado(null);
+    if (rolActual === 'DUENO') fetchEquipo();
+  }, [activeSection, campoId, session]);
 
   // --- FUNCIONES DE AUTH ---
   async function handleLogin(e?: React.FormEvent) { 
@@ -172,7 +211,51 @@ export default function App() {
   async function handleLogout() { await supabase.auth.signOut(); setSession(null); }
 
   // Funciones de Fetch de Datos
-  async function loadCampos() { const { data, error } = await supabase.from('establecimientos').select('*').order('created_at'); if (error) { console.error('[loadCampos]', error); return; } if (data && data.length > 0) { setEstablecimientos(data); const guardado = localStorage.getItem('campoId'); if (guardado && data.find(c => c.id === guardado)) setCampoId(guardado); else if (!campoId) setCampoId(data[0].id); } }
+  async function loadCampos() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const [{ data: propios, error: e1 }, { data: membresias, error: e2 }] = await Promise.all([
+      supabase.from('establecimientos').select('*').eq('user_id', user.id).order('created_at'),
+      supabase.from('campo_miembros').select('establecimiento_id, rol').eq('user_id', user.id),
+    ]);
+
+    if (e1) { console.error('[loadCampos]', e1); return; }
+    if (e2) console.error('[loadCampos] membresías', e2);
+
+    const roles: Record<string, 'DUENO' | 'PEON' | 'VETERINARIO'> = {};
+    (propios || []).forEach((e: any) => { roles[e.id] = 'DUENO'; });
+
+    const ajenosIds = (membresias || [])
+      .filter((m: any) => !roles[m.establecimiento_id])
+      .map((m: any) => m.establecimiento_id);
+
+    let ajenosSinDuplicar: Establecimiento[] = [];
+    if (ajenosIds.length > 0) {
+      const { data: ajenosData, error: e3 } = await supabase
+        .from('establecimientos').select('*').in('id', ajenosIds);
+      if (e3) console.error('[loadCampos] ajenos', e3);
+      ajenosSinDuplicar = ajenosData || [];
+      ajenosSinDuplicar.forEach((e: any) => {
+        const m = (membresias || []).find((mb: any) => mb.establecimiento_id === e.id);
+        if (m) roles[e.id] = m.rol as 'PEON' | 'VETERINARIO';
+      });
+    }
+
+    const todos: Establecimiento[] = [...(propios || []), ...ajenosSinDuplicar];
+    setRolesPorCampo(roles);
+
+    if (todos.length > 0) {
+      setEstablecimientos(todos);
+      const guardado = localStorage.getItem('campoId');
+      if (guardado && todos.find(c => c.id === guardado)) {
+        setCampoId(guardado);
+      } else if (!campoId) {
+        const primerPropio = (propios || [])[0];
+        setCampoId(primerPropio ? primerPropio.id : todos[0].id);
+      }
+    }
+  }
   
   async function fetchSuscripcion() {
       // 1. Verificamos que haya alguien logueado
@@ -241,7 +324,8 @@ export default function App() {
   async function crearCampo() { 
       if (!nuevoCampoNombre) return; 
       
-      if (datosSuscripcion && establecimientos.length >= datosSuscripcion.limite_establecimientos) {
+      const camposPropios = establecimientos.filter(e => rolesPorCampo[e.id] === 'DUENO');
+      if (datosSuscripcion && camposPropios.length >= datosSuscripcion.limite_establecimientos) {
           alert(`Límite alcanzado. Tu plan actual solo permite ${datosSuscripcion.limite_establecimientos} establecimiento(s). Por favor, mejorá tu plan para agregar más.`);
           return;
       }
@@ -285,6 +369,58 @@ export default function App() {
 
   async function editarCampo(id: string, nombreActual: string, renspaActual?: string) { const nuevoNombre = prompt("Nuevo nombre del establecimiento:", nombreActual); if (nuevoNombre === null) return; const nuevoRenspa = prompt("Número de RENSPA:", renspaActual || ''); if (nuevoRenspa === null) return; await supabase.from('establecimientos').update({ nombre: nuevoNombre, renspa: nuevoRenspa }).eq('id', id); loadCampos(); }
 
+  // Funciones de gestión del equipo
+  async function fetchEquipo() {
+    if (!campoId) return;
+    setLoadingEquipo(true);
+    const [{ data: m, error: em }, { data: i, error: ei }] = await Promise.all([
+      supabase.rpc('obtener_miembros_campo', { p_campo_id: campoId }),
+      supabase.from('campo_invitaciones').select('*').eq('establecimiento_id', campoId).eq('usado', false).order('created_at', { ascending: false }),
+    ]);
+    if (em) console.error('[fetchEquipo] RPC miembros:', em);
+    if (ei) console.error('[fetchEquipo] invitaciones:', ei);
+    setMiembros(m || []);
+    setInvitaciones(i || []);
+    setLoadingEquipo(false);
+  }
+
+  async function generarInvitacion() {
+    if (!campoId || !session) return;
+    const token = crypto.randomUUID();
+    const { error } = await supabase.from('campo_invitaciones').insert({
+      establecimiento_id: campoId,
+      rol: rolNuevaInvitacion,
+      creado_por: session.user.id,
+      token,
+    });
+    if (error) { console.error('[generarInvitacion]', error); return; }
+    setLinkGenerado(`${window.location.origin}?token=${token}`);
+    fetchEquipo();
+  }
+
+  async function removerMiembro(userId: string) {
+    if (!campoId) return;
+    await supabase.from('campo_miembros').delete().eq('establecimiento_id', campoId).eq('user_id', userId);
+    fetchEquipo();
+  }
+
+  async function actualizarApodo(userId: string, nuevoApodo: string) {
+    setEditandoApodo(null);
+    if (!campoId) return;
+    const apodo = nuevoApodo.trim() || null;
+    const { error } = await supabase.from('campo_miembros')
+      .update({ apodo })
+      .eq('establecimiento_id', campoId)
+      .eq('user_id', userId);
+    if (error) { console.error('[actualizarApodo]', error); return; }
+    fetchEquipo();
+  }
+
+  async function invalidarInvitacion(id: string) {
+    await supabase.from('campo_invitaciones').update({ usado: true }).eq('id', id);
+    fetchEquipo();
+  }
+
   // Handlers para abrir modales específicos
   const abrirFichaVaca = (animal: Animal) => {
     setAnimalSelId(animal.id);
@@ -310,10 +446,15 @@ export default function App() {
   return (
     <MantineProvider>
         <Notifications position="top-right" zIndex={9999} />
-        {!session ? (
-            <Login 
-                email={email} setEmail={setEmail} 
-                password={password} setPassword={setPassword} 
+        {!session && invToken ? (
+            <AceptarInvitacion
+                token={invToken}
+                onSuccess={() => { setInvToken(null); window.history.replaceState({}, '', window.location.pathname); }}
+            />
+        ) : !session ? (
+            <Login
+                email={email} setEmail={setEmail}
+                password={password} setPassword={setPassword}
                 handleLogin={handleLogin} handleSignUp={handleSignUp} handleForgotPassword={handleForgotPassword}
                 authLoading={authLoading}
                 authError={authError} setAuthError={setAuthError}
@@ -351,6 +492,8 @@ export default function App() {
                             >
                                 {establecimientos.find(e => e.id === campoId)?.nombre || ''}
                             </Title>
+                            {rolActual === 'PEON' && <Badge color="orange" size="sm" style={{ flexShrink: 0 }}>Peón</Badge>}
+                            {rolActual === 'VETERINARIO' && <Badge color="blue" size="sm" style={{ flexShrink: 0 }}>Veterinario</Badge>}
                         </Group>
                     )}
                 </Group>
@@ -398,10 +541,9 @@ export default function App() {
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
                   <NavLink label="Potreros y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura' || activeSection === 'potrero_detalle'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">ADMINISTRACIÓN</Text>
-                  <NavLink label="Caja / Economía" leftSection={<IconCurrencyDollar size={20}/>} active={activeSection === 'economia'} onClick={() => { setActiveSection('economia'); toggle(); }} color="green" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
-                  
-                  {/* Este NavLink SIEMPRE queda habilitado para que puedan entrar a pagar */}
-                  <NavLink label="Mi Plan" leftSection={<IconCreditCard size={20}/>} active={activeSection === 'suscripcion'} onClick={() => { setActiveSection('suscripcion'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }} mt="sm" />
+                  {rolActual === 'DUENO' && <NavLink label="Caja / Economía" leftSection={<IconCurrencyDollar size={20}/>} active={activeSection === 'economia'} onClick={() => { setActiveSection('economia'); toggle(); }} color="green" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>}
+                  {/* Mi Plan solo visible para el dueño */}
+                  {rolActual === 'DUENO' && <NavLink label="Mi Plan" leftSection={<IconCreditCard size={20}/>} active={activeSection === 'suscripcion'} onClick={() => { setActiveSection('suscripcion'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }} mt="sm" />}
                   
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">REPORTES</Text>
                   <NavLink label="Registro Actividad" leftSection={<IconActivity size={20}/>} active={activeSection === 'actividad'} onClick={() => { setActiveSection('actividad'); toggle(); }} color="blue" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
@@ -410,8 +552,27 @@ export default function App() {
               <AppShell.Section style={{ borderTop: '1px solid #eee', paddingTop: '1rem', marginTop: '1rem' }}>
                   <Text size="xs" fw={700} c="dimmed" mb="xs" ml={4}>ESTABLECIMIENTO</Text>
                   <Group wrap="nowrap" gap="xs" mb="sm">
-                      <Select data={establecimientos.map(e => ({ value: e.id, label: e.nombre }))} value={campoId} onChange={(val) => setCampoId(val)} allowDeselect={false} leftSection={<IconBuilding size={16}/>} variant="filled" style={{ flex: 1 }} comboboxProps={{ zIndex: 1001 }} disabled={estaVencido}/>
-                      <ActionIcon variant="light" color="gray" size="lg" onClick={openModalConfig} title="Gestionar Campos" style={{ width: 36, height: 36 }} disabled={estaVencido}><IconSettings size={20}/></ActionIcon>
+                      <Select
+                        data={[
+                          {
+                            group: 'Mis campos',
+                            items: establecimientos.filter(e => rolesPorCampo[e.id] === 'DUENO').map(e => ({ value: e.id, label: e.nombre }))
+                          },
+                          {
+                            group: 'Campos donde trabajo',
+                            items: establecimientos.filter(e => rolesPorCampo[e.id] !== 'DUENO').map(e => ({ value: e.id, label: `${e.nombre}  ·  ${rolesPorCampo[e.id] === 'PEON' ? 'Peón' : 'Veterinario'}` }))
+                          }
+                        ].filter(g => g.items.length > 0)}
+                        value={campoId}
+                        onChange={(val) => setCampoId(val)}
+                        allowDeselect={false}
+                        leftSection={<IconBuilding size={16}/>}
+                        variant="filled"
+                        style={{ flex: 1 }}
+                        comboboxProps={{ zIndex: 1001 }}
+                        disabled={estaVencido}
+                      />
+                      <ActionIcon variant="light" color="gray" size="lg" onClick={() => { openModalConfig(); if (rolActual === 'DUENO') fetchEquipo(); }} title="Gestionar Campos" style={{ width: 36, height: 36 }} disabled={estaVencido}><IconSettings size={20}/></ActionIcon>
                   </Group>
                   <Button fullWidth variant="subtle" color="red" leftSection={<IconLogout size={18}/>} onClick={handleLogout}>Cerrar Sesión</Button>
               </AppShell.Section>
@@ -420,11 +581,11 @@ export default function App() {
             <AppShell.Main bg="gray.0">
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} />}
-              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca}/>}
-              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} />}
-              {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales}/>}
-              {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} />}
-              {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} />}
+              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual}/>}
+              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} />}
+              {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} />}
+              {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} />}
+              {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} />}
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}
               
               {activeSection === 'suscripcion' && (
@@ -439,13 +600,14 @@ export default function App() {
         )}
 
       {/* --- MODALES EXTERNOS REFACTORIZADOS --- */}
-      <ModalAltaAnimal 
-          opened={modalAltaOpen} 
-          onClose={closeModalAlta} 
-          campoId={campoId} 
-          animales={animales} 
+      <ModalAltaAnimal
+          opened={modalAltaOpen}
+          onClose={closeModalAlta}
+          campoId={campoId}
+          animales={animales}
           datosSuscripcion={datosSuscripcion}
-          onSuccess={() => { fetchAnimales(); fetchAgenda(); fetchActividadGlobal(); }} 
+          onSuccess={() => { fetchAnimales(); fetchAgenda(); fetchActividadGlobal(); }}
+          rolActual={rolActual}
       />
 
       <ModalTransferencia 
@@ -466,26 +628,194 @@ export default function App() {
           animalIdInicial={graficoAnimalId} 
       />
 
-      <ModalFichaVaca 
-          opened={modalVacaOpen} 
-          onClose={closeModalVaca} 
+      <ModalFichaVaca
+          opened={modalVacaOpen}
+          onClose={closeModalVaca}
           animalSelId={animalSelId}
           setAnimalSelId={setAnimalSelId}
-          campoId={campoId} 
-          animales={animales} 
-          potreros={potreros} 
-          parcelas={parcelas} 
-          lotes={lotes} 
-          establecimientos={establecimientos} 
-          onUpdate={() => { fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }} 
+          campoId={campoId}
+          animales={animales}
+          potreros={potreros}
+          parcelas={parcelas}
+          lotes={lotes}
+          establecimientos={establecimientos}
+          onUpdate={() => { fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }}
           abrirGraficoPeso={handleAbrirGrafico}
           datosSuscripcion={datosSuscripcion}
+          rolActual={rolActual}
       />
 
       {/* --- MODALES INTERNOS --- */}
-      <Modal opened={modalConfigOpen} onClose={closeModalConfig} title={<Text fw={700} size="lg">Mis Establecimientos</Text>} centered size="lg">
-         <Group align="flex-end" mb="lg"><TextInput label="Nuevo Campo" placeholder="Nombre" value={nuevoCampoNombre} onChange={(e) => setNuevoCampoNombre(e.target.value)} style={{flex: 1}}/><TextInput label="Nro RENSPA" placeholder="Opcional" value={nuevoCampoRenspa} onChange={(e) => setNuevoCampoRenspa(e.target.value)} style={{flex: 1}}/><Button onClick={crearCampo} leftSection={<IconPlus size={16}/>}>Crear</Button></Group>
-         <Stack>{establecimientos.map(e => (<Group key={e.id} justify="space-between" p="sm" bg="gray.0" style={{borderRadius: 8}}><Group><IconBuilding size={18} color="gray"/><div><Text fw={500}>{e.nombre} {e.id === campoId && <Badge color="teal" size="sm" ml="xs">ACTIVO</Badge>}</Text><Text size="sm" c="dimmed">RENSPA: {e.renspa || 'Sin cargar'}</Text></div></Group><Group gap="xs"><ActionIcon variant="subtle" color="blue" onClick={() => editarCampo(e.id, e.nombre, e.renspa)}><IconEdit size={16}/></ActionIcon><ActionIcon variant="subtle" color="red" onClick={() => borrarCampo(e.id)}><IconTrash size={16}/></ActionIcon></Group></Group>))}</Stack>
+      <Modal
+        opened={modalConfigOpen}
+        onClose={() => { closeModalConfig(); setLinkGenerado(null); }}
+        title={<Text fw={700} size="lg">Configuración del campo</Text>}
+        centered
+        size="lg"
+      >
+        {/* Sección: mis establecimientos */}
+        <Text size="xs" fw={700} c="dimmed" mb="sm">MIS ESTABLECIMIENTOS</Text>
+        <Group align="flex-end" mb="md"><TextInput label="Nuevo Campo" placeholder="Nombre" value={nuevoCampoNombre} onChange={(e) => setNuevoCampoNombre(e.target.value)} style={{flex: 1}}/><TextInput label="Nro RENSPA" placeholder="Opcional" value={nuevoCampoRenspa} onChange={(e) => setNuevoCampoRenspa(e.target.value)} style={{flex: 1}}/><Button onClick={crearCampo} leftSection={<IconPlus size={16}/>}>Crear</Button></Group>
+        <Stack mb="md">
+          {establecimientos.filter(e => rolesPorCampo[e.id] === 'DUENO').map(e => (
+            <Group key={e.id} justify="space-between" p="sm" bg={e.id === campoId ? 'teal.0' : 'gray.0'} style={{borderRadius: 8, cursor: 'pointer'}} onClick={() => { setCampoId(e.id); setLinkGenerado(null); }}>
+              <Group><IconBuilding size={18} color="gray"/><div>
+                <Text fw={500}>{e.nombre} {e.id === campoId && <Badge color="teal" size="sm" ml="xs">ACTIVO</Badge>}</Text>
+                <Text size="sm" c="dimmed">RENSPA: {e.renspa || 'Sin cargar'}</Text>
+              </div></Group>
+              <Group gap="xs" onClick={(ev) => ev.stopPropagation()}>
+                <ActionIcon variant="subtle" color="blue" onClick={() => editarCampo(e.id, e.nombre, e.renspa)}><IconEdit size={16}/></ActionIcon>
+                <ActionIcon variant="subtle" color="red" onClick={() => borrarCampo(e.id)}><IconTrash size={16}/></ActionIcon>
+              </Group>
+            </Group>
+          ))}
+        </Stack>
+        {establecimientos.some(e => rolesPorCampo[e.id] === 'VETERINARIO') && (
+          <>
+            <Text size="xs" fw={700} c="dimmed" mb="xs">CAMPOS COMO VETERINARIO</Text>
+            <Stack mb="md">
+              {establecimientos.filter(e => rolesPorCampo[e.id] === 'VETERINARIO').map(e => (
+                <Group key={e.id} p="sm" bg={e.id === campoId ? 'violet.0' : 'gray.0'} style={{borderRadius: 8, cursor: 'pointer'}} onClick={() => { setCampoId(e.id); setLinkGenerado(null); }}>
+                  <IconBuilding size={18} color="gray"/>
+                  <div>
+                    <Text fw={500}>{e.nombre} {e.id === campoId && <Badge color="violet" size="sm" ml="xs">ACTIVO</Badge>}</Text>
+                  </div>
+                </Group>
+              ))}
+            </Stack>
+          </>
+        )}
+        {establecimientos.some(e => rolesPorCampo[e.id] === 'PEON') && (
+          <>
+            <Text size="xs" fw={700} c="dimmed" mb="xs">CAMPOS COMO PEÓN</Text>
+            <Stack mb="md">
+              {establecimientos.filter(e => rolesPorCampo[e.id] === 'PEON').map(e => (
+                <Group key={e.id} p="sm" bg={e.id === campoId ? 'orange.0' : 'gray.0'} style={{borderRadius: 8, cursor: 'pointer'}} onClick={() => { setCampoId(e.id); setLinkGenerado(null); }}>
+                  <IconBuilding size={18} color="gray"/>
+                  <div>
+                    <Text fw={500}>{e.nombre} {e.id === campoId && <Badge color="orange" size="sm" ml="xs">ACTIVO</Badge>}</Text>
+                  </div>
+                </Group>
+              ))}
+            </Stack>
+          </>
+        )}
+
+        {/* Sección: equipo — solo visible para el dueño */}
+        {rolActual === 'DUENO' && campoId && (
+          <>
+            {(() => {
+              const nombreCampoActivo = establecimientos.find(e => e.id === campoId)?.nombre ?? '';
+              return (
+                <Divider my="md" label={<Group gap="xs"><IconUsers size={14}/><Text size="xs" fw={700} c="dimmed">EQUIPO — {nombreCampoActivo}</Text></Group>} />
+              );
+            })()}
+
+            {loadingEquipo ? (
+              <Text size="sm" c="dimmed">Cargando equipo...</Text>
+            ) : (
+              <Stack gap="sm">
+                {/* Miembros actuales */}
+                {miembros.length > 0 ? (
+                  <>
+                    <Text size="xs" fw={700} c="dimmed">Miembros</Text>
+                    {miembros.map((m: any) => (
+                      <Group key={m.user_id} justify="space-between" p="xs" bg="gray.0" style={{borderRadius: 8}} align="flex-start">
+                        <div style={{flex: 1, minWidth: 0}}>
+                          {editandoApodo === m.user_id ? (
+                            <TextInput
+                              size="xs"
+                              placeholder="Nombre o apodo"
+                              value={apodoInput}
+                              onChange={(e) => setApodoInput(e.target.value)}
+                              onBlur={() => actualizarApodo(m.user_id, apodoInput)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') actualizarApodo(m.user_id, apodoInput);
+                                if (e.key === 'Escape') setEditandoApodo(null);
+                              }}
+                              autoFocus
+                              mb={4}
+                            />
+                          ) : (
+                            <Group gap={4} align="center">
+                              <Text size="sm" fw={500} style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                                {m.apodo || m.email}
+                              </Text>
+                              <ActionIcon
+                                variant="subtle" size="xs" color="gray"
+                                title="Editar apodo"
+                                onClick={() => { setEditandoApodo(m.user_id); setApodoInput(m.apodo || ''); }}
+                              >
+                                <IconEdit size={12}/>
+                              </ActionIcon>
+                            </Group>
+                          )}
+                          {m.apodo && <Text size="xs" c="dimmed" style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{m.email}</Text>}
+                          <Badge size="xs" color={m.rol === 'VETERINARIO' ? 'violet' : 'orange'} mt={2}>
+                            {m.rol === 'VETERINARIO' ? 'Veterinario' : 'Peón'}
+                          </Badge>
+                        </div>
+                        <ActionIcon variant="subtle" color="red" title="Remover miembro" onClick={() => removerMiembro(m.user_id)}>
+                          <IconUserMinus size={16}/>
+                        </ActionIcon>
+                      </Group>
+                    ))}
+                  </>
+                ) : (
+                  <Text size="sm" c="dimmed">Todavía no hay miembros en este campo.</Text>
+                )}
+
+                {/* Generador de invitación */}
+                <Text size="xs" fw={700} c="dimmed" mt="xs">Invitar al equipo</Text>
+                <Group gap="xs">
+                  <Select
+                    data={[{ value: 'PEON', label: 'Peón' }, { value: 'VETERINARIO', label: 'Veterinario' }]}
+                    value={rolNuevaInvitacion}
+                    onChange={(v) => setRolNuevaInvitacion(v || 'PEON')}
+                    style={{ flex: 1 }}
+                  />
+                  <Button leftSection={<IconLink size={16}/>} onClick={generarInvitacion} color="teal">
+                    Generar link
+                  </Button>
+                </Group>
+
+                {linkGenerado && (
+                  <Paper withBorder p="sm" radius="md" bg="teal.0" style={{ borderColor: 'var(--mantine-color-teal-3)' }}>
+                    <Text size="xs" fw={700} mb={4}>Link de invitación:</Text>
+                    <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }} mb="xs">{linkGenerado}</Text>
+                    <Group gap="xs" align="center">
+                      <Button size="xs" leftSection={<IconCopy size={13}/>} color="teal" onClick={() => navigator.clipboard.writeText(linkGenerado)}>
+                        Copiar link
+                      </Button>
+                      <Text size="xs" c="dimmed">Vence en 7 días. Mandáselo por WhatsApp.</Text>
+                    </Group>
+                  </Paper>
+                )}
+
+                {/* Invitaciones pendientes */}
+                {invitaciones.length > 0 && (
+                  <>
+                    <Text size="xs" fw={700} c="dimmed" mt="xs">Invitaciones pendientes</Text>
+                    {invitaciones.map((inv: any) => (
+                      <Group key={inv.id} justify="space-between" p="xs" bg="gray.0" style={{borderRadius: 8}}>
+                        <div>
+                          <Text size="xs" ff="monospace" c="dimmed">…{inv.token.slice(-10)}</Text>
+                          <Group gap="xs" mt={2}>
+                            <Badge size="xs" color={inv.rol === 'VETERINARIO' ? 'violet' : 'orange'}>{inv.rol}</Badge>
+                            <Text size="xs" c="dimmed">Vence: {new Date(inv.expires_at).toLocaleDateString('es-AR')}</Text>
+                          </Group>
+                        </div>
+                        <ActionIcon variant="subtle" color="red" title="Invalidar invitación" onClick={() => invalidarInvitacion(inv.id)}>
+                          <IconTrash size={14}/>
+                        </ActionIcon>
+                      </Group>
+                    ))}
+                  </>
+                )}
+              </Stack>
+            )}
+          </>
+        )}
       </Modal>
 
       <OnboardingTour

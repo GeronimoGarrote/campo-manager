@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Modal, TextInput, Button, Stack, Text } from '@mantine/core';
+import { Modal, TextInput, Button, Stack, Text, Center, ThemeIcon } from '@mantine/core';
+import { IconLock } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 import VistaLotesActivos from '../components/Lotes/VistaLotesActivos';
@@ -7,7 +8,7 @@ import VistaHistorial from '../components/Lotes/VistaHistorial';
 import VistaDetalleLote from '../components/Lotes/VistaDetalleLote';
 import VistaDetalleHistorico from '../components/Lotes/VistaDetalleHistorico';
 
-export default function Lotes({ campoId, lotes, animales, potreros, parcelas, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca }: any) {
+export default function Lotes({ campoId, lotes, animales, potreros, parcelas, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO' }: any) {
     // ESTADOS DE NAVEGACIÓN
     const [loteSel, setLoteSel] = useState<any | null>(null);
     const [mostrandoHistorial, setMostrandoHistorial] = useState(false);

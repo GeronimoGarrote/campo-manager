@@ -4,23 +4,24 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp, IconScan } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
-interface ModalFichaVacaProps { 
-    opened: boolean; 
+interface ModalFichaVacaProps {
+    opened: boolean;
     onClose: () => void;
-    animalSelId: string | null; 
-    campoId: string | null; 
-    animales: any[]; 
+    animalSelId: string | null;
+    campoId: string | null;
+    animales: any[];
     potreros: any[];
-    parcelas: any[]; 
-    lotes: any[]; 
-    establecimientos: any[]; 
-    onUpdate: () => void; 
-    abrirGraficoPeso: (id: string) => void; 
-    setAnimalSelId: (id: string | null) => void; 
-    datosSuscripcion: any; 
+    parcelas: any[];
+    lotes: any[];
+    establecimientos: any[];
+    onUpdate: () => void;
+    abrirGraficoPeso: (id: string) => void;
+    setAnimalSelId: (id: string | null) => void;
+    datosSuscripcion: any;
+    rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO';
 }
 
-export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, setAnimalSelId, datosSuscripcion }: ModalFichaVacaProps) {
+export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, animales, potreros, parcelas, lotes, establecimientos, onUpdate, abrirGraficoPeso, setAnimalSelId, datosSuscripcion, rolActual = 'DUENO' }: ModalFichaVacaProps) {
     const [loading, setLoading] = useState(false);
     const [activeTabVaca, setActiveTabVaca] = useState<string | null>('historia'); 
     const [fichaAnterior, setFichaAnterior] = useState<any>(null); 
@@ -468,13 +469,13 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         onClose(); onUpdate();
     }
 
-    const opcionesDisponibles = (() => { 
-        if (!animalSel) return []; 
+    const opcionesDisponibles = (() => {
+        if (!animalSel) return [];
         const base = ['PESAJE', 'ENFERMEDAD', 'LESION', 'CURACION', 'TRATAMIENTO', 'VACUNACION', 'OTRO'];
-        if (['Vaca', 'Vaquillona'].includes(animalSel.categoria)) return [...base, 'TACTO', 'SERVICIO', 'PARTO', 'DESTETE']; 
-        if (animalSel.categoria === 'Ternero') return animalSel.sexo === 'M' ? [...base, 'CAPADO', 'DESTETE'] : [...base, 'DESTETE']; 
-        if (animalSel.categoria === 'Toro') return [...base, 'RASPAJE', 'APARTADO']; 
-        return base; 
+        if (['Vaca', 'Vaquillona'].includes(animalSel.categoria)) return [...base, 'TACTO', 'SERVICIO', 'PARTO', 'DESTETE'];
+        if (animalSel.categoria === 'Ternero') return animalSel.sexo === 'M' ? [...base, 'CAPADO', 'DESTETE'] : [...base, 'DESTETE'];
+        if (animalSel.categoria === 'Toro') return [...base, 'RASPAJE', 'APARTADO'];
+        return base;
     })();
 
     const torosDisponibles = animales.filter(a => a.categoria === 'Toro' && a.estado !== 'MUERTO' && a.estado !== 'VENDIDO');
@@ -589,20 +590,24 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                <Textarea label="Detalles / Anotaciones" placeholder="Información adicional..." value={editDetalles} onChange={(e) => setEditDetalles(e.target.value)} disabled={!esActivo} minRows={3} mb="sm" />
                <Group grow mb="xl"><TextInput label="Fecha Nacimiento" type="date" value={editFechaNac} onChange={(e) => setEditFechaNac(e.target.value)} disabled={!esActivo} /><TextInput label="Fecha Ingreso" type="date" value={editFechaIngreso} onChange={(e) => setEditFechaIngreso(e.target.value)} disabled={!esActivo} /></Group>
                
-               {esActivo ? ( 
+               {esActivo ? (
                    <>
-                       {!modoBaja ? ( 
+                       {!modoBaja ? (
                            <>
                                <Button fullWidth variant="outline" leftSection={<IconCheck size={16}/>} onClick={actualizarAnimal} mb="xl">Guardar Cambios</Button>
                                <Text size="sm" fw={700} c="red.6" mb="xs">Operaciones Especiales</Text>
                                <Group grow>
-                                   <Button color="orange" onClick={() => setModoBaja('VENDIDO')} leftSection={<IconCurrencyDollar size={16}/>}>Vender</Button>
-                                   <Button color="blue" onClick={() => { setModoBaja('TRASLADO'); setBajaMotivo(''); }} leftSection={<IconTractor size={16}/>}>Trasladar</Button>
+                                   {rolActual === 'DUENO' && (
+                                       <Button color="orange" onClick={() => setModoBaja('VENDIDO')} leftSection={<IconCurrencyDollar size={16}/>}>Vender</Button>
+                                   )}
+                                   {rolActual === 'DUENO' && (
+                                       <Button color="blue" onClick={() => { setModoBaja('TRASLADO'); setBajaMotivo(''); }} leftSection={<IconTractor size={16}/>}>Trasladar</Button>
+                                   )}
                                    <Button color="red" onClick={() => setModoBaja('MUERTO')} leftSection={<IconSkull size={16}/>}>Muerte</Button>
                                </Group>
                                <Button fullWidth variant="subtle" color="gray" mt="xs" leftSection={<IconTrash size={16}/>} onClick={borrarAnimalDefinitivo}>Borrar definitivamente</Button>
-                           </> 
-                       ) : ( 
+                           </>
+                       ) : (
                            <Paper withBorder p="sm" bg={modoBaja === 'VENDIDO' ? 'orange.0' : modoBaja === 'TRASLADO' ? 'blue.0' : 'red.0'}>
                                <Group justify="space-between" mb="sm">
                                    <Text fw={700} c={modoBaja === 'VENDIDO' ? 'orange.9' : modoBaja === 'TRASLADO' ? 'blue.9' : 'red.9'}>CONFIRMAR: {modoBaja}</Text>
@@ -643,7 +648,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                    </Stack> 
                                )}
                                <Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'} onClick={confirmarBaja} loading={loading}>Confirmar Acción</Button>
-                           </Paper> 
+                           </Paper>
                        )}
                    </> 
                ) : ( <Paper p="md" bg="gray.1" ta="center"><Text c="dimmed" size="sm" mb="md">Este animal se encuentra {animalSel?.en_transito ? 'en tránsito hacia el comprador' : 'archivado'}.</Text>{!animalSel?.en_transito && <Button fullWidth variant="outline" color="blue" leftSection={<IconArrowBackUp/>} onClick={restaurarAnimal}>Restaurar a Hacienda Activa</Button>}</Paper> )}

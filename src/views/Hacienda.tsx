@@ -57,7 +57,8 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
 export default function Hacienda({
     animales, potreros, parcelas, lotes, activeSection,
     abrirFichaVaca, openModalAlta, setAnimales,
-    datosSuscripcion, campoId, fetchAnimales
+    datosSuscripcion, campoId, fetchAnimales,
+    rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
 }: any) {
     const [busqueda, setBusqueda] = useState('');
     const [importarExcelAbierto, setImportarExcelAbierto] = useState(false);

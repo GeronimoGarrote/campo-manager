@@ -5,14 +5,14 @@ import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTra
 import { supabase } from '../supabase';
 
 interface Establecimiento { id: string; nombre: string; renspa?: string; }
-interface EconomiaProps { campoId: string; establecimientos?: Establecimiento[]; }
+interface EconomiaProps { campoId: string; establecimientos?: Establecimiento[]; rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO'; }
 interface Movimiento { id: string; fecha: string; timestamp: string; tipo: 'INGRESO' | 'EGRESO'; categoria: string; detalle: string; monto: number; esManual: boolean; venta_id?: string | null; }
 
 // ACÁ ESTÁ EL CAMBIO (slice(-2) al año)
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`; };
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 
-export default function Economia({ campoId, establecimientos = [] }: EconomiaProps) {
+export default function Economia({ campoId, establecimientos = [], rolActual = 'DUENO' }: EconomiaProps) {
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDatos, setLoadingDatos] = useState(true);
@@ -205,6 +205,16 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
   }
 
   // --- PANTALLA DE BLOQUEO ---
+  if (rolActual !== 'DUENO') return (
+    <Center h={400}>
+      <Stack align="center" gap="md">
+        <ThemeIcon size={60} radius="xl" color="gray" variant="light"><IconLock size={30}/></ThemeIcon>
+        <Text fw={600} size="lg">Acceso restringido</Text>
+        <Text c="dimmed" ta="center" maw={300}>Solo el dueño del campo puede ver la información económica y financiera.</Text>
+      </Stack>
+    </Center>
+  );
+
   if (loadingDatos) return <Center h={400}><Text c="dimmed">Cargando datos financieros...</Text></Center>;
 
   if (isLocked) {
@@ -248,7 +258,9 @@ export default function Economia({ campoId, establecimientos = [] }: EconomiaPro
             <Menu.Target><Button leftSection={<IconPlus size={20} />} color="green">Nuevo Movimiento</Button></Menu.Target>
             <Menu.Dropdown>
               <Menu.Item leftSection={<IconReceipt size={14} />} onClick={() => { setTipoInput('EGRESO'); setCategoriaInput('Infraestructura / Alambrados'); open(); }}>Ingreso/Egreso Estándar</Menu.Item>
-              <Menu.Item leftSection={<IconTruckDelivery size={14} />} onClick={() => { setTipoInput('TRASLADO'); setCategoriaInput('Traslado Insumo'); open(); }}>Traslado a Otro Campo</Menu.Item>
+              {rolActual === 'DUENO' && (
+                <Menu.Item leftSection={<IconTruckDelivery size={14} />} onClick={() => { setTipoInput('TRASLADO'); setCategoriaInput('Traslado Insumo'); open(); }}>Traslado a Otro Campo</Menu.Item>
+              )}
             </Menu.Dropdown>
           </Menu>
         </Group>

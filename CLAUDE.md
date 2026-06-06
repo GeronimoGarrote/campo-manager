@@ -144,9 +144,89 @@ id, user_id, plan_nombre, estado, fecha_vencimiento,
 limite_animales, limite_establecimientos
 ```
 
+### `campo_miembros`
+```
+establecimiento_id (FK), user_id (UUID),
+rol: 'PEON' | 'VETERINARIO',
+apodo: string | null
+```
+Relación N:M entre usuarios y campos ajenos (DUENO no tiene fila aquí, es el `user_id` del `establecimiento`).
+
+### `campo_invitaciones`
+```
+id, establecimiento_id, rol: 'PEON' | 'VETERINARIO',
+token (UUID), usado (boolean), created_at
+```
+Un token de un solo uso que, al visitarse con `?token=<uuid>` en la URL, añade al usuario autenticado como miembro.
+
 ### RPCs disponibles
 - `buscar_campo_por_renspa({ buscar_renspa })` → `{ id, nombre }`
 - `obtener_caravanas_perdidas({ ids })` → `[{ id, caravana }]`
+- `obtener_miembros_campo({ p_campo_id })` → `[{ user_id, email, rol, apodo }]`
+- `aceptar_invitacion({ p_token })` → procesa el token e inserta en `campo_miembros`
+
+---
+
+## Sistema Multi-usuario
+
+### Flujo de membresías
+
+1. DUENO genera un link desde modal config → inserta en `campo_invitaciones` con un UUID aleatorio.
+2. Invitado abre `?token=<uuid>` → si ya tiene sesión, se llama `aceptar_invitacion` automáticamente; si no, ve la pantalla de login/registro y se procesa al iniciar sesión.
+3. El miembro queda en `campo_miembros` con el `rol` del token.
+4. DUENO puede revocar invitaciones no usadas o remover miembros desde el modal config.
+
+### Estado en App.tsx
+
+```typescript
+// Mapa con el rol del usuario autenticado en cada campo
+const [rolesPorCampo, setRolesPorCampo] = useState<
+  Record<string, 'DUENO' | 'PEON' | 'VETERINARIO'>
+>({});
+
+// Derivado: rol en el campo activo. Default DUENO si no hay fila (nunca debería ocurrir).
+const rolActual: 'DUENO' | 'PEON' | 'VETERINARIO' =
+  campoId ? (rolesPorCampo[campoId] ?? 'DUENO') : 'DUENO';
+```
+
+### `loadCampos` — patrón de dos queries
+
+**No usar embedded join** `campo_miembros.select('*, establecimientos(*)')` — puede fallar silenciosamente por interacciones RLS/PostgREST. El patrón correcto usa dos queries paralelas:
+
+```typescript
+const [{ data: propios }, { data: membresias }] = await Promise.all([
+  supabase.from('establecimientos').select('*').eq('user_id', user.id),
+  supabase.from('campo_miembros').select('establecimiento_id, rol').eq('user_id', user.id),
+]);
+// propios → DUENO; membresias → ids de campos ajenos, se fetchean en una tercera query .in()
+```
+
+### Apodo de miembros
+
+`campo_miembros.apodo` es un alias editable que el DUENO asigna a cada miembro. Cuando está definido, se muestra en lugar del email en la UI. Se actualiza via `UPDATE campo_miembros SET apodo = $1 WHERE establecimiento_id = $2 AND user_id = $3`.
+
+### Matriz de permisos
+
+| Acción | DUENO | PEON | VETERINARIO |
+|--------|-------|------|-------------|
+| Ver Hacienda / Lotes / Agenda / Masivos / Agricultura | ✅ | ✅ | ✅ |
+| Registrar eventos (pesaje, vacuna, etc.) | ✅ | ✅ | ✅ |
+| Ver Caja / Economía | ✅ | ❌ | ❌ |
+| Ver Mi Plan / Suscripción | ✅ | ❌ | ❌ |
+| Vender animales (ModalFichaVaca + Masivos) | ✅ | ❌ | ❌ |
+| Trasladar animales (ModalFichaVaca) | ✅ | ❌ | ❌ |
+| Traslado a Otro Campo (Economía) | ✅ | ❌ | ❌ |
+| Gestionar equipo / invitaciones | ✅ | ❌ | ❌ |
+
+**Regla general**: PEON y VETERINARIO tienen acceso completo excepto a lo financiero (Caja, Mi Plan) y a acciones de venta/traslado de animales.
+
+### Gates en el código
+
+- **Navbar**: `{rolActual === 'DUENO' && <NavLink label="Caja / Economía" .../>}` y `Mi Plan`
+- **ModalFichaVaca**: botones "Vender" y "Trasladar" bajo `rolActual === 'DUENO'`
+- **Masivos**: tipo `VENTA` filtrado del Select para no-DUENO
+- **Economia**: bloque completo de acceso restringido si `rolActual !== 'DUENO'`; ítem "Traslado a Otro Campo" bajo `rolActual === 'DUENO'`
+- **`rolActual` se pasa como prop** a: `Hacienda`, `Masivos`, `Lotes`, `Agricultura`, `Economia`, `ModalFichaVaca`, `ModalAltaAnimal`, `ModalAltaDesdeBaston`
 
 ---
 
@@ -265,6 +345,8 @@ El patrón es: `App.tsx` fetcha → pasa como props → la vista renderiza.
 | `en_transito` flag | Coordinado con `transferencias`, no cambiar sin ambos |
 | Cálculo de días de gestación | 283 días es el valor ganadero correcto para bovinos |
 | RPC `buscar_campo_por_renspa` | Función de Supabase, no replicar en cliente |
+| RPC `aceptar_invitacion` | Lógica de membresía en server-side, no mover al cliente |
+| RPC `obtener_miembros_campo` | Retorna `email` vía `auth.users`; el rol autenticado no puede leer esa tabla directo |
 
 ---
 
