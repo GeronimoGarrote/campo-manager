@@ -94,7 +94,10 @@ export default function Masivos({
     const torosDisponibles = animales.filter((a: any) => a.categoria === 'Toro' && a.estado !== 'MUERTO' && a.estado !== 'VENDIDO');
 
     const animalesFiltrados = animales.filter((animal: any) => {
-        const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase());
+        const q = busqueda.trim().toLowerCase();
+        const matchBusqueda = !q ||
+            animal.caravana.trim().toLowerCase().includes(q) ||
+            (animal.caravana_electronica?.trim().toLowerCase().includes(q) ?? false);
         const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
         const matchSexo = filterSexo ? animal.sexo === filterSexo : true;
         const matchLote = filterLote ? animal.lote_id === filterLote : true;

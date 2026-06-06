@@ -179,6 +179,7 @@ export default function Actividad({ eventosGlobales }: { eventosGlobales: Evento
       .filter(ev => {
         const coincideTexto = !search ||
           ev.animales?.caravana?.toLowerCase().includes(search) ||
+          ev.animales?.caravana_electronica?.toLowerCase().includes(search) ||
           ev.tipo.toLowerCase().includes(search) ||
           ev.detalle?.toLowerCase().includes(search) ||
           ev.resultado?.toLowerCase().includes(search);

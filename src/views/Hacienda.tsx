@@ -107,8 +107,10 @@ export default function Hacienda({
                 ? (animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO')
                 : (animal.estado === 'VENDIDO' || animal.estado === 'MUERTO');
 
-            const matchBusqueda = animal.caravana.toLowerCase().includes(busqueda.toLowerCase()) ||
-                (animal.caravana_electronica?.toLowerCase().includes(busqueda.toLowerCase()) ?? false);
+            const q = busqueda.trim().toLowerCase();
+            const matchBusqueda = !q ||
+                animal.caravana.trim().toLowerCase().includes(q) ||
+                (animal.caravana_electronica?.trim().toLowerCase().includes(q) ?? false);
             const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
             const matchLote = filterLote ? animal.lote_id === filterLote : true; 
             
@@ -126,7 +128,7 @@ export default function Hacienda({
             }
             return matchSeccion && matchBusqueda && matchCategoria && matchLote && matchAtributos;
         }).sort((a: any, b: any) => {
-            if (busqueda) { const exactA = a.caravana.toLowerCase() === busqueda.toLowerCase(); const exactB = b.caravana.toLowerCase() === busqueda.toLowerCase(); if (exactA && !exactB) return -1; if (!exactA && exactB) return 1; }
+            if (busqueda) { const q2 = busqueda.trim().toLowerCase(); const exactA = a.caravana.trim().toLowerCase() === q2 || a.caravana_electronica?.trim().toLowerCase() === q2; const exactB = b.caravana.trim().toLowerCase() === q2 || b.caravana_electronica?.trim().toLowerCase() === q2; if (exactA && !exactB) return -1; if (!exactA && exactB) return 1; }
             
             if (ordenParto) {
                 const diasA = calcularDiasFaltantesParto(a.fecha_servicio);
