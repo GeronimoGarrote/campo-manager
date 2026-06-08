@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
+import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
 import { useLectorAllflex } from '../hooks/useLectorAllflex';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import AllflexScanner from '../components/AllflexScanner';
-import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert } from '@mantine/core';
+import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert, Modal, Stack } from '@mantine/core';
 import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
@@ -89,6 +90,10 @@ export default function Masivos({
     
     const [esVentaRedMasiva, setEsVentaRedMasiva] = useState(false);
     const [renspaDestinoMasiva, setRenspaDestinoMasiva] = useState('');
+    const [confirmOpened, { open: openConfirm, close: closeConfirm }] = useDisclosure(false);
+    const [confirmMsg, setConfirmMsg] = useState('');
+    const [confirmWarn, setConfirmWarn] = useState('');
+    const [idsPendientes, setIdsPendientes] = useState<string[]>([]);
 
     const opcionesGestacion = [ { value: '0.5', label: '15 días (0.5 mes)' }, { value: '1', label: '1 mes' }, { value: '1.5', label: '1 mes y medio' }, { value: '2', label: '2 meses' }, { value: '2.5', label: '2 meses y medio' }, { value: '3', label: '3 meses' }, { value: '3.5', label: '3 meses y medio' }, { value: '4', label: '4 meses' }, { value: '4.5', label: '4 meses y medio' }, { value: '5', label: '5 meses' }, { value: '5.5', label: '5 meses y medio' }, { value: '6', label: '6 meses' }, { value: '6.5', label: '6 meses y medio' }, { value: '7', label: '7 meses' }, { value: '7.5', label: '7 meses y medio' }, { value: '8', label: '8 meses' }, { value: '8.5', label: '8 meses y medio' }, { value: '9', label: '9 meses (A parir)' } ];
 
@@ -132,35 +137,73 @@ export default function Masivos({
         }
     };
 
-    async function guardarEventoMasivo() {
-        if (selectedIds.length === 0) return alert("No seleccionaste ningún animal");
-        if (!massFecha || !massActividad || !campoId) return alert("Faltan datos del evento");
-        
+    function prepararYConfirmar() {
+        if (selectedIds.length === 0) {
+            notifications.show({ title: 'Sin selección', message: 'No seleccionaste ningún animal', color: 'red' });
+            return;
+        }
+        if (!massFecha || !massActividad || !campoId) {
+            notifications.show({ title: 'Datos incompletos', message: 'Faltan datos del evento', color: 'red' });
+            return;
+        }
         if (massActividad === 'VENTA') {
-            if (!massPrecioVenta) return alert("Falta especificar el monto de la venta.");
-            if (massModalidadVenta === 'KILO' && !massKilosTotales) return alert("Faltan los kilos totales.");
+            if (!massPrecioVenta) {
+                notifications.show({ title: 'Datos incompletos', message: 'Falta especificar el monto de la venta.', color: 'red' });
+                return;
+            }
+            if (massModalidadVenta === 'KILO' && !massKilosTotales) {
+                notifications.show({ title: 'Datos incompletos', message: 'Faltan los kilos totales.', color: 'red' });
+                return;
+            }
         }
-        
-        if (massActividad === 'MOVIMIENTO_POTRERO' && !massPotreroDestino) return alert("Falta el Potrero destino");
-        if (massActividad === 'CAMBIO_LOTE' && !massLoteDestino) return alert("Falta el Lote (Grupo) destino");
-        if (massActividad === 'SERVICIO' && massTipoServicio === 'TORO' && massTorosIds.length === 0) return alert("Seleccioná al menos un toro");
-        
+        if (massActividad === 'MOVIMIENTO_POTRERO' && !massPotreroDestino) {
+            notifications.show({ title: 'Datos incompletos', message: 'Falta el Potrero destino', color: 'red' });
+            return;
+        }
+        if (massActividad === 'CAMBIO_LOTE' && !massLoteDestino) {
+            notifications.show({ title: 'Datos incompletos', message: 'Falta el Lote (Grupo) destino', color: 'red' });
+            return;
+        }
+        if (massActividad === 'SERVICIO' && massTipoServicio === 'TORO' && massTorosIds.length === 0) {
+            notifications.show({ title: 'Datos incompletos', message: 'Seleccioná al menos un toro', color: 'red' });
+            return;
+        }
         if (massActividad === 'TRASLADO') {
-            if (!massEstablecimientoDestino) return alert("Falta el establecimiento de destino");
-            if (massEstablecimientoDestino === campoId) return alert("El establecimiento de destino no puede ser el mismo que el actual");
+            if (!massEstablecimientoDestino) {
+                notifications.show({ title: 'Datos incompletos', message: 'Falta el establecimiento de destino', color: 'red' });
+                return;
+            }
+            if (massEstablecimientoDestino === campoId) {
+                notifications.show({ title: 'Error', message: 'El establecimiento de destino no puede ser el mismo que el actual', color: 'red' });
+                return;
+            }
         }
-        
-        let idsParaProcesar = [...selectedIds]; let mensajeConfirmacion = `¿Confirmar ${massActividad} para ${selectedIds.length} animales?`;
+
+        let idsParaProcesar = [...selectedIds];
+        let msg = `¿Confirmar ${massActividad} para ${selectedIds.length} animal${selectedIds.length !== 1 ? 'es' : ''}?`;
+        let warn = '';
 
         if (massActividad === 'CAPADO') {
-            const machos = animales.filter((a: any) => selectedIds.includes(a.id) && a.sexo === 'M' && a.categoria === 'Ternero'); idsParaProcesar = machos.map((a: any) => a.id);
+            const machos = animales.filter((a: any) => selectedIds.includes(a.id) && a.sexo === 'M' && a.categoria === 'Ternero');
+            idsParaProcesar = machos.map((a: any) => a.id);
             const descartados = selectedIds.length - idsParaProcesar.length;
-            if (idsParaProcesar.length === 0) return alert("Error: No hay Terneros Machos en la selección.");
-            if (descartados > 0) mensajeConfirmacion = `⚠️ ATENCIÓN: Se detectaron ${descartados} animales inválidos.\nSolo se capará a ${idsParaProcesar.length} TERNEROS MACHOS.\n\n¿Continuar?`;
-            else mensajeConfirmacion = `¿Confirmar CAPADO para ${idsParaProcesar.length} terneros?`;
+            if (idsParaProcesar.length === 0) {
+                notifications.show({ title: 'Sin terneros machos', message: 'No hay Terneros Machos en la selección.', color: 'red' });
+                return;
+            }
+            if (descartados > 0) warn = `Se detectaron ${descartados} animales inválidos. Solo se capará a ${idsParaProcesar.length} ternero${idsParaProcesar.length !== 1 ? 's' : ''} macho${idsParaProcesar.length !== 1 ? 's' : ''}.`;
+            msg = `¿Confirmar CAPADO para ${idsParaProcesar.length} ternero${idsParaProcesar.length !== 1 ? 's' : ''}?`;
         }
 
-        if(!confirm(mensajeConfirmacion)) return; setLoading(true); const fechaStr = massFecha.toISOString();
+        setIdsPendientes(idsParaProcesar);
+        setConfirmMsg(msg);
+        setConfirmWarn(warn);
+        openConfirm();
+    }
+
+    async function guardarEventoMasivo() {
+        if (!massFecha || !campoId) return;
+        setLoading(true); const idsParaProcesar = idsPendientes; const fechaStr = massFecha.toISOString();
 
         if (massActividad === 'VENTA' || massActividad === 'TRASLADO') {
             const ternerosSeleccionados = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero' && a.estado === 'LACTANTE');
@@ -226,16 +269,16 @@ export default function Masivos({
         let errorGlobal = null;
 
         if (massActividad === 'VENTA' && esVentaRedMasiva) {
-            if (!renspaDestinoMasiva) { setLoading(false); return alert("Ingresá el RENSPA destino"); }
+            if (!renspaDestinoMasiva) { setLoading(false); notifications.show({ title: 'Datos incompletos', message: 'Ingresá el RENSPA destino', color: 'red' }); return; }
             
             const { data, error: rpcErr } = await supabase.rpc('verificar_espacio_renspa', { 
                 p_renspa: renspaDestinoMasiva.trim(),
                 p_cantidad: idsParaProcesar.length
             });
             
-            if (rpcErr) { setLoading(false); return alert("Error de conexión al verificar el RENSPA."); }
-            if (!data.ok) { setLoading(false); return alert("❌ ERROR: " + data.error); }
-            if (data.dest_id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+            if (rpcErr) { setLoading(false); notifications.show({ title: 'Error de conexión', message: 'Error al verificar el RENSPA.', color: 'red' }); return; }
+            if (!data.ok) { setLoading(false); notifications.show({ title: 'Error', message: data.error, color: 'red' }); return; }
+            if (data.dest_id === campoId) { setLoading(false); notifications.show({ title: 'Error', message: 'No podés transferirte a vos mismo.', color: 'red' }); return; }
 
             const dest = { id: data.dest_id, nombre: data.dest_nombre };
             const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre || 'Campo Desconocido';
@@ -367,14 +410,16 @@ export default function Masivos({
         }
 
         setLoading(false);
-        if (errorGlobal) { alert("Error al transferir: " + errorGlobal.message); } 
-        else {
-            alert("¡Carga masiva exitosa!"); 
-            setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino(''); 
-            setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario(''); 
+        closeConfirm();
+        if (errorGlobal) {
+            notifications.show({ title: 'Error', message: 'Error al guardar: ' + errorGlobal.message, color: 'red' });
+        } else {
+            notifications.show({ title: '¡Carga masiva exitosa!', message: `${massActividad} aplicado a ${idsParaProcesar.length} animal${idsParaProcesar.length !== 1 ? 'es' : ''}.`, color: 'teal', autoClose: 4000 });
+            setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino('');
+            setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario('');
             setMassTorosIds([]); setMassMesesGestacion(null); setMassEstablecimientoDestino(null); setSelectedIds([]);
             setEsVentaRedMasiva(false); setRenspaDestinoMasiva('');
-            fetchAnimales(); fetchActividadGlobal(); setActiveSection('actividad');
+            fetchAnimales(); fetchActividadGlobal();
         }
     }
 
@@ -529,7 +574,22 @@ export default function Masivos({
                 </Table>
                 </ScrollArea>
             </Paper>
-            {selectedIds.length > 0 && ( <Paper shadow="xl" p="md" radius="md" withBorder bg="gray.0" style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}><Group><Button size="lg" color="violet" loading={loading} onClick={guardarEventoMasivo}>CONFIRMAR {massActividad}</Button></Group></Paper> )}
+            {selectedIds.length > 0 && ( <Paper shadow="xl" p="md" radius="md" withBorder bg="gray.0" style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}><Group><Button size="lg" color="violet" loading={loading} onClick={prepararYConfirmar}>CONFIRMAR {massActividad}</Button></Group></Paper> )}
+
+            <Modal opened={confirmOpened} onClose={closeConfirm} title="Confirmar acción" centered>
+                <Stack>
+                    {confirmWarn && (
+                        <Alert color="orange" title="Atención" variant="light">
+                            {confirmWarn}
+                        </Alert>
+                    )}
+                    <Text size="sm">{confirmMsg}</Text>
+                    <Group justify="flex-end" mt="sm">
+                        <Button variant="default" onClick={closeConfirm} disabled={loading}>Cancelar</Button>
+                        <Button color="violet" loading={loading} onClick={guardarEventoMasivo}>Confirmar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
 
             <ModalAltaDesdeBaston
                 opened={modalAltaBastonOpen}
