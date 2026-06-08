@@ -493,7 +493,7 @@ export default function Masivos({
             </Group>
             <Group mb="md" wrap="nowrap" gap="xs">
                 <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 2}}/>
-                <Select placeholder="Categoría" data={['Vaca', 'Ternero', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
+                <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
                 <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
                 <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1.5}}/>
                 <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1.5}}/>
