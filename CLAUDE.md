@@ -33,7 +33,8 @@ src/
 │   ├── Lotes.tsx            # Shell de navegación de lotes/grupos
 │   ├── Agenda.tsx
 │   ├── Actividad.tsx
-│   └── Suscripcion.tsx
+│   ├── Suscripcion.tsx
+│   └── AceptarInvitacion.tsx  # Pantalla de join por token de invitación
 ├── components/
 │   ├── ModalAltaAnimal.tsx
 │   ├── ModalFichaVaca.tsx   # Ficha completa del animal (historial, eventos, baja)
@@ -41,6 +42,8 @@ src/
 │   ├── ModalGraficoPeso.tsx
 │   ├── ModalAltaDesdeBaston.tsx
 │   ├── AllflexScanner.tsx
+│   ├── OnboardingTour.tsx     # Tour de bienvenida para usuarios nuevos
+│   ├── HelpDrawer.tsx         # Drawer de ayuda contextual por sección
 │   ├── Hacienda/
 │   │   └── ModalImportarExcel.tsx
 │   └── Lotes/
@@ -90,7 +93,8 @@ datos_extra (jsonb)
 id, establecimiento_id, fecha (YYYY-MM-DD),
 tipo: 'INGRESO' | 'EGRESO' | 'TRASLADO',
 categoria: 'Hacienda (Venta/Compra)' | 'Sanidad Veterinaria' | 'Agricultura / Semillas' | 'Alimentación / Nutrición' | ...,
-detalle, monto
+detalle, monto,
+venta_id (UUID, nullable, FK a ventas)
 ```
 
 ### `potreros`
@@ -158,6 +162,17 @@ id, establecimiento_id, rol: 'PEON' | 'VETERINARIO',
 token (UUID), usado (boolean), created_at
 ```
 Un token de un solo uso que, al visitarse con `?token=<uuid>` en la URL, añade al usuario autenticado como miembro.
+
+### `ventas`
+```
+id, establecimiento_id, fecha (DATE),
+tipo: MASIVA | LOTE | INDIVIDUAL,
+destino, comprador, modalidad,
+monto_total, gastos_total, kilos_totales,
+animales_ids (UUID[]), created_at
+```
+Vincula movimientos de caja con animales vendidos.
+El icono en Economia consulta esta tabla al clickear.
 
 ### RPCs disponibles
 - `buscar_campo_por_renspa({ buscar_renspa })` → `{ id, nombre }`
@@ -357,10 +372,7 @@ El patrón es: `App.tsx` fetcha → pasa como props → la vista renderiza.
 | 1 | ✅ Completo | Este archivo CLAUDE.md |
 | 2 | ✅ Completo | Crear `src/types.ts` con todas las interfaces |
 | 3 | ✅ Completo | Manejo de errores en fetches de App.tsx |
-| 4 | Pendiente | Extraer hooks: `useAnimales`, `useSuscripcion`, `useAuth` |
-
-Antes de avanzar a Fase 3, la Fase 2 debe estar completa.
-Los hooks de Fase 4 deben importar tipos de `src/types.ts`, no redefinirlos.
+| 4 | ⏸ Pausado | Extraer hooks: `useAnimales`, `useSuscripcion`, `useAuth` — esperar necesidad concreta |
 
 ---
 
