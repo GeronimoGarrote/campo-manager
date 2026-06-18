@@ -30,7 +30,7 @@ const CustomTooltipMulti = ({ active, payload }: any) => {
     return null;
 };
 
-export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, campoId, lotes, animales, potreros, parcelas, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, fetchHistoricosGlobal, abrirFichaVaca, checkNombreDuplicado }: any) {
+export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, campoId, lotes, animales, potreros, parcelas, establecimientos, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, fetchHistoricosGlobal, abrirFichaVaca, checkNombreDuplicado }: any) {
     const [loading, setLoading] = useState(false);
     const [modalVentaOpen, { open: openModalVenta, close: closeModalVenta }] = useDisclosure(false);
     const [eventosLoteFicha, setEventosLoteFicha] = useState<any[]>([]);
