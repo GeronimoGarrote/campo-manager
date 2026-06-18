@@ -138,14 +138,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     async function borrarEvento(ev: { id: string; tipo: string; costo?: number }) {
         if (!confirm("¿Borrar evento?")) return;
         await supabase.from('eventos').delete().eq('id', ev.id);
-        // Si el evento tenía costo, borrar el egreso correspondiente en caja
-        if (ev.costo && ev.costo > 0 && animalSel && campoId) {
-            await supabase.from('caja')
-                .delete()
-                .eq('establecimiento_id', campoId)
-                .eq('detalle', `Costo ${ev.tipo} - Caravana ${animalSel.caravana}`)
-                .eq('monto', ev.costo);
-        }
+        // El egreso en caja se elimina automáticamente via ON DELETE CASCADE (evento_id FK)
         if (animalSelId) recargarEventos(animalSelId);
         onUpdate();
     }
@@ -288,10 +281,10 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             if (isNaN(pesoNum) || pesoNum <= 0 || resultadoInput.includes('-')) { setLoading(false); return alert("❌ ERROR: Peso inválido."); }
         }
     
-        const { error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: datosExtra, costo: Number(costoEvento), establecimiento_id: campoId }]);
-        
-        if (Number(costoEvento) > 0) {
-            await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaEvento.toISOString().split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Sanidad/Manejo)', detalle: `Costo ${tipoEventoInput} - Caravana ${animalSel.caravana}`, monto: Number(costoEvento) });
+        const { data: eventoData, error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: datosExtra, costo: Number(costoEvento), establecimiento_id: campoId }]).select('id').single();
+
+        if (Number(costoEvento) > 0 && eventoData) {
+            await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaEvento.toISOString().split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Sanidad/Manejo)', detalle: `Costo ${tipoEventoInput} - Caravana ${animalSel.caravana}`, monto: Number(costoEvento), evento_id: eventoData.id });
         }
 
         const stringCondicion = nuevasCondiciones.length > 0 ? nuevasCondiciones.join(', ') : 'SANA'; 

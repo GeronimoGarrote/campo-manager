@@ -8,7 +8,7 @@ import VistaHistorial from '../components/Lotes/VistaHistorial';
 import VistaDetalleLote from '../components/Lotes/VistaDetalleLote';
 import VistaDetalleHistorico from '../components/Lotes/VistaDetalleHistorico';
 
-export default function Lotes({ campoId, lotes, animales, potreros, parcelas, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO' }: any) {
+export default function Lotes({ campoId, lotes, animales, potreros, parcelas, establecimientos, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO' }: any) {
     // ESTADOS DE NAVEGACIÓN
     const [loteSel, setLoteSel] = useState<any | null>(null);
     const [mostrandoHistorial, setMostrandoHistorial] = useState(false);
@@ -92,22 +92,23 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, ev
 
     if (loteSel) {
         return (
-            <VistaDetalleLote 
-                loteSel={loteSel} 
-                onVolver={() => setLoteSel(null)} 
-                onLoteModificado={(loteActualizado: any) => setLoteSel(loteActualizado)} 
-                campoId={campoId} 
-                lotes={lotes} 
-                animales={animales} 
-                potreros={potreros} 
-                parcelas={parcelas} 
-                fetchLotes={fetchLotes} 
-                fetchAnimales={fetchAnimales} 
-                fetchEventosLotesGlobal={fetchEventosLotesGlobal} 
-                fetchActividadGlobal={fetchActividadGlobal} 
-                fetchHistoricosGlobal={fetchHistoricosGlobal} 
-                abrirFichaVaca={abrirFichaVaca} 
-                checkNombreDuplicado={checkNombreDuplicado} 
+            <VistaDetalleLote
+                loteSel={loteSel}
+                onVolver={() => setLoteSel(null)}
+                onLoteModificado={(loteActualizado: any) => setLoteSel(loteActualizado)}
+                campoId={campoId}
+                lotes={lotes}
+                animales={animales}
+                potreros={potreros}
+                parcelas={parcelas}
+                establecimientos={establecimientos}
+                fetchLotes={fetchLotes}
+                fetchAnimales={fetchAnimales}
+                fetchEventosLotesGlobal={fetchEventosLotesGlobal}
+                fetchActividadGlobal={fetchActividadGlobal}
+                fetchHistoricosGlobal={fetchHistoricosGlobal}
+                abrirFichaVaca={abrirFichaVaca}
+                checkNombreDuplicado={checkNombreDuplicado}
             />
         );
     }

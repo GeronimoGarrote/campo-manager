@@ -12,9 +12,10 @@ interface ModalTransferenciaProps {
     potreros: any[];
     onSuccess: () => void;
     datosSuscripcion: any;
+    rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO';
 }
 
-export default function ModalTransferencia({ opened, onClose, transfActiva, campoId, animales, potreros, onSuccess, datosSuscripcion }: ModalTransferenciaProps) {
+export default function ModalTransferencia({ opened, onClose, transfActiva, campoId, animales, potreros, onSuccess, datosSuscripcion, rolActual = 'DUENO' }: ModalTransferenciaProps) {
     const [loading, setLoading] = useState(false);
     const [animalesEntrantes, setAnimalesEntrantes] = useState<any[]>([]);
     const [nuevasCaravanasMap, setNuevasCaravanasMap] = useState<Record<string, string>>({});
@@ -103,8 +104,10 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
         <Modal opened={opened} onClose={onClose} title={<Text fw={700} size="lg">Hacienda Entrante por Red</Text>} centered size="xl">
             <Stack>
                 <Alert color="blue" icon={<IconTruckDelivery size={16}/>}>
-                    Estás recibiendo <Text span fw={700}>{transfActiva.animales_ids.length} animal(es)</Text> de <Text span fw={700}>{transfActiva.origen_nombre}</Text>.<br/>
-                    Monto a descontar de caja: <Text span fw={700} c="red">${transfActiva.precio_total?.toLocaleString('es-AR') ?? 0}</Text>
+                    Estás recibiendo <Text span fw={700}>{transfActiva.animales_ids.length} animal(es)</Text> de <Text span fw={700}>{transfActiva.origen_nombre}</Text>.
+                    {rolActual === 'DUENO' && (
+                        <><br/>Monto a descontar de caja: <Text span fw={700} c="red">${transfActiva.precio_total?.toLocaleString('es-AR') ?? 0}</Text></>
+                    )}
                 </Alert>
 
                 {loading && animalesEntrantes.length === 0 ? (
@@ -149,10 +152,14 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
                 )}
 
                 <Select label="Asignar a Potrero" placeholder="Opcional" data={potreros.map(p => ({value: p.id, label: p.nombre}))} value={transfPotreroId} onChange={setTransfPotreroId} clearable />
-                <Group grow mt="md">
-                    <Button color="red" variant="outline" onClick={rechazarTransferencia} disabled={loading}>Rechazar</Button>
-                    <Button color="teal" onClick={aceptarTransferencia} loading={loading}>Aceptar y Pagar</Button>
-                </Group>
+                {rolActual === 'DUENO' ? (
+                    <Group grow mt="md">
+                        <Button color="red" variant="outline" onClick={rechazarTransferencia} disabled={loading}>Rechazar</Button>
+                        <Button color="teal" onClick={aceptarTransferencia} loading={loading}>Aceptar y Pagar</Button>
+                    </Group>
+                ) : (
+                    <Alert color="orange" mt="md">Solo el dueño del campo puede aceptar o rechazar transferencias.</Alert>
+                )}
             </Stack>
         </Modal>
     );

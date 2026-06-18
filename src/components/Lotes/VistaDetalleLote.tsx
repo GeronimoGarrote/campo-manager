@@ -369,7 +369,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                 </Tabs>
             </Paper>
 
-            <ModalVentaLote opened={modalVentaOpen} onClose={closeModalVenta} loteSel={loteSel} animalesEnEsteLote={animalesEnEsteLote} campoId={campoId} statsGraficoLote={statsGraficoLote} onVentaExitosa={() => { fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); }} />
+            <ModalVentaLote opened={modalVentaOpen} onClose={closeModalVenta} loteSel={loteSel} animalesEnEsteLote={animalesEnEsteLote} campoId={campoId} establecimientos={establecimientos} statsGraficoLote={statsGraficoLote} onVentaExitosa={() => { fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); }} />
         </>
     );
 }

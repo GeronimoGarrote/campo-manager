@@ -151,7 +151,8 @@ export default function App() {
     if (!campoId || !session) return;
     localStorage.setItem('campoId', campoId);
     fetchSuscripcion();
-    fetchAnimales(); fetchPotreros(); fetchParcelas(); fetchLotes(); fetchEventosLotesGlobal(); fetchAgenda(); fetchTransferencias();
+    fetchAnimales(); fetchPotreros(); fetchParcelas(); fetchLotes(); fetchEventosLotesGlobal(); fetchAgenda();
+    if (rolActual === 'DUENO') fetchTransferencias();
     if (activeSection === 'inicio' || activeSection === 'actividad') fetchActividadGlobal();
     setMiembros([]);
     setInvitaciones([]);
@@ -512,7 +513,7 @@ export default function App() {
                             </Popover.Target>
                             <Popover.Dropdown>
                                 <Text size="sm" fw={700} mb="xs">Centro de Notificaciones</Text>
-                                {transferencias.length > 0 && (
+                                {rolActual === 'DUENO' && transferencias.length > 0 && (
                                     <Alert color="blue" mb="sm" title="¡Hacienda Entrante!" p="xs">
                                         Tenés {transferencias.length} transferencia(s) pendiente(s).
                                         <Button size="xs" mt="xs" fullWidth color="blue" onClick={() => abrirModalTransferencia(transferencias[0])}>Revisar Ingresos</Button>
@@ -581,7 +582,7 @@ export default function App() {
             <AppShell.Main bg="gray.0">
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} />}
-              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual}/>}
+              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} establecimientos={establecimientos} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual}/>}
               {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} />}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} />}
@@ -610,14 +611,15 @@ export default function App() {
           rolActual={rolActual}
       />
 
-      <ModalTransferencia 
-        opened={modalTransfOpen} 
-        onClose={closeModalTransf} 
+      <ModalTransferencia
+        opened={modalTransfOpen}
+        onClose={closeModalTransf}
         transfActiva={transfActiva}
         campoId={campoId}
         animales={animales}
         potreros={potreros}
         datosSuscripcion={datosSuscripcion}
+        rolActual={rolActual}
         onSuccess={() => { fetchTransferencias(); fetchAnimales(); fetchActividadGlobal(); fetchAgenda(); }}
       />
 
