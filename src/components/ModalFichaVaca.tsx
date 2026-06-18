@@ -491,7 +491,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     if (!animalSel) return null;
 
     return (
-        <Modal opened={opened} onClose={handleCloseModalVaca} title={<Group><Text fw={700} size="lg">Ficha: {animalSel?.caravana} {esActivo ? '' : animalSel?.en_transito ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text> 
+        <Modal opened={opened} onClose={handleCloseModalVaca} title={<Group><Text fw={700} size="lg" ff={animalSel?.caravana_electronica && animalSel.caravana === animalSel.caravana_electronica ? 'monospace' : undefined}>Ficha: {animalSel?.caravana_electronica && animalSel.caravana === animalSel.caravana_electronica ? `…${animalSel.caravana.slice(-4)}` : animalSel?.caravana} {esActivo ? '' : animalSel?.en_transito ? '(EN TRÁNSITO)' : '(ARCHIVO)'}</Text>
         <Group gap="xs" wrap="nowrap">
             {animalSel?.en_transito ? (
                 <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>

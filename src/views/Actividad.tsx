@@ -422,7 +422,7 @@ export default function Actividad({ eventosGlobales }: { eventosGlobales: Evento
                       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
                         <Group gap={6} align="center" wrap="wrap">
                           {ev.animales?.caravana && (
-                            <Text fw={700} size="sm">{ev.animales.caravana}</Text>
+                            <Text fw={700} size="sm" ff={ev.animales.caravana_electronica && ev.animales.caravana === ev.animales.caravana_electronica ? 'monospace' : undefined}>{ev.animales.caravana_electronica && ev.animales.caravana === ev.animales.caravana_electronica ? `…${ev.animales.caravana.slice(-4)}` : ev.animales.caravana}</Text>
                           )}
                           <Badge
                             size="xs"

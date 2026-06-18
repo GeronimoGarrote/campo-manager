@@ -551,7 +551,7 @@ export default function Masivos({
                         {animalesFiltrados.map((animal: any) => (
                             <Table.Tr key={animal.id} bg={selectedIds.includes(animal.id) ? 'violet.1' : undefined}>
                                 <Table.Td><Checkbox checked={selectedIds.includes(animal.id)} onChange={() => toggleSeleccion(animal.id)} /></Table.Td>
-                                <Table.Td><Text fw={700}>{animal.caravana}</Text></Table.Td>
+                                <Table.Td><Text fw={700} ff={animal.caravana_electronica && animal.caravana === animal.caravana_electronica ? 'monospace' : undefined}>{animal.caravana_electronica && animal.caravana === animal.caravana_electronica ? `…${animal.caravana.slice(-4)}` : animal.caravana}</Text></Table.Td>
                                 <Table.Td><Text fw={500}>{animal.categoria}</Text></Table.Td>
                                 <Table.Td>
                                     <Group gap="xs" wrap="nowrap">

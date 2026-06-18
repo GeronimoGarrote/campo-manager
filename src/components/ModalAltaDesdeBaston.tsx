@@ -86,12 +86,7 @@ export default function ModalAltaDesdeBaston({
 
         let caravanaFinal = caravana.trim();
         if (!caravanaFinal) {
-            const regex = /^SC-(\d+)$/i;
-            const nums = animalesActivos
-                .map(a => { const m = String(a.caravana).match(regex); return m ? parseInt(m[1]) : 0; })
-                .filter(n => n > 0);
-            const max = nums.length > 0 ? Math.max(...nums) : 0;
-            caravanaFinal = `SC-${String(max + 1).padStart(3, '0')}`;
+            caravanaFinal = caravanaElectronica.trim();
         } else {
             const yaExiste = animalesActivos.some(
                 a => a.caravana.toLowerCase() === caravanaFinal.toLowerCase()
@@ -216,7 +211,7 @@ export default function ModalAltaDesdeBaston({
                             placeholder="Ej: 1045 — opcional"
                             value={caravana}
                             onChange={(e) => setCaravana(e.target.value)}
-                            description="Podés dejarlo vacío y se asignará un código SC automático"
+                            description="Podés dejarlo vacío y se usará el número del EID como caravana"
                         />
                         <Group grow align="flex-start">
                             <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={categoria} onChange={setCategoria} allowDeselect={false} />
