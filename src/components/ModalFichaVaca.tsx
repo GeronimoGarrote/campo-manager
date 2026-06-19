@@ -451,14 +451,15 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         if (!confirm(msg)) return;
 
         await supabase.from('animales').update({ estado: 'ELIMINADO' }).eq('id', animalSel.id);
-        await supabase.from('eventos').insert({ 
-            animal_id: animalSel.id, 
-            fecha_evento: new Date().toISOString(), 
-            tipo: 'BORRADO', 
-            resultado: 'ELIMINADO DEL SISTEMA', 
-            detalle: 'Ocultado por el usuario (Soft Delete)', 
-            establecimiento_id: campoId 
+        await supabase.from('eventos').insert({
+            animal_id: animalSel.id,
+            fecha_evento: new Date().toISOString(),
+            tipo: 'BORRADO',
+            resultado: 'ELIMINADO DEL SISTEMA',
+            detalle: 'Ocultado por el usuario (Soft Delete)',
+            establecimiento_id: campoId
         });
+        await supabase.from('agenda').delete().eq('animal_id', animalSel.id).eq('completado', false);
         onClose(); onUpdate();
     }
 

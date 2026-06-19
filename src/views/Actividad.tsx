@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
 import { Stack, Box, TextInput, Text, Badge, Group, ScrollArea, Paper, Title, Button, Select } from '@mantine/core';
 import {
   IconSearch, IconDownload, IconVirus, IconBandage, IconHeartbeat, IconPill, IconCut,
@@ -129,6 +130,8 @@ const formatFechaGrupo = (fechaIso: string): string => {
 };
 
 export default function Actividad({ eventosGlobales }: { eventosGlobales: EventoActividad[] }) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
   const [busqueda, setBusqueda] = useState('');
   const [filtrosActivos, setFiltrosActivos] = useState<Set<Categoria>>(new Set());
   const [periodoActivo, setPeriodoActivo] = useState<Periodo | null>('todo');
@@ -275,57 +278,106 @@ export default function Actividad({ eventosGlobales }: { eventosGlobales: Evento
       <Paper withBorder bg="gray.0" p="sm" radius="md">
         <Stack gap="xs">
           {/* Fila 1: búsqueda + chips de período + selects */}
-          <Group gap="xs" wrap="wrap" align="center">
-            <TextInput
-              leftSection={<IconSearch size={16} />}
-              placeholder="Buscar..."
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              style={{ flex: 1, minWidth: 180 }}
-            />
-            <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-              {PERIODOS.map(p => {
-                const active = periodoActivo === p.value;
-                return (
-                  <Badge
-                    key={p.value}
-                    variant={active ? 'filled' : 'outline'}
-                    style={{
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                      backgroundColor: active ? '#228be6' : 'transparent',
-                      color: active ? '#fff' : '#228be6',
-                      borderColor: '#228be6',
-                      userSelect: 'none',
-                    }}
-                    onClick={() => seleccionarPeriodo(p.value)}
-                  >
-                    {p.label}
-                  </Badge>
-                );
-              })}
+          {!!isMobile ? (
+            <Stack gap="xs">
+              <TextInput
+                leftSection={<IconSearch size={16} />}
+                placeholder="Buscar..."
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+              />
+              <Group gap="xs" wrap="wrap">
+                {PERIODOS.map(p => {
+                  const active = periodoActivo === p.value;
+                  return (
+                    <Badge
+                      key={p.value}
+                      variant={active ? 'filled' : 'outline'}
+                      style={{
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        backgroundColor: active ? '#228be6' : 'transparent',
+                        color: active ? '#fff' : '#228be6',
+                        borderColor: '#228be6',
+                        userSelect: 'none',
+                      }}
+                      onClick={() => seleccionarPeriodo(p.value)}
+                    >
+                      {p.label}
+                    </Badge>
+                  );
+                })}
+              </Group>
+              <Group grow>
+                <Select
+                  placeholder="Mes"
+                  data={MESES}
+                  value={filtroMes}
+                  onChange={seleccionarMes}
+                  clearable
+                />
+                <Select
+                  placeholder="Año"
+                  data={ANIOS}
+                  value={filtroAnio}
+                  onChange={seleccionarAnio}
+                  clearable
+                />
+              </Group>
+            </Stack>
+          ) : (
+            <Group gap="xs" wrap="wrap" align="center">
+              <TextInput
+                leftSection={<IconSearch size={16} />}
+                placeholder="Buscar..."
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                style={{ flex: 1, minWidth: 180 }}
+              />
+              <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+                {PERIODOS.map(p => {
+                  const active = periodoActivo === p.value;
+                  return (
+                    <Badge
+                      key={p.value}
+                      variant={active ? 'filled' : 'outline'}
+                      style={{
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        backgroundColor: active ? '#228be6' : 'transparent',
+                        color: active ? '#fff' : '#228be6',
+                        borderColor: '#228be6',
+                        userSelect: 'none',
+                      }}
+                      onClick={() => seleccionarPeriodo(p.value)}
+                    >
+                      {p.label}
+                    </Badge>
+                  );
+                })}
+              </Group>
+              <Select
+                placeholder="Mes"
+                data={MESES}
+                value={filtroMes}
+                onChange={seleccionarMes}
+                clearable
+                style={{ width: 130, flexShrink: 0 }}
+              />
+              <Select
+                placeholder="Año"
+                data={ANIOS}
+                value={filtroAnio}
+                onChange={seleccionarAnio}
+                clearable
+                style={{ width: 100, flexShrink: 0 }}
+              />
             </Group>
-            <Select
-              placeholder="Mes"
-              data={MESES}
-              value={filtroMes}
-              onChange={seleccionarMes}
-              clearable
-              style={{ width: 130, flexShrink: 0 }}
-            />
-            <Select
-              placeholder="Año"
-              data={ANIOS}
-              value={filtroAnio}
-              onChange={seleccionarAnio}
-              clearable
-              style={{ width: 100, flexShrink: 0 }}
-            />
-          </Group>
+          )}
 
           {/* Fila 2: chips de categoría */}
-          <ScrollArea scrollbarSize={4} offsetScrollbars={false}>
-            <Group gap="xs" wrap="nowrap" pb={2}>
+          {!!isMobile ? (
+            <Group gap="xs" wrap="wrap">
               <Text size="sm" fw={600} c="dimmed" style={{ flexShrink: 0 }}>Categorías:</Text>
               {CATEGORIAS.map(cat => {
                 const active = filtrosActivos.has(cat);
@@ -349,7 +401,34 @@ export default function Actividad({ eventosGlobales }: { eventosGlobales: Evento
                 );
               })}
             </Group>
-          </ScrollArea>
+          ) : (
+            <ScrollArea scrollbarSize={4} offsetScrollbars={false}>
+              <Group gap="xs" wrap="nowrap" pb={2}>
+                <Text size="sm" fw={600} c="dimmed" style={{ flexShrink: 0 }}>Categorías:</Text>
+                {CATEGORIAS.map(cat => {
+                  const active = filtrosActivos.has(cat);
+                  const c = CATEGORIA_COLORS[cat];
+                  return (
+                    <Badge
+                      key={cat}
+                      variant={active ? 'filled' : 'outline'}
+                      style={{
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        borderColor: c.border,
+                        backgroundColor: active ? c.border : 'transparent',
+                        color: active ? '#fff' : c.text,
+                        userSelect: 'none',
+                      }}
+                      onClick={() => toggleFiltro(cat)}
+                    >
+                      {cat}
+                    </Badge>
+                  );
+                })}
+              </Group>
+            </ScrollArea>
+          )}
         </Stack>
       </Paper>
 
