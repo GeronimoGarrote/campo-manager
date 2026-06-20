@@ -32,7 +32,7 @@ import ModalGraficoPeso from './components/ModalGraficoPeso';
 
 interface Establecimiento { id: string; nombre: string; renspa?: string; }
 interface Animal { id: string; caravana: string; caravana_electronica?: string; categoria: string; sexo: string; estado: string; condicion: string; origen: string; detalle_baja?: string; detalles?: string; destacado?: boolean; fecha_nacimiento?: string; fecha_ingreso?: string; madre_id?: string; castrado?: boolean; establecimiento_id: string; potrero_id?: string; parcela_id?: string; lote_id?: string; toros_servicio_ids?: string[]; en_transito?: boolean; }
-interface Evento { id: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; costo?: number; datos_extra?: any; animales?: { caravana: string } }
+interface Evento { id: string; created_at: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; costo?: number; datos_extra?: any; animales?: { caravana: string } }
 
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 
@@ -119,7 +119,10 @@ export default function App() {
 
   // Registra el acceso actual (captura logins frescos Y sesiones cacheadas/refreshes)
   function registrarPresencia(userId: string) {
-    supabase.from('user_presencia').upsert({ user_id: userId, ultimo_acceso: new Date().toISOString() });
+    supabase
+      .from('user_presencia')
+      .upsert({ user_id: userId, ultimo_acceso: new Date().toISOString() }, { onConflict: 'user_id' })
+      .then(({ error }) => { if (error) console.error('[registrarPresencia]', error); });
   }
 
   // Sincronización Inicial
@@ -771,8 +774,8 @@ export default function App() {
                                   if (hs < 24) return `Activo hace ${hs} h`;
                                   const dias = Math.floor(hs / 24);
                                   if (dias < 30) return `Activo hace ${dias} día${dias !== 1 ? 's' : ''}`;
-                                  const p = m.ultimo_acceso.split('T')[0].split('-');
-                                  return `Último acceso: ${p[2]}/${p[1]}/${p[0].slice(-2)}`;
+                                  const fecha = new Date(m.ultimo_acceso).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: '2-digit' });
+                                  return `Último acceso: ${fecha}`;
                                 })()
                               : 'Sin acceso registrado'}
                           </Text>
