@@ -117,10 +117,15 @@ export default function App() {
   }, [estaVencido, activeSection]);
   // -------------------------------------
 
+  // Registra el acceso actual (captura logins frescos Y sesiones cacheadas/refreshes)
+  function registrarPresencia(userId: string) {
+    supabase.from('user_presencia').upsert({ user_id: userId, ultimo_acceso: new Date().toISOString() });
+  }
+
   // Sincronización Inicial
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if (session) { loadCampos(); } });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); if (session) { loadCampos(); } else { setEstablecimientos([]); setCampoId(null); } });
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if (session) { loadCampos(); registrarPresencia(session.user.id); } });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); if (session) { loadCampos(); registrarPresencia(session.user.id); } else { setEstablecimientos([]); setCampoId(null); } });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -756,6 +761,21 @@ export default function App() {
                           <Badge size="xs" color={m.rol === 'VETERINARIO' ? 'violet' : 'orange'} mt={2}>
                             {m.rol === 'VETERINARIO' ? 'Veterinario' : 'Peón'}
                           </Badge>
+                          <Text size="xs" c="dimmed" mt={2}>
+                            {m.ultimo_acceso
+                              ? (() => {
+                                  const diff = Date.now() - new Date(m.ultimo_acceso).getTime();
+                                  const mins = Math.floor(diff / 60000);
+                                  if (mins < 60) return `Activo hace ${mins < 2 ? 'un momento' : `${mins} min`}`;
+                                  const hs = Math.floor(mins / 60);
+                                  if (hs < 24) return `Activo hace ${hs} h`;
+                                  const dias = Math.floor(hs / 24);
+                                  if (dias < 30) return `Activo hace ${dias} día${dias !== 1 ? 's' : ''}`;
+                                  const p = m.ultimo_acceso.split('T')[0].split('-');
+                                  return `Último acceso: ${p[2]}/${p[1]}/${p[0].slice(-2)}`;
+                                })()
+                              : 'Sin acceso registrado'}
+                          </Text>
                         </div>
                         <ActionIcon variant="subtle" color="red" title="Remover miembro" onClick={() => removerMiembro(m.user_id)}>
                           <IconUserMinus size={16}/>
