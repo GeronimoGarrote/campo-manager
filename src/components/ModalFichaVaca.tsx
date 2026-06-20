@@ -87,7 +87,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         if (opened && animalSel) {
             cargarDatosFicha();
         }
-    }, [opened, animalSelId]);
+    }, [opened, animalSelId, animalSel?.caravana]);
 
     useEffect(() => { setResultadoInput(''); setTorosIdsInput([]); setNuevoTerneroCaravana(''); setPesoNacimiento(''); setCostoEvento(''); setAdpvCalculado(null); setMesesGestacion(null); }, [tipoEventoInput]);
     
@@ -223,20 +223,25 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             }
         } 
         else if (tipoEventoInput === 'PARTO') {
-          if (!nuevoTerneroCaravana) { setLoading(false); return alert("Falta caravana ternero."); }
-          const yaExiste = animales.some(a => a.caravana.toLowerCase() === nuevoTerneroCaravana.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
-          if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana."); }
+          const scRegex = /^SC-(\d+)$/i;
+          const scNums = animales.map(a => { const m = String(a.caravana).match(scRegex); return m ? parseInt(m[1]) : 0; }).filter(v => v > 0);
+          const scMax = scNums.length > 0 ? Math.max(...scNums) : 0;
+          const caravanaFinalTernero = nuevoTerneroCaravana.trim() || `SC-${String(scMax + 1).padStart(3, '0')}`;
+          if (nuevoTerneroCaravana.trim()) {
+            const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravanaFinalTernero.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
+            if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana."); }
+          }
           if (pesoNacimiento) { const pesoNacNum = parseFloat(pesoNacimiento.replace(/[^\d.]/g, '')); if (isNaN(pesoNacNum) || pesoNacNum <= 0 || pesoNacimiento.includes('-')) { setLoading(false); return alert("❌ ERROR: Peso inválido."); } }
-          
+
           const fechaParto = fechaEvento.toISOString().split('T')[0];
-          const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: nuevoTerneroCaravana, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, potrero_id: animalSel.potrero_id, parcela_id: animalSel.parcela_id, lote_id: animalSel.lote_id, en_transito: false }]).select().single();
+          const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: caravanaFinalTernero, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, potrero_id: animalSel.potrero_id, parcela_id: animalSel.parcela_id, lote_id: animalSel.lote_id, en_transito: false }]).select().single();
           if (err) { setLoading(false); return alert("Error: " + err.message); }
           if (pesoNacimiento) await supabase.from('eventos').insert({ animal_id: nuevoTernero.id, tipo: 'PESAJE', resultado: `${pesoNacimiento}kg`, detalle: 'Peso al nacer', fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
-          
-          nuevoEstado = 'EN LACTANCIA'; 
-          fechaServicioAActualizar = null; 
+
+          nuevoEstado = 'EN LACTANCIA';
+          fechaServicioAActualizar = null;
           if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
-          resultadoFinal = `Nació ${nuevoTerneroCaravana} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: nuevoTerneroCaravana, ternero_sexo: nuevoTerneroSexo }; 
+          resultadoFinal = `Nació ${caravanaFinalTernero} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: caravanaFinalTernero, ternero_sexo: nuevoTerneroSexo };
           if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo, estado: 'LACTANTE' }]);
         }
         else if (tipoEventoInput === 'DESTETE') {
@@ -526,7 +531,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                        )}
                
                        {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}
-                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Nueva ID" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} required/><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
+                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Ej: 1045 — opcional" description="Vacío = SC-xxx automático" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} /><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
                        {!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO', 'DESTETE'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}
                        <TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>
                        {adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}
