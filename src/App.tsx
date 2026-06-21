@@ -1,7 +1,7 @@
 import { useEffect, useState} from 'react';
-import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover, Divider, Paper } from '@mantine/core';
+import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover, Divider, Paper, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus } from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus, IconDownload } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { Notifications, notifications } from '@mantine/notifications';
@@ -27,6 +27,7 @@ import ModalAltaAnimal from './components/ModalAltaAnimal';
 import OnboardingTour from './components/OnboardingTour';
 import HelpDrawer from './components/HelpDrawer';
 import InstallPrompt from './components/InstallPrompt';
+import { useInstallPrompt } from './hooks/useInstallPrompt';
 import ModalFichaVaca from './components/ModalFichaVaca';
 import ModalTransferencia from './components/ModalTransferencia';
 import ModalGraficoPeso from './components/ModalGraficoPeso';
@@ -82,6 +83,8 @@ export default function App() {
   // Onboarding y Ayuda
   const [tourOpened, { open: openTour, close: closeTour }] = useDisclosure(false);
   const [helpOpened, { open: openHelp, close: closeHelp }] = useDisclosure(false);
+  const [iosInstallOpen, setIosInstallOpen] = useState(false);
+  const { canInstall, isIOS: isIOSDevice, instalar } = useInstallPrompt();
   const [nuevoCampoNombre, setNuevoCampoNombre] = useState('');
   const [nuevoCampoRenspa, setNuevoCampoRenspa] = useState('');
 
@@ -508,8 +511,25 @@ export default function App() {
                     )}
                 </Group>
 
-                {/* GRUPO DERECHO (Ayuda + Notificaciones) */}
+                {/* GRUPO DERECHO (Instalar + Ayuda + Notificaciones) */}
                 <Group gap="xs" style={{ flexShrink: 0 }}>
+                    {canInstall && (
+                      <Tooltip label="Instalar app">
+                        <ActionIcon
+                          hiddenFrom="sm"
+                          variant="light"
+                          color="teal"
+                          size="lg"
+                          radius="xl"
+                          onClick={async () => {
+                            const result = await instalar();
+                            if (result === 'ios') setIosInstallOpen(true);
+                          }}
+                        >
+                          <IconDownload size={22} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
                     <ActionIcon variant="light" color="blue" size="lg" radius="xl" onClick={openHelp} title="Ayuda">
                       <IconQuestionMark size={22} />
                     </ActionIcon>
@@ -857,6 +877,19 @@ export default function App() {
         onAbrirTour={openTour}
       />
       <InstallPrompt />
+
+      <Modal
+        opened={iosInstallOpen}
+        onClose={() => setIosInstallOpen(false)}
+        title={isIOSDevice ? 'Aprovechá al máximo RodeoControl desde la app' : 'Instalar RodeoControl'}
+        centered
+        size="sm"
+      >
+        <Text size="sm">
+          Tocá Compartir (□↑) → <strong>"Agregar a pantalla de inicio"</strong>.
+          Quedará como una app más en tu teléfono, sin necesidad de abrir el navegador.
+        </Text>
+      </Modal>
 
     </MantineProvider>
   );
