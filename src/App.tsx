@@ -26,6 +26,7 @@ import AceptarInvitacion from './views/AceptarInvitacion';
 import ModalAltaAnimal from './components/ModalAltaAnimal';
 import OnboardingTour from './components/OnboardingTour';
 import HelpDrawer from './components/HelpDrawer';
+import InstallPrompt from './components/InstallPrompt';
 import ModalFichaVaca from './components/ModalFichaVaca';
 import ModalTransferencia from './components/ModalTransferencia';
 import ModalGraficoPeso from './components/ModalGraficoPeso';
@@ -855,6 +856,7 @@ export default function App() {
         activeSection={activeSection}
         onAbrirTour={openTour}
       />
+      <InstallPrompt />
 
     </MantineProvider>
   );
