@@ -67,7 +67,7 @@ const PASOS: Paso[] = [
     icono: <IconCircleCheck size={40} />,
     color: 'teal',
     titulo: '¡Ya estás listo!',
-    descripcion: '¿Querés arrancar ahora? Cargá tu primer animal y comenzá a gestionar tu hacienda desde hoy mismo.',
+    descripcion: 'Te llevamos a Hacienda Activa para que cargues tu primer animal. Ahí podés elegir cargarlo de a uno, o un grupo entero de una sola vez si todavía no tenés caravanas.',
   },
 ];
 

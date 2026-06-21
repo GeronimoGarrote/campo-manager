@@ -1,10 +1,11 @@
-import { Drawer, Text, Title, List, ThemeIcon, Stack, Divider, Anchor } from '@mantine/core';
-import { IconCheck } from '@tabler/icons-react';
+import { Drawer, Text, Title, List, ThemeIcon, Stack, Divider, Anchor, Button } from '@mantine/core';
+import { IconCheck, IconRefresh } from '@tabler/icons-react';
 
 export interface HelpDrawerProps {
   opened: boolean;
   onClose: () => void;
   activeSection: string;
+  onAbrirTour: () => void;
 }
 
 interface SeccionAyuda {
@@ -123,7 +124,7 @@ const AYUDA_DEFAULT: SeccionAyuda = {
   ],
 };
 
-export default function HelpDrawer({ opened, onClose, activeSection }: HelpDrawerProps) {
+export default function HelpDrawer({ opened, onClose, activeSection, onAbrirTour }: HelpDrawerProps) {
   const seccion = AYUDA[activeSection] ?? AYUDA_DEFAULT;
 
   return (
@@ -157,6 +158,16 @@ export default function HelpDrawer({ opened, onClose, activeSection }: HelpDrawe
             <List.Item key={i}>{item}</List.Item>
           ))}
         </List>
+
+        <Button
+          variant="light"
+          color="blue"
+          fullWidth
+          leftSection={<IconRefresh size={16}/>}
+          onClick={() => { onClose(); onAbrirTour(); }}
+        >
+          Ver el tutorial de bienvenida otra vez
+        </Button>
 
         <Divider mt="lg" />
 

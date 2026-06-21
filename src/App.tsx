@@ -846,13 +846,14 @@ export default function App() {
       <OnboardingTour
         opened={tourOpened}
         onClose={closeTour}
-        onCargarPrimerAnimal={openModalAlta}
+        onCargarPrimerAnimal={() => { setActiveSection('hacienda'); openModalAlta(); }}
         userId={session?.user.id ?? ''}
       />
       <HelpDrawer
         opened={helpOpened}
         onClose={closeHelp}
         activeSection={activeSection}
+        onAbrirTour={openTour}
       />
 
     </MantineProvider>
