@@ -6,7 +6,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 const SESSION_KEY = 'rc_install_dismissed_session';
 
-export default function InstallPrompt() {
+export default function SugerenciaDescarga() {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const { isStandalone, isIOS, canInstall, instalar } = useInstallPrompt();
   const [dismissed, setDismissed] = useState(() => !!sessionStorage.getItem(SESSION_KEY));
@@ -51,7 +51,7 @@ export default function InstallPrompt() {
             ) : (
               <>
                 <Text size="sm" fw={700} c="white" lh={1.3}>
-                  ¿Buscando el link en WhatsApp otra vez?
+                  Descargalo y aprovechá RodeoControl al máximo
                 </Text>
                 <Text size="xs" c="white" style={{ opacity: 0.85 }} lh={1.3}>
                   Instalá RodeoControl y entrá con un toque, directo desde tu pantalla de inicio.

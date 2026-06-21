@@ -26,7 +26,7 @@ import AceptarInvitacion from './views/AceptarInvitacion';
 import ModalAltaAnimal from './components/ModalAltaAnimal';
 import OnboardingTour from './components/OnboardingTour';
 import HelpDrawer from './components/HelpDrawer';
-import InstallPrompt from './components/InstallPrompt';
+import SugerenciaDescarga from './components/SugerenciaDescarga';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
 import ModalFichaVaca from './components/ModalFichaVaca';
 import ModalTransferencia from './components/ModalTransferencia';
@@ -876,7 +876,7 @@ export default function App() {
         activeSection={activeSection}
         onAbrirTour={openTour}
       />
-      <InstallPrompt />
+      <SugerenciaDescarga />
 
       <Modal
         opened={iosInstallOpen}

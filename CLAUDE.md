@@ -44,6 +44,7 @@ src/
 │   ├── AllflexScanner.tsx
 │   ├── OnboardingTour.tsx     # Tour de bienvenida para usuarios nuevos
 │   ├── HelpDrawer.tsx         # Drawer de ayuda contextual por sección
+│   ├── SugerenciaDescarga.tsx # Banner teal (mobile) para instalar la PWA
 │   ├── Hacienda/
 │   │   └── ModalImportarExcel.tsx
 │   └── Lotes/
@@ -54,7 +55,8 @@ src/
 │       └── ModalVentaLote.tsx
 └── hooks/
     ├── useLectorAllflex.ts  # Lector RFID por HID (teclado)
-    └── useWebSerialAllflex.ts # Lector RFID por Web Serial
+    ├── useWebSerialAllflex.ts # Lector RFID por Web Serial
+    └── useInstallPrompt.ts  # Detecta disponibilidad de instalación PWA (Android/iOS)
 ```
 
 ---
