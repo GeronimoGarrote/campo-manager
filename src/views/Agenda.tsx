@@ -6,7 +6,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconSearch, IconPlus, IconTrash, IconClock, IconCheck, IconChevronDown, IconTag } from '@tabler/icons-react';
+import { IconSearch, IconPlus, IconTrash, IconClock, IconCheck, IconChevronDown, IconTag, IconTractor, IconPackage } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => {
@@ -36,7 +36,7 @@ const getOffsetDiasIso = (n: number) => {
 
 type FiltroActivo = 'todas' | 'vencidas' | 'hoy' | 'semana';
 
-export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFichaVaca }: any) {
+export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFichaVaca, potreros, lotes, onAbrirPotrero, onAbrirLote }: any) {
     const isMobile = useMediaQuery('(max-width: 768px)');
 
     const [busqueda, setBusqueda] = useState('');
@@ -49,6 +49,9 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
     const [nuevaTareaDesc, setNuevaTareaDesc] = useState('');
     const [nuevaTareaFecha, setNuevaTareaFecha] = useState<Date | null>(new Date());
     const [nuevaTareaAnimalId, setNuevaTareaAnimalId] = useState<string | null>(null);
+    const [vinculoTipo, setVinculoTipo] = useState<'ninguno' | 'animal' | 'potrero' | 'lote'>('ninguno');
+    const [nuevaTareaPotreroId, setNuevaTareaPotreroId] = useState<string | null>(null);
+    const [nuevaTareaLoteId, setNuevaTareaLoteId] = useState<string | null>(null);
 
     const hoyIso = getHoyIso();
     const enSieteDiasIso = getOffsetDiasIso(7);
@@ -94,13 +97,18 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
             fecha_programada: nuevaTareaFecha.toISOString().split('T')[0],
             tipo: 'MANUAL',
         };
-        if (nuevaTareaAnimalId) payload.animal_id = nuevaTareaAnimalId;
+        if (vinculoTipo === 'animal' && nuevaTareaAnimalId) payload.animal_id = nuevaTareaAnimalId;
+        if (vinculoTipo === 'potrero' && nuevaTareaPotreroId) payload.potrero_id = nuevaTareaPotreroId;
+        if (vinculoTipo === 'lote' && nuevaTareaLoteId) payload.lote_id = nuevaTareaLoteId;
         const { error } = await supabase.from('agenda').insert([payload]);
         setLoading(false);
         if (!error) {
             setNuevaTareaTitulo('');
             setNuevaTareaDesc('');
             setNuevaTareaAnimalId(null);
+            setNuevaTareaPotreroId(null);
+            setNuevaTareaLoteId(null);
+            setVinculoTipo('ninguno');
             closeModal();
             fetchAgenda();
         }
@@ -148,6 +156,38 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
         );
     }
 
+    function PotreroBadge({ potreroId }: { potreroId: string }) {
+        const potrero = (potreros || []).find((p: any) => p.id === potreroId);
+        if (!potrero) return null;
+        return (
+            <Badge
+                size="xs" variant="light" color="lime"
+                leftSection={<IconTractor size={10} />}
+                style={{ cursor: 'pointer' }}
+                mt={4}
+                onClick={(e) => { e.stopPropagation(); onAbrirPotrero && onAbrirPotrero(potreroId); }}
+            >
+                {potrero.nombre}
+            </Badge>
+        );
+    }
+
+    function LoteBadge({ loteId }: { loteId: string }) {
+        const lote = (lotes || []).find((l: any) => l.id === loteId);
+        if (!lote) return null;
+        return (
+            <Badge
+                size="xs" variant="light" color="grape"
+                leftSection={<IconPackage size={10} />}
+                style={{ cursor: 'pointer' }}
+                mt={4}
+                onClick={(e) => { e.stopPropagation(); onAbrirLote && onAbrirLote(loteId); }}
+            >
+                {lote.nombre}
+            </Badge>
+        );
+    }
+
     function TareaCard({ tarea, mostrarPostergar }: { tarea: any; mostrarPostergar?: boolean }) {
         const isParto = tarea.tipo === 'PARTO_ESTIMADO';
         const isVencida = tarea.fecha_programada < hoyIso;
@@ -176,6 +216,8 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
                         <Text fw={700} size="md" c={isParto ? 'red.8' : 'dark'}>{tarea.titulo}</Text>
                         {tarea.descripcion && <Text size="sm" c="dimmed" mt={4}>{tarea.descripcion}</Text>}
                         {tarea.animal_id && <AnimalBadge animalId={tarea.animal_id} />}
+                        {tarea.potrero_id && <PotreroBadge potreroId={tarea.potrero_id} />}
+                        {tarea.lote_id && <LoteBadge loteId={tarea.lote_id} />}
                     </div>
                     <Group gap={4} align="flex-start" wrap="nowrap">
                         {mostrarPostergar && (
@@ -343,6 +385,8 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
                                                 Programada para: {formatDate(tarea.fecha_programada)}
                                             </Text>
                                             {tarea.animal_id && <AnimalBadge animalId={tarea.animal_id} />}
+                                            {tarea.potrero_id && <PotreroBadge potreroId={tarea.potrero_id} />}
+                                            {tarea.lote_id && <LoteBadge loteId={tarea.lote_id} />}
                                         </div>
                                         <ActionIcon variant="subtle" color="red" onClick={() => borrarTareaAgenda(tarea.id)}>
                                             <IconTrash size={18} />
@@ -358,7 +402,7 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
             {/* Modal Nueva Tarea */}
             <Modal
                 opened={modalOpen}
-                onClose={() => { closeModal(); setNuevaTareaAnimalId(null); }}
+                onClose={() => { closeModal(); setNuevaTareaAnimalId(null); setNuevaTareaPotreroId(null); setNuevaTareaLoteId(null); setVinculoTipo('ninguno'); }}
                 title={<Text fw={700} size="lg">Nueva Tarea Programada</Text>}
                 centered
             >
@@ -378,17 +422,59 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
                         required
                     />
                     <Select
-                        label="Vincular a un animal (opcional)"
-                        placeholder="Buscá por caravana..."
-                        data={(animales || [])
-                            .filter((a: any) => !['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(a.estado))
-                            .map((a: any) => ({ value: a.id, label: a.caravana }))}
-                        value={nuevaTareaAnimalId}
-                        onChange={setNuevaTareaAnimalId}
-                        searchable
-                        clearable
-                        nothingFoundMessage="No se encontró ningún animal"
+                        label="Vincular a"
+                        data={[
+                            { value: 'ninguno', label: 'Ninguno' },
+                            { value: 'animal', label: 'Animal' },
+                            { value: 'potrero', label: 'Potrero' },
+                            { value: 'lote', label: 'Lote' },
+                        ]}
+                        value={vinculoTipo}
+                        onChange={(v) => {
+                            setVinculoTipo((v || 'ninguno') as any);
+                            setNuevaTareaAnimalId(null);
+                            setNuevaTareaPotreroId(null);
+                            setNuevaTareaLoteId(null);
+                        }}
                     />
+                    {vinculoTipo === 'animal' && (
+                        <Select
+                            label="Animal"
+                            placeholder="Buscá por caravana..."
+                            data={(animales || [])
+                                .filter((a: any) => !['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(a.estado))
+                                .map((a: any) => ({ value: a.id, label: a.caravana }))}
+                            value={nuevaTareaAnimalId}
+                            onChange={setNuevaTareaAnimalId}
+                            searchable
+                            clearable
+                            nothingFoundMessage="No se encontró ningún animal"
+                        />
+                    )}
+                    {vinculoTipo === 'potrero' && (
+                        <Select
+                            label="Potrero"
+                            placeholder="Seleccioná un potrero..."
+                            data={(potreros || []).map((p: any) => ({ value: p.id, label: p.nombre }))}
+                            value={nuevaTareaPotreroId}
+                            onChange={setNuevaTareaPotreroId}
+                            searchable
+                            clearable
+                            nothingFoundMessage="No se encontró ningún potrero"
+                        />
+                    )}
+                    {vinculoTipo === 'lote' && (
+                        <Select
+                            label="Lote"
+                            placeholder="Seleccioná un lote..."
+                            data={(lotes || []).map((l: any) => ({ value: l.id, label: l.nombre }))}
+                            value={nuevaTareaLoteId}
+                            onChange={setNuevaTareaLoteId}
+                            searchable
+                            clearable
+                            nothingFoundMessage="No se encontró ningún lote"
+                        />
+                    )}
                     <Textarea
                         label="Detalle (Opcional)"
                         placeholder="Escribir observaciones..."

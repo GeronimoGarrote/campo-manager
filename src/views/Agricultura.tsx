@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Group, Title, Badge, Button, SimpleGrid, Card, Paper, Text, ActionIcon, Tabs, TextInput, Select, Table, Modal, Stack, Center, ThemeIcon } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus, IconTractor, IconEdit, IconArrowLeft, IconLeaf, IconMapPin, IconList, IconCurrencyDollar, IconCheck, IconTrash, IconLock } from '@tabler/icons-react';
@@ -10,7 +10,7 @@ const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffs
 export default function Agricultura({
     campoId, potreros, parcelas, animales,
     fetchPotreros, fetchParcelas, abrirFichaVaca,
-    rolActual = 'DUENO'
+    rolActual = 'DUENO', potreroIdAAbrir, onPotreroAbierto
 }: any) {
     const [loading, setLoading] = useState(false);
     
@@ -33,6 +33,13 @@ export default function Agricultura({
     const [nuevaParcelaHas, setNuevaParcelaHas] = useState<string | number>('');
 
     const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO');
+
+    useEffect(() => {
+        if (!potreroIdAAbrir) return;
+        const potrero = potreros.find((p: any) => p.id === potreroIdAAbrir);
+        if (potrero) abrirFicha(potrero);
+        onPotreroAbierto?.();
+    }, [potreroIdAAbrir]);
 
     // --- FUNCIONES POTREROS ---
     async function guardarPotrero() { 

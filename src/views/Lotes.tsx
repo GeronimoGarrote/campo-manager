@@ -8,7 +8,7 @@ import VistaHistorial from '../components/Lotes/VistaHistorial';
 import VistaDetalleLote from '../components/Lotes/VistaDetalleLote';
 import VistaDetalleHistorico from '../components/Lotes/VistaDetalleHistorico';
 
-export default function Lotes({ campoId, lotes, animales, potreros, parcelas, establecimientos, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO' }: any) {
+export default function Lotes({ campoId, lotes, animales, potreros, parcelas, establecimientos, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO', loteIdAAbrir, onLoteAbierto }: any) {
     // ESTADOS DE NAVEGACIÓN
     const [loteSel, setLoteSel] = useState<any | null>(null);
     const [mostrandoHistorial, setMostrandoHistorial] = useState(false);
@@ -23,6 +23,13 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, es
     useEffect(() => {
         if (campoId) fetchHistoricosGlobal();
     }, [campoId]);
+
+    useEffect(() => {
+        if (!loteIdAAbrir) return;
+        const lote = lotes.find((l: any) => l.id === loteIdAAbrir);
+        if (lote) setLoteSel(lote);
+        onLoteAbierto?.();
+    }, [loteIdAAbrir]);
 
     async function fetchHistoricosGlobal() {
         const { data } = await supabase.from('lotes_historicos').select('*').eq('establecimiento_id', campoId).order('fecha_cierre', { ascending: false });
