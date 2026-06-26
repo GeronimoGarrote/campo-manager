@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Group, Title, Badge, Button, SimpleGrid, Paper, Text, ActionIcon, Tabs, MultiSelect, Table, TextInput, Select, Stack, Tooltip, ThemeIcon, Alert, Divider } from '@mantine/core';
+import { Group, Title, Badge, Button, SimpleGrid, Paper, Text, ActionIcon, Tabs, MultiSelect, Table, TextInput, Select, Stack, Tooltip, ThemeIcon, Alert, Divider, Modal } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle, IconCalendar, IconArchive, IconPigMoney } from '@tabler/icons-react';
+import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle, IconCalendar, IconArchive, IconPigMoney, IconPlaylistAdd, IconMapPin } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../../supabase';
 import ModalVentaLote from './ModalVentaLote';
@@ -30,14 +30,17 @@ const CustomTooltipMulti = ({ active, payload }: any) => {
     return null;
 };
 
-export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, campoId, lotes, animales, potreros, parcelas, establecimientos, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, fetchHistoricosGlobal, abrirFichaVaca, checkNombreDuplicado }: any) {
+export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, campoId, lotes, animales, potreros, parcelas, establecimientos, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, fetchHistoricosGlobal, abrirFichaVaca, checkNombreDuplicado, onIrAMasivosConLote }: any) {
     const [loading, setLoading] = useState(false);
     const [modalVentaOpen, { open: openModalVenta, close: closeModalVenta }] = useDisclosure(false);
+    const [batchModalOpen, { open: openBatchModal, close: closeBatchModal }] = useDisclosure(false);
     const [eventosLoteFicha, setEventosLoteFicha] = useState<any[]>([]);
+    const [eventosAnimalesLote, setEventosAnimalesLote] = useState<any[]>([]);
+    const [batchModalData, setBatchModalData] = useState<{ tipo: string; fecha: string; count: number; animalesDetalle: { caravana: string; categoria: string }[] }>({ tipo: '', fecha: '', count: 0, animalesDetalle: [] });
     const [datosGraficoLote, setDatosGraficoLote] = useState<any[]>([]);
     const [lineasAnimalesLote, setLineasAnimalesLote] = useState<string[]>([]);
     const [loadingGraficoLote, setLoadingGraficoLote] = useState(false);
-    const [statsGraficoLote, setStatsGraficoLote] = useState({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); 
+    const [statsGraficoLote, setStatsGraficoLote] = useState({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' });
     const [isLoteEstimated, setIsLoteEstimated] = useState(false);
     const [filtroTiempo, setFiltroTiempo] = useState<string>('TODOS');
     const [fechaDesde, setFechaDesde] = useState<Date | null>(null);
@@ -52,18 +55,116 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
     const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && a.estado !== 'EN TRÁNSITO');
     const animalesEnEsteLote = haciendaActiva.filter((a: any) => a.lote_id === loteSel.id);
 
+    // Calcular ubicación predominante de los animales del lote
+    const ubicacionLote = (() => {
+        if (animalesEnEsteLote.length === 0) return null;
+        const potreroIds = [...new Set(animalesEnEsteLote.map((a: any) => a.potrero_id).filter(Boolean))] as string[];
+        if (potreroIds.length === 0) return null;
+        if (potreroIds.length === 1) {
+            const p = potreros.find((p: any) => p.id === potreroIds[0]);
+            return p ? p.nombre : null;
+        }
+        return 'Varios potreros';
+    })();
+
     useEffect(() => {
         if (!loteSel) return;
-        setEventosLoteFicha([]); setDatosGraficoLote([]); setLineasAnimalesLote([]); setAgregarAlLoteIds([]); setIsLoteEstimated(false);
+        setEventosLoteFicha([]); setEventosAnimalesLote([]); setDatosGraficoLote([]); setLineasAnimalesLote([]); setAgregarAlLoteIds([]); setIsLoteEstimated(false);
         setStatsGraficoLote({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setFiltroTiempo('TODOS'); setFechaDesde(null); setFechaHasta(null);
-        
+
         async function loadFicha() {
+            // Fetch 1: eventos propios del lote (lotes_eventos)
             const { data: evData } = await supabase.from('lotes_eventos').select('*').eq('lote_id', loteSel.id).order('fecha', { ascending: false }).order('created_at', { ascending: false });
             if (evData) setEventosLoteFicha(evData);
+
+            // Fetch 2: eventos de animales vinculados a este lote (por lote_id_en_momento o como destino de CAMBIO_LOTE)
+            const [{ data: evPorMomento }, { data: evCambioDestino }] = await Promise.all([
+                supabase.from('eventos').select('*').eq('establecimiento_id', campoId).filter('datos_extra->>lote_id_en_momento', 'eq', loteSel.id),
+                supabase.from('eventos').select('*').eq('establecimiento_id', campoId).eq('tipo', 'CAMBIO_LOTE').filter('datos_extra->>lote_id', 'eq', loteSel.id),
+            ]);
+
+            // Unir y deduplicar por id
+            const idsVistas = new Set<string>();
+            const eventosAnimales: any[] = [];
+            for (const ev of [...(evPorMomento || []), ...(evCambioDestino || [])]) {
+                if (!idsVistas.has(ev.id)) {
+                    idsVistas.add(ev.id);
+                    eventosAnimales.push(ev);
+                }
+            }
+            setEventosAnimalesLote(eventosAnimales);
+
             generarGraficoLote(loteSel.id, null, null);
         }
         loadFicha();
     }, [loteSel.id]);
+
+    // Construir historial combinado (lotes_eventos + eventos de animales agrupados por batch_id)
+    const historialCombinado = (() => {
+        // Procesar eventos de animales: agrupar por batch_id
+        const grupos: Record<string, any[]> = {};
+        const sinBatch: any[] = [];
+        for (const ev of eventosAnimalesLote) {
+            const batchId = ev.datos_extra?.batch_id;
+            if (batchId) {
+                if (!grupos[batchId]) grupos[batchId] = [];
+                grupos[batchId].push(ev);
+            } else {
+                sinBatch.push(ev);
+            }
+        }
+
+        const items: any[] = [];
+
+        // lotes_eventos (sin cambios)
+        for (const ev of eventosLoteFicha) {
+            items.push({ _tipo: 'lote_evento', _fechaSort: ev.fecha, _createdAt: ev.created_at || '', ...ev });
+        }
+
+        // eventos individuales (sin batch_id)
+        for (const ev of sinBatch) {
+            const animal = animales.find((a: any) => a.id === ev.animal_id);
+            items.push({
+                _tipo: 'evento_individual',
+                _fechaSort: ev.fecha_evento.split('T')[0],
+                _createdAt: ev.created_at || '',
+                id: ev.id,
+                fecha: ev.fecha_evento,
+                tipo: ev.tipo,
+                detalle: ev.detalle,
+                resultado: ev.resultado,
+                costo: ev.costo,
+                caravana: animal?.caravana || '—',
+            });
+        }
+
+        // eventos en batch
+        for (const [batchId, evs] of Object.entries(grupos)) {
+            const primer = evs[0];
+            const animalesDetalle = evs.map((ev: any) => {
+                const a = animales.find((an: any) => an.id === ev.animal_id);
+                return { caravana: a?.caravana || '—', categoria: a?.categoria || '—' };
+            });
+            items.push({
+                _tipo: 'evento_batch',
+                _fechaSort: primer.fecha_evento.split('T')[0],
+                _createdAt: primer.created_at || '',
+                id: batchId,
+                fecha: primer.fecha_evento,
+                tipo: primer.tipo,
+                detalle: primer.detalle,
+                costo: evs.reduce((sum: number, ev: any) => sum + (ev.costo || 0), 0),
+                count: evs.length,
+                animalesDetalle,
+            });
+        }
+
+        // Ordenar por fecha desc; mismo día → created_at desc
+        return items.sort((a, b) => {
+            if (a._fechaSort !== b._fechaSort) return b._fechaSort.localeCompare(a._fechaSort);
+            return b._createdAt.localeCompare(a._createdAt);
+        });
+    })();
 
     const getUbicacionCompleta = (potrero_id?: string, parcela_id?: string) => {
         if(!potrero_id) return <Text size="xs" c="dimmed">-</Text>;
@@ -76,7 +177,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         const nuevoNombre = prompt("Nuevo nombre del Lote:", nombreActual);
         if (nuevoNombre === null || nuevoNombre === nombreActual) return;
         if (await checkNombreDuplicado(nuevoNombre, id)) { alert("Ya existe un lote con ese nombre."); return; }
-        await supabase.from('lotes').update({ nombre: nuevoNombre }).eq('id', id); 
+        await supabase.from('lotes').update({ nombre: nuevoNombre }).eq('id', id);
         fetchLotes(); onLoteModificado({...loteSel, nombre: nuevoNombre});
     }
 
@@ -100,7 +201,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         const ids = animalesLote.map((a: any) => a.id);
         const { data: pesajes } = await supabase.from('eventos').select('*, animales!inner(caravana)').in('animal_id', ids).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: true });
         if (!pesajes || pesajes.length === 0) { setDatosGraficoLote([]); setLineasAnimalesLote([]); setStatsGraficoLote({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setIsLoteEstimated(false); setLoadingGraficoLote(false); return; }
-        
+
         let pesajesFiltrados = pesajes;
         if (fDesde) { const desdeIso = fDesde.toISOString().split('T')[0]; pesajesFiltrados = pesajesFiltrados.filter((p: any) => p.fecha_evento >= desdeIso); }
         if (fHasta) { const hastaIso = fHasta.toISOString().split('T')[0]; pesajesFiltrados = pesajesFiltrados.filter((p: any) => p.fecha_evento <= hastaIso + 'T23:59:59'); }
@@ -113,7 +214,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         pesajesFiltrados.forEach((p: any) => {
             const d = new Date(p.fecha_evento.split('T')[0] + 'T12:00:00'); const w = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const c = (p.animales as any)?.caravana || 'Desc';
             if (!isNaN(w)) {
-                if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d, adpv: 0 }; } 
+                if (!animalStats[c]) { animalStats[c] = { firstW: w, firstD: d, lastW: w, lastD: d, adpv: 0 }; }
                 else { if (d < animalStats[c].firstD) { animalStats[c].firstW = w; animalStats[c].firstD = d; } if (d > animalStats[c].lastD) { animalStats[c].lastW = w; animalStats[c].lastD = d; } }
             }
         });
@@ -125,13 +226,13 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         });
 
         const ultimoPesoConocido: Record<string, {w: number, d: Date}> = {};
-        const lastKnownForMeta: Record<string, { weight: number, date: Date }> = {}; 
+        const lastKnownForMeta: Record<string, { weight: number, date: Date }> = {};
 
         const dataGrafico = fechasUnicas.map((fechaStr: any) => {
             const currentDate = new Date(fechaStr + 'T12:00:00');
             const pesajesDelDia = pesajesFiltrados.filter((p: any) => p.fecha_evento.startsWith(fechaStr));
             const objParaElGrafico: any = { fecha: formatDate(fechaStr), timestamp: currentDate.getTime(), _meta: {} };
-            
+
             pesajesDelDia.forEach((p: any) => {
                 const pesoNum = parseFloat(p.resultado.replace(/[^0-9.]/g, '')); const caravana = (p.animales as any)?.caravana || 'Desc';
                 if(!isNaN(pesoNum)) { ultimoPesoConocido[caravana] = {w: pesoNum, d: currentDate}; caravanasPresentes.add(caravana); objParaElGrafico[caravana] = pesoNum; }
@@ -151,7 +252,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             });
 
             if (countActivos > 0) { objParaElGrafico['Promedio Lote'] = Math.round(sumTotal / countActivos); }
-            
+
             Object.keys(objParaElGrafico).forEach((key: string) => {
                 if (key === 'fecha' || key === 'timestamp' || key === '_meta' || key === 'Promedio Lote') return;
                 const currentWeight = objParaElGrafico[key];
@@ -169,14 +270,14 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             const fechaUltimoPesaje = new Date(fechasUnicas[fechasUnicas.length - 1] + 'T12:00:00');
             let targetDate = fHasta || new Date(hoy); if (fHasta && fHasta < hoy) targetDate = fHasta;
             let diasDesdeUltimo = Math.floor((targetDate.getTime() - fechaUltimoPesaje.getTime()) / (1000 * 60 * 60 * 24)); if (isNaN(diasDesdeUltimo)) diasDesdeUltimo = 0;
-            
+
             let labelProyeccion = fHasta && fHasta < hoy ? formatDate(targetDate.toISOString().split('T')[0]) + ' (Est.)' : 'Hoy (Est.)';
             let mostrarBadgeEstimado = diasDesdeUltimo >= 2;
 
-            if (!fHasta && diasDesdeUltimo < 2) { 
-                targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000); 
-                labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy. 15d)'; 
-                diasDesdeUltimo = 15; 
+            if (!fHasta && diasDesdeUltimo < 2) {
+                targetDate = new Date(fechaUltimoPesaje.getTime() + 15 * 24 * 60 * 60 * 1000);
+                labelProyeccion = formatDate(targetDate.toISOString().split('T')[0]) + ' (Proy. 15d)';
+                diasDesdeUltimo = 15;
             }
 
             let pesoTotalInicio = 0; let pesoTotalActual = 0; let sumEst = 0; let countEst = 0;
@@ -184,15 +285,15 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                 const stats = animalStats[caravana]; const lastKnown = ultimoPesoConocido[caravana];
                 if (stats && lastKnown) {
                     let pesoProyectado = lastKnown.w;
-                    const daysSinceAnimalLastWeighing = (targetDate.getTime() - lastKnown.d.getTime()) / 86400000; 
-                    if (daysSinceAnimalLastWeighing > 0) pesoProyectado += (stats.adpv * daysSinceAnimalLastWeighing); 
+                    const daysSinceAnimalLastWeighing = (targetDate.getTime() - lastKnown.d.getTime()) / 86400000;
+                    if (daysSinceAnimalLastWeighing > 0) pesoProyectado += (stats.adpv * daysSinceAnimalLastWeighing);
                     sumEst += pesoProyectado; countEst++;
                     pesoTotalInicio += stats.firstW; pesoTotalActual += stats.lastW;
                 }
             });
 
             if (countEst > 0 && diasDesdeUltimo >= 2) {
-                const promedioEstTarget = Math.round(sumEst / countEst); 
+                const promedioEstTarget = Math.round(sumEst / countEst);
                 ultimoDiaReal['Promedio Estimado'] = ultimoDiaReal['Promedio Lote'];
                 const diffWeight = promedioEstTarget - (ultimoDiaReal['Promedio Lote'] || 0); const adpv = diasDesdeUltimo > 0 ? (diffWeight / diasDesdeUltimo).toFixed(3) : '0';
                 dataGrafico.push({ fecha: labelProyeccion, timestamp: targetDate.getTime(), 'Promedio Estimado': promedioEstTarget, _meta: { 'Promedio Estimado': { diff: diffWeight, adpv } } });
@@ -201,7 +302,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             const pesoInicio = dataGrafico[0]['Promedio Lote'] || 0; const pesoActualReal = ultimoDiaReal['Promedio Lote'] || 0;
             const gananciaReal = pesoActualReal - pesoInicio; const diffDaysReal = Math.ceil(Math.abs(fechaUltimoPesaje.getTime() - new Date(fechasUnicas[0] + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24));
             setStatsGraficoLote({ inicio: pesoInicio, actual: pesoActualReal, totalInicio: pesoTotalInicio, totalActual: pesoTotalActual, ganancia: gananciaReal, dias: diffDaysReal, adpv: diffDaysReal > 0 ? (gananciaReal / diffDaysReal).toFixed(3) : '0' });
-            setIsLoteEstimated(mostrarBadgeEstimado); 
+            setIsLoteEstimated(mostrarBadgeEstimado);
         } else {
             const pesoUnico = dataGrafico.length > 0 ? (dataGrafico[0]['Promedio Lote'] || 0) : 0;
             setStatsGraficoLote({ inicio: pesoUnico, actual: pesoUnico, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setIsLoteEstimated(false);
@@ -223,7 +324,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         setLoading(true); const fechaStr = new Date().toISOString();
         const inserts = agregarAlLoteIds.map((id: string) => {
             const animalObj = animales.find((a: any) => a.id === id); const loteAnteriorId = animalObj?.lote_id; const loteAnteriorNombre = loteAnteriorId ? lotes.find((l: any) => l.id === loteAnteriorId)?.nombre || 'Sin Lote' : 'Sin Lote';
-            return { animal_id: id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: `Movido de: ${loteAnteriorNombre} ➔ A: ${loteSel.nombre}`, datos_extra: { lote_origen: loteAnteriorNombre, lote_destino: loteSel.nombre, lote_id: loteSel.id }, establecimiento_id: campoId };
+            return { animal_id: id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: `Movido de: ${loteAnteriorNombre} ➔ A: ${loteSel.nombre}`, datos_extra: { lote_origen: loteAnteriorNombre, lote_destino: loteSel.nombre, lote_id: loteSel.id, lote_id_en_momento: loteAnteriorId ?? null }, establecimiento_id: campoId };
         });
         animales.forEach((a: any) => { if (agregarAlLoteIds.includes(a.id)) a.lote_id = loteSel.id; });
         generarGraficoLote(loteSel.id);
@@ -257,6 +358,11 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         setLoading(false);
     }
 
+    function abrirBatchModal(item: any) {
+        setBatchModalData({ tipo: item.tipo, fecha: item.fecha, count: item.count, animalesDetalle: item.animalesDetalle });
+        openBatchModal();
+    }
+
     return (
         <>
             <Group justify="space-between" mb="lg">
@@ -266,8 +372,18 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                     <Title order={2}>Lote: {loteSel.nombre}</Title>
                     <ActionIcon variant="subtle" color="grape" onClick={() => renombrarLoteGrupo(loteSel.id, loteSel.nombre)}><IconEdit size={20}/></ActionIcon>
                     <Badge variant="light" color="gray" leftSection={<IconCalendar size={12}/>} ml="sm">Creado: {formatDate(loteSel.created_at)}</Badge>
+                    {ubicacionLote && (
+                        <Badge variant="light" color="lime" leftSection={<IconMapPin size={12}/>}>{ubicacionLote}</Badge>
+                    )}
                 </Group>
-                <Button color="red" variant="subtle" onClick={() => borrarLoteGrupo(loteSel.id)} leftSection={<IconTrash size={16}/>}>Eliminar Lote</Button>
+                <Group gap="xs">
+                    {onIrAMasivosConLote && (
+                        <Button leftSection={<IconPlaylistAdd size={18}/>} color="violet" variant="light" onClick={() => onIrAMasivosConLote(loteSel)}>
+                            Cargar evento
+                        </Button>
+                    )}
+                    <Button color="red" variant="subtle" onClick={() => borrarLoteGrupo(loteSel.id)} leftSection={<IconTrash size={16}/>}>Eliminar Lote</Button>
+                </Group>
             </Group>
 
             <Paper withBorder radius="md" p="md" bg="white">
@@ -321,10 +437,76 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                             </Group>
                             <Button onClick={guardarEventoLote} color="grape" variant="filled" leftSection={<IconCheck size={16}/>}>Guardar Registro</Button>
                         </Paper>
+
                         <Text fw={700} mb="sm">Historial del Lote</Text>
-                        {eventosLoteFicha.length === 0 ? <Text c="dimmed" size="sm" p="md" bg="gray.0" style={{borderRadius: 8}}>Sin eventos registrados para este lote.</Text> : (
-                            <Table striped><Table.Thead bg="gray.1"><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th>Tipo</Table.Th><Table.Th>Detalle</Table.Th><Table.Th>Cantidad</Table.Th><Table.Th>Costo</Table.Th><Table.Th w={50}></Table.Th></Table.Tr></Table.Thead>
-                                <Table.Tbody>{eventosLoteFicha.map((ev: any) => (<Table.Tr key={ev.id}><Table.Td><Text size="sm" c="dimmed">{formatDate(ev.fecha)}</Text></Table.Td><Table.Td><Badge size="sm" color="grape">{ev.tipo}</Badge></Table.Td><Table.Td><Text size="sm">{ev.detalle || '-'}</Text></Table.Td><Table.Td><Text size="sm" fw={700}>{ev.cantidad || '-'}</Text></Table.Td><Table.Td><Text size="sm" c="dimmed">${ev.costo || 0}</Text></Table.Td><Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarEventoLote(ev.id)}><IconTrash size={16}/></ActionIcon></Table.Td></Table.Tr>))}</Table.Tbody>
+                        {historialCombinado.length === 0 ? (
+                            <Text c="dimmed" size="sm" p="md" bg="gray.0" style={{borderRadius: 8}}>Sin eventos registrados para este lote.</Text>
+                        ) : (
+                            <Table striped>
+                                <Table.Thead bg="gray.1">
+                                    <Table.Tr>
+                                        <Table.Th>Fecha</Table.Th>
+                                        <Table.Th>Tipo</Table.Th>
+                                        <Table.Th>Descripción</Table.Th>
+                                        <Table.Th>Cant./Animal</Table.Th>
+                                        <Table.Th>Costo</Table.Th>
+                                        <Table.Th w={50}></Table.Th>
+                                    </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                    {historialCombinado.map((item: any) => {
+                                        if (item._tipo === 'lote_evento') {
+                                            return (
+                                                <Table.Tr key={`le-${item.id}`}>
+                                                    <Table.Td><Text size="sm" c="dimmed">{formatDate(item.fecha)}</Text></Table.Td>
+                                                    <Table.Td><Badge size="sm" color="grape">{item.tipo}</Badge></Table.Td>
+                                                    <Table.Td><Text size="sm">{item.detalle || '-'}</Text></Table.Td>
+                                                    <Table.Td><Text size="sm" fw={700}>{item.cantidad || '-'}</Text></Table.Td>
+                                                    <Table.Td><Text size="sm" c="dimmed">${item.costo || 0}</Text></Table.Td>
+                                                    <Table.Td align="right"><ActionIcon color="red" variant="subtle" size="sm" onClick={() => borrarEventoLote(item.id)}><IconTrash size={16}/></ActionIcon></Table.Td>
+                                                </Table.Tr>
+                                            );
+                                        }
+                                        if (item._tipo === 'evento_individual') {
+                                            return (
+                                                <Table.Tr key={`ei-${item.id}`} bg="violet.0">
+                                                    <Table.Td><Text size="sm" c="dimmed">{formatDate(item.fecha)}</Text></Table.Td>
+                                                    <Table.Td><Badge size="sm" color="violet" variant="light">{item.tipo}</Badge></Table.Td>
+                                                    <Table.Td>
+                                                        <Text size="sm" fw={600}>{item.caravana}</Text>
+                                                        {item.detalle && <Text size="xs" c="dimmed">{item.detalle}</Text>}
+                                                    </Table.Td>
+                                                    <Table.Td><Text size="xs" c="dimmed">Individual</Text></Table.Td>
+                                                    <Table.Td><Text size="sm" c="dimmed">${item.costo || 0}</Text></Table.Td>
+                                                    <Table.Td></Table.Td>
+                                                </Table.Tr>
+                                            );
+                                        }
+                                        if (item._tipo === 'evento_batch') {
+                                            return (
+                                                <Table.Tr key={`eb-${item.id}`} bg="violet.0">
+                                                    <Table.Td><Text size="sm" c="dimmed">{formatDate(item.fecha)}</Text></Table.Td>
+                                                    <Table.Td><Badge size="sm" color="violet" variant="light">{item.tipo}</Badge></Table.Td>
+                                                    <Table.Td>
+                                                        <Group gap="xs" align="center">
+                                                            <Text size="sm" fw={600}>{item.count} animales</Text>
+                                                            <Tooltip label="Ver animales incluidos" withArrow zIndex={3000}>
+                                                                <ActionIcon size="xs" variant="subtle" color="violet" onClick={() => abrirBatchModal(item)}>
+                                                                    <IconInfoCircle size={14}/>
+                                                                </ActionIcon>
+                                                            </Tooltip>
+                                                        </Group>
+                                                        {item.detalle && <Text size="xs" c="dimmed">{item.detalle}</Text>}
+                                                    </Table.Td>
+                                                    <Table.Td><Text size="xs" c="dimmed">Masivo</Text></Table.Td>
+                                                    <Table.Td><Text size="sm" c="dimmed">${item.costo || 0}</Text></Table.Td>
+                                                    <Table.Td></Table.Td>
+                                                </Table.Tr>
+                                            );
+                                        }
+                                        return null;
+                                    })}
+                                </Table.Tbody>
                             </Table>
                         )}
                     </Tabs.Panel>
@@ -370,6 +552,23 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
             </Paper>
 
             <ModalVentaLote opened={modalVentaOpen} onClose={closeModalVenta} loteSel={loteSel} animalesEnEsteLote={animalesEnEsteLote} campoId={campoId} establecimientos={establecimientos} statsGraficoLote={statsGraficoLote} onVentaExitosa={() => { fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); }} />
+
+            <Modal opened={batchModalOpen} onClose={closeBatchModal} title={<Text fw={700}>Detalle: {batchModalData.tipo} · {formatDate(batchModalData.fecha)}</Text>} centered size="md" zIndex={3000}>
+                <Text size="sm" c="dimmed" mb="sm">{batchModalData.count} animales incluidos en esta operación masiva:</Text>
+                <Table striped>
+                    <Table.Thead bg="gray.1">
+                        <Table.Tr><Table.Th>Caravana</Table.Th><Table.Th>Categoría</Table.Th></Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                        {batchModalData.animalesDetalle.map((a, i) => (
+                            <Table.Tr key={i}>
+                                <Table.Td fw={700}>{a.caravana}</Table.Td>
+                                <Table.Td>{a.categoria}</Table.Td>
+                            </Table.Tr>
+                        ))}
+                    </Table.Tbody>
+                </Table>
+            </Modal>
         </>
     );
 }

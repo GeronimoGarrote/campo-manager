@@ -8,7 +8,7 @@ import VistaHistorial from '../components/Lotes/VistaHistorial';
 import VistaDetalleLote from '../components/Lotes/VistaDetalleLote';
 import VistaDetalleHistorico from '../components/Lotes/VistaDetalleHistorico';
 
-export default function Lotes({ campoId, lotes, animales, potreros, parcelas, establecimientos, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO', loteIdAAbrir, onLoteAbierto }: any) {
+export default function Lotes({ campoId, lotes, animales, potreros, parcelas, establecimientos, eventosLotesGlobal, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, abrirFichaVaca, rolActual = 'DUENO', loteIdAAbrir, onLoteAbierto, onIrAMasivosConLote }: any) {
     // ESTADOS DE NAVEGACIÓN
     const [loteSel, setLoteSel] = useState<any | null>(null);
     const [mostrandoHistorial, setMostrandoHistorial] = useState(false);
@@ -116,6 +116,7 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, es
                 fetchHistoricosGlobal={fetchHistoricosGlobal}
                 abrirFichaVaca={abrirFichaVaca}
                 checkNombreDuplicado={checkNombreDuplicado}
+                onIrAMasivosConLote={onIrAMasivosConLote}
             />
         );
     }

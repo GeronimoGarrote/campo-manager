@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
@@ -30,6 +30,8 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
 export default function Masivos({
     campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, setActiveSection,
     rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
+    lotePreseleccionado = null as string | null,
+    onLotePreseleccionadoAplicado,
 }: any) {
     const [loading, setLoading] = useState(false);
     const [lectorActivo, setLectorActivo] = useState(false);
@@ -98,6 +100,27 @@ export default function Masivos({
     const opcionesGestacion = [ { value: '0.5', label: '15 días (0.5 mes)' }, { value: '1', label: '1 mes' }, { value: '1.5', label: '1 mes y medio' }, { value: '2', label: '2 meses' }, { value: '2.5', label: '2 meses y medio' }, { value: '3', label: '3 meses' }, { value: '3.5', label: '3 meses y medio' }, { value: '4', label: '4 meses' }, { value: '4.5', label: '4 meses y medio' }, { value: '5', label: '5 meses' }, { value: '5.5', label: '5 meses y medio' }, { value: '6', label: '6 meses' }, { value: '6.5', label: '6 meses y medio' }, { value: '7', label: '7 meses' }, { value: '7.5', label: '7 meses y medio' }, { value: '8', label: '8 meses' }, { value: '8.5', label: '8 meses y medio' }, { value: '9', label: '9 meses (A parir)' } ];
 
     const torosDisponibles = animales.filter((a: any) => a.categoria === 'Toro' && a.estado !== 'MUERTO' && a.estado !== 'VENDIDO');
+
+    // Guarda el lote_id que debe auto-seleccionarse tras aplicarse el filtro
+    const pendingLoteSelect = useRef<string | null>(null);
+
+    // Efecto 1: aplica el filtro y marca el lote pendiente de auto-selección
+    useEffect(() => {
+        if (lotePreseleccionado) {
+            pendingLoteSelect.current = lotePreseleccionado;
+            setFilterLote(lotePreseleccionado);
+            onLotePreseleccionadoAplicado?.();
+        }
+    }, [lotePreseleccionado]);
+
+    // Efecto 2: cuando filterLote ya coincide con el lote pendiente (re-render posterior),
+    // llama a seleccionarGrupo para que use animalesFiltrados ya actualizado
+    useEffect(() => {
+        if (pendingLoteSelect.current && filterLote === pendingLoteSelect.current) {
+            pendingLoteSelect.current = null;
+            seleccionarGrupo(null);
+        }
+    }, [filterLote]);
 
     const animalesFiltrados = animales.filter((animal: any) => {
         const q = busqueda.trim().toLowerCase();
@@ -203,7 +226,7 @@ export default function Masivos({
 
     async function guardarEventoMasivo() {
         if (!massFecha || !campoId) return;
-        setLoading(true); const idsParaProcesar = idsPendientes; const fechaStr = massFecha.toISOString();
+        setLoading(true); const idsParaProcesar = idsPendientes; const fechaStr = massFecha.toISOString(); const batchId = crypto.randomUUID();
 
         if (massActividad === 'VENTA' || massActividad === 'TRASLADO') {
             const ternerosSeleccionados = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero' && a.estado === 'LACTANTE');
@@ -226,7 +249,7 @@ export default function Masivos({
             }
             if (ternerosADestetarIds.length > 0) {
                 await supabase.from('animales').update({ estado: 'ACTIVO', madre_id: null }).in('id', ternerosADestetarIds);
-                const eventosTerneros = ternerosADestetarIds.map(id => ({ animal_id: id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: 'Separación madre/cría (Venta/Traslado)', fecha_evento: fechaStr, establecimiento_id: campoId }));
+                const eventosTerneros = ternerosADestetarIds.map(id => ({ animal_id: id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: 'Separación madre/cría (Venta/Traslado)', fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { lote_id_en_momento: animales.find((a: any) => a.id === id)?.lote_id ?? null, batch_id: batchId } }));
                 await supabase.from('eventos').insert(eventosTerneros);
                 idsParaProcesar.forEach(idProc => { const a = animales.find((an: any) => an.id === idProc); if (a && ternerosADestetarIds.includes(a.id)) { a.estado = 'ACTIVO'; a.madre_id = undefined; } });
             }
@@ -235,7 +258,7 @@ export default function Masivos({
                 for (const [madreId, data] of madresADestetarMap.entries()) {
                     const nuevoEstadoMadre = data.estadoOriginal.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
                     await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', madreId);
-                    eventosMadres.push({ animal_id: madreId, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Separación de cría (${data.caravanaTernero})`, fecha_evento: fechaStr, establecimiento_id: campoId });
+                    eventosMadres.push({ animal_id: madreId, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Separación de cría (${data.caravanaTernero})`, fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { lote_id_en_momento: animales.find((a: any) => a.id === madreId)?.lote_id ?? null, batch_id: batchId } });
                     const a = animales.find((an: any) => an.id === madreId); if (a && idsParaProcesar.includes(a.id)) { a.estado = nuevoEstadoMadre; }
                 }
                 await supabase.from('eventos').insert(eventosMadres);
@@ -298,14 +321,14 @@ export default function Masivos({
 
                 const insertsVenta = idsParaProcesar.map(animalId => {
                     const anim = animales.find((a: any) => a.id === animalId);
-                    return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: anim?.caravana }, establecimiento_id: campoId, costo: precioPorAnimal }
+                    return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, batch_id: batchId }, establecimiento_id: campoId, costo: precioPorAnimal }
                 });
                 await supabase.from('eventos').insert(insertsVenta);
             }
         } else {
             const inserts = idsParaProcesar.map(animalId => {
                 const anim = animales.find((a: any) => a.id === animalId);
-                let finalDetalle = massDetalle; let finalDatosExtra = { ...datosExtra, caravana_origen: anim?.caravana };
+                let finalDetalle = massDetalle; let finalDatosExtra = { ...datosExtra, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, batch_id: batchId };
 
                 if (massActividad === 'CAMBIO_LOTE') {
                     const lNom = lotes.find((l: any) => l.id === massLoteDestino)?.nombre || 'Sin asignar'; const lAnterior = lotes.find((l: any) => l.id === anim?.lote_id)?.nombre || 'Sin asignar';
@@ -385,7 +408,7 @@ export default function Masivos({
                     if (vacasToUpdate.length > 0 && massTipoServicio === 'TORO') await supabase.from('animales').update({ toros_servicio_ids: massTorosIds }).in('id', vacasToUpdate);
                     if (torosToUpdate.length > 0) await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', torosToUpdate);
                     if (massTipoServicio === 'TORO' && massTorosIds.length > 0) {
-                        const torosEvents = massTorosIds.map(toroId => ({ animal_id: toroId, fecha_evento: fechaStr, tipo: 'SERVICIO', resultado: 'En servicio', detalle: 'Asignado a rodeo (Masivo)', establecimiento_id: campoId }));
+                        const torosEvents = massTorosIds.map(toroId => ({ animal_id: toroId, fecha_evento: fechaStr, tipo: 'SERVICIO', resultado: 'En servicio', detalle: 'Asignado a rodeo (Masivo)', datos_extra: { lote_id_en_momento: animales.find((a: any) => a.id === toroId)?.lote_id ?? null, batch_id: batchId }, establecimiento_id: campoId }));
                         await supabase.from('eventos').insert(torosEvents); await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', massTorosIds);
                     }
                 }
@@ -401,7 +424,7 @@ export default function Masivos({
                     const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre;
                     const insertsIngreso = idsParaProcesar.map(animalId => {
                         const anim = animales.find((a: any) => a.id === animalId);
-                        return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId, caravana_origen: anim?.caravana }, establecimiento_id: massEstablecimientoDestino }
+                        return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, batch_id: batchId }, establecimiento_id: massEstablecimientoDestino }
                     });
                     await supabase.from('eventos').insert(insertsIngreso);
                     await supabase.from('agenda').update({ establecimiento_id: massEstablecimientoDestino }).in('animal_id', idsParaProcesar).eq('completado', false);

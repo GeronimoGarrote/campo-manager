@@ -66,6 +66,7 @@ export default function App() {
   const [transferencias, setTransferencias] = useState<any[]>([]);
   const [potreroIdAAbrir, setPotreroIdAAbrir] = useState<string | null>(null);
   const [loteIdAAbrir, setLoteIdAAbrir] = useState<string | null>(null);
+  const [lotePreseleccionadoMasivos, setLotePreseleccionadoMasivos] = useState<string | null>(null);
 
   // Controladores de Modales Extraídos
   const [modalAltaOpen, { open: openModalAlta, close: closeModalAlta }] = useDisclosure(false);
@@ -463,6 +464,11 @@ export default function App() {
     setLoteIdAAbrir(id);
   }
 
+  function irAMasivosConLote(loteSel: any) {
+    setLotePreseleccionadoMasivos(loteSel.id);
+    setActiveSection('masivos');
+  }
+
   const hoyFormateado = getHoyIso();
   const tareasPendientesUrgentes = agenda.filter(t => !t.completado && t.fecha_programada < hoyFormateado);
   const tareasParaHoy = agenda.filter(t => !t.completado && t.fecha_programada === hoyFormateado);
@@ -623,8 +629,8 @@ export default function App() {
             <AppShell.Main bg="gray.0">
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} animales={animales} abrirFichaVaca={abrirFichaVaca} potreros={potreros} lotes={lotes} onAbrirPotrero={abrirPotreroDesdeAgenda} onAbrirLote={abrirLoteDesdeAgenda} />}
-              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} establecimientos={establecimientos} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} loteIdAAbrir={loteIdAAbrir} onLoteAbierto={() => setLoteIdAAbrir(null)}/>}
-              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} />}
+              {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} establecimientos={establecimientos} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} loteIdAAbrir={loteIdAAbrir} onLoteAbierto={() => setLoteIdAAbrir(null)} onIrAMasivosConLote={irAMasivosConLote}/>}
+              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} lotePreseleccionado={lotePreseleccionadoMasivos} onLotePreseleccionadoAplicado={() => setLotePreseleccionadoMasivos(null)} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} />}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} />}
               {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} potreroIdAAbrir={potreroIdAAbrir} onPotreroAbierto={() => setPotreroIdAAbrir(null)} />}
