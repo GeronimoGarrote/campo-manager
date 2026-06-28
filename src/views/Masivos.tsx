@@ -249,7 +249,7 @@ export default function Masivos({
             }
             if (ternerosADestetarIds.length > 0) {
                 await supabase.from('animales').update({ estado: 'ACTIVO', madre_id: null }).in('id', ternerosADestetarIds);
-                const eventosTerneros = ternerosADestetarIds.map(id => ({ animal_id: id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: 'Separación madre/cría (Venta/Traslado)', fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { lote_id_en_momento: animales.find((a: any) => a.id === id)?.lote_id ?? null, batch_id: batchId } }));
+                const eventosTerneros = ternerosADestetarIds.map(id => { const _lid = animales.find((a: any) => a.id === id)?.lote_id ?? null; return { animal_id: id, tipo: 'DESTETE', resultado: 'Destete automático', detalle: 'Separación madre/cría (Venta/Traslado)', fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { lote_id_en_momento: _lid, lote_nombre_en_momento: _lid ? lotes.find((l: any) => l.id === _lid)?.nombre ?? null : null, batch_id: batchId } }; });
                 await supabase.from('eventos').insert(eventosTerneros);
                 idsParaProcesar.forEach(idProc => { const a = animales.find((an: any) => an.id === idProc); if (a && ternerosADestetarIds.includes(a.id)) { a.estado = 'ACTIVO'; a.madre_id = undefined; } });
             }
@@ -258,7 +258,7 @@ export default function Masivos({
                 for (const [madreId, data] of madresADestetarMap.entries()) {
                     const nuevoEstadoMadre = data.estadoOriginal.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
                     await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', madreId);
-                    eventosMadres.push({ animal_id: madreId, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Separación de cría (${data.caravanaTernero})`, fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { lote_id_en_momento: animales.find((a: any) => a.id === madreId)?.lote_id ?? null, batch_id: batchId } });
+                    const _lidMadre = animales.find((a: any) => a.id === madreId)?.lote_id ?? null; eventosMadres.push({ animal_id: madreId, tipo: 'DESTETE', resultado: 'Destete automático', detalle: `Separación de cría (${data.caravanaTernero})`, fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { lote_id_en_momento: _lidMadre, lote_nombre_en_momento: _lidMadre ? lotes.find((l: any) => l.id === _lidMadre)?.nombre ?? null : null, batch_id: batchId } });
                     const a = animales.find((an: any) => an.id === madreId); if (a && idsParaProcesar.includes(a.id)) { a.estado = nuevoEstadoMadre; }
                 }
                 await supabase.from('eventos').insert(eventosMadres);
@@ -321,14 +321,14 @@ export default function Masivos({
 
                 const insertsVenta = idsParaProcesar.map(animalId => {
                     const anim = animales.find((a: any) => a.id === animalId);
-                    return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, batch_id: batchId }, establecimiento_id: campoId, costo: precioPorAnimal }
+                    return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: massModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, lote_nombre_en_momento: anim?.lote_id ? lotes.find((l: any) => l.id === anim.lote_id)?.nombre ?? null : null, batch_id: batchId }, establecimiento_id: campoId, costo: precioPorAnimal }
                 });
                 await supabase.from('eventos').insert(insertsVenta);
             }
         } else {
             const inserts = idsParaProcesar.map(animalId => {
                 const anim = animales.find((a: any) => a.id === animalId);
-                let finalDetalle = massDetalle; let finalDatosExtra = { ...datosExtra, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, batch_id: batchId };
+                let finalDetalle = massDetalle; let finalDatosExtra = { ...datosExtra, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, lote_nombre_en_momento: anim?.lote_id ? lotes.find((l: any) => l.id === anim.lote_id)?.nombre ?? null : null, batch_id: batchId };
 
                 if (massActividad === 'CAMBIO_LOTE') {
                     const lNom = lotes.find((l: any) => l.id === massLoteDestino)?.nombre || 'Sin asignar'; const lAnterior = lotes.find((l: any) => l.id === anim?.lote_id)?.nombre || 'Sin asignar';
@@ -408,7 +408,7 @@ export default function Masivos({
                     if (vacasToUpdate.length > 0 && massTipoServicio === 'TORO') await supabase.from('animales').update({ toros_servicio_ids: massTorosIds }).in('id', vacasToUpdate);
                     if (torosToUpdate.length > 0) await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', torosToUpdate);
                     if (massTipoServicio === 'TORO' && massTorosIds.length > 0) {
-                        const torosEvents = massTorosIds.map(toroId => ({ animal_id: toroId, fecha_evento: fechaStr, tipo: 'SERVICIO', resultado: 'En servicio', detalle: 'Asignado a rodeo (Masivo)', datos_extra: { lote_id_en_momento: animales.find((a: any) => a.id === toroId)?.lote_id ?? null, batch_id: batchId }, establecimiento_id: campoId }));
+                        const torosEvents = massTorosIds.map(toroId => { const _lidToro = animales.find((a: any) => a.id === toroId)?.lote_id ?? null; return { animal_id: toroId, fecha_evento: fechaStr, tipo: 'SERVICIO', resultado: 'En servicio', detalle: 'Asignado a rodeo (Masivo)', datos_extra: { lote_id_en_momento: _lidToro, lote_nombre_en_momento: _lidToro ? lotes.find((l: any) => l.id === _lidToro)?.nombre ?? null : null, batch_id: batchId }, establecimiento_id: campoId }; });
                         await supabase.from('eventos').insert(torosEvents); await supabase.from('animales').update({ estado: 'EN SERVICIO' }).in('id', massTorosIds);
                     }
                 }
@@ -424,7 +424,7 @@ export default function Masivos({
                     const nombreOrigen = establecimientos.find((e: any) => e.id === campoId)?.nombre;
                     const insertsIngreso = idsParaProcesar.map(animalId => {
                         const anim = animales.find((a: any) => a.id === animalId);
-                        return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, batch_id: batchId }, establecimiento_id: massEstablecimientoDestino }
+                        return { animal_id: animalId, fecha_evento: fechaStr, tipo: 'TRASLADO_INGRESO', resultado: 'INGRESO POR TRASLADO', detalle: `Proveniente de: ${nombreOrigen}`, datos_extra: { establecimiento_origen: nombreOrigen, establecimiento_origen_id: campoId, caravana_origen: anim?.caravana, lote_id_en_momento: anim?.lote_id ?? null, lote_nombre_en_momento: anim?.lote_id ? lotes.find((l: any) => l.id === anim.lote_id)?.nombre ?? null : null, batch_id: batchId }, establecimiento_id: massEstablecimientoDestino }
                     });
                     await supabase.from('eventos').insert(insertsIngreso);
                     await supabase.from('agenda').update({ establecimiento_id: massEstablecimientoDestino }).in('animal_id', idsParaProcesar).eq('completado', false);

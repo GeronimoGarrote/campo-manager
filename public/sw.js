@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rc-static-v1';
+const CACHE_NAME = 'rc-static-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 

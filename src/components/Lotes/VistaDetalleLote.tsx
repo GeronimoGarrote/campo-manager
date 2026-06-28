@@ -312,10 +312,23 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
 
     async function sacarAnimalDeLote(animalId: string) {
         if (!confirm("¿Quitar este animal del lote?")) return;
-        const animal = animales.find((a: any) => a.id === animalId); if (animal) animal.lote_id = null;
+        const animal = animales.find((a: any) => a.id === animalId);
+        const loteAnteriorId = animal?.lote_id;
+        if (animal) animal.lote_id = null;
         setAgregarAlLoteIds([...agregarAlLoteIds]); generarGraficoLote(loteSel.id);
         await supabase.from('animales').update({ lote_id: null }).eq('id', animalId);
-        await supabase.from('eventos').insert({ animal_id: animalId, fecha_evento: new Date().toISOString(), tipo: 'CAMBIO_LOTE', resultado: 'REMOVIDO DE LOTE', detalle: `Removido del lote: ${loteSel?.nombre}`, establecimiento_id: campoId });
+        await supabase.from('eventos').insert({
+            animal_id: animalId, fecha_evento: new Date().toISOString(),
+            tipo: 'CAMBIO_LOTE', resultado: 'REMOVIDO DE LOTE',
+            detalle: `Removido del lote: ${loteSel?.nombre}`,
+            datos_extra: {
+                lote_origen: loteSel?.nombre ?? null,
+                lote_destino: null,
+                lote_id: null,
+                lote_id_en_momento: loteAnteriorId ?? null,
+            },
+            establecimiento_id: campoId
+        });
         fetchAnimales(); fetchActividadGlobal();
     }
 
@@ -352,7 +365,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         if (animalesEnEsteLote.length === 0) return alert("El lote está vacío.");
         if (!confirm(`¿Estás seguro de FINALIZAR el ciclo del lote "${loteSel.nombre}"?\nSe guardará en el historial y el lote será eliminado.`)) return;
         setLoading(true); const idsAnimales = animalesEnEsteLote.map((a: any) => a.id);
-        const nuevoHistorico = { establecimiento_id: campoId, lote_id: null, nombre_lote: loteSel.nombre, cantidad_animales: animalesEnEsteLote.length, peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0, peso_final: statsGraficoLote.totalActual || statsGraficoLote.actual || 0, ganancia_promedio: statsGraficoLote.ganancia || 0, adpv: statsGraficoLote.adpv || '0', dias_ciclo: statsGraficoLote.dias || 0, vendido: false, animales_ids: idsAnimales };
+        const nuevoHistorico = { establecimiento_id: campoId, lote_id: loteSel.id, nombre_lote: loteSel.nombre, cantidad_animales: animalesEnEsteLote.length, peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0, peso_final: statsGraficoLote.totalActual || statsGraficoLote.actual || 0, ganancia_promedio: statsGraficoLote.ganancia || 0, adpv: statsGraficoLote.adpv || '0', dias_ciclo: statsGraficoLote.dias || 0, vendido: false, animales_ids: idsAnimales };
         const { error } = await supabase.from('lotes_historicos').insert([nuevoHistorico]);
         if (!error) { await supabase.from('animales').update({ lote_id: null }).in('id', idsAnimales); await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id); await supabase.from('lotes').delete().eq('id', loteSel.id); fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); alert("Ciclo finalizado con éxito."); } else alert("Error al cerrar: " + error.message);
         setLoading(false);

@@ -50,7 +50,7 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
 
         const nuevoHistorico = {
             establecimiento_id: campoId,
-            lote_id: null,
+            lote_id: loteSel.id,
             nombre_lote: loteSel.nombre,
             cantidad_animales: animalesEnEsteLote.length,
             peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0,

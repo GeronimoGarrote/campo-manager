@@ -632,7 +632,7 @@ export default function App() {
               {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} establecimientos={establecimientos} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} loteIdAAbrir={loteIdAAbrir} onLoteAbierto={() => setLoteIdAAbrir(null)} onIrAMasivosConLote={irAMasivosConLote}/>}
               {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} lotePreseleccionado={lotePreseleccionadoMasivos} onLotePreseleccionadoAplicado={() => setLotePreseleccionadoMasivos(null)} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} />}
-              {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} />}
+              {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} lotes={lotes} potreros={potreros} animales={animales} />}
               {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} potreroIdAAbrir={potreroIdAAbrir} onPotreroAbierto={() => setPotreroIdAAbrir(null)} />}
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}
               
@@ -656,6 +656,8 @@ export default function App() {
           datosSuscripcion={datosSuscripcion}
           onSuccess={() => { fetchAnimales(); fetchAgenda(); fetchActividadGlobal(); }}
           rolActual={rolActual}
+          potreros={potreros}
+          lotes={lotes}
       />
 
       <ModalTransferencia

@@ -11,9 +11,11 @@ interface ModalAltaAnimalProps {
     onSuccess: () => void;
     datosSuscripcion: any;
     rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO';
+    potreros?: any[];
+    lotes?: any[];
 }
 
-export default function ModalAltaAnimal({ opened, onClose, campoId, animales, onSuccess, datosSuscripcion, rolActual = 'DUENO' }: ModalAltaAnimalProps) {
+export default function ModalAltaAnimal({ opened, onClose, campoId, animales, onSuccess, datosSuscripcion, rolActual = 'DUENO', potreros = [], lotes = [] }: ModalAltaAnimalProps) {
     const [modoAlta, setModoAlta] = useState<'individual' | 'masivo'>('individual');
     const [loading, setLoading] = useState(false);
 
@@ -28,6 +30,10 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
     const [nuevoLactancia, setNuevoLactancia] = useState(false);
     const [nuevoMesesGestacion, setNuevoMesesGestacion] = useState<string | null>(null);
     const [edadEstimada, setEdadEstimada] = useState<string | null>(null);
+
+    // ── Estado: potrero/lote (compartido entre modos) ────────────────────────
+    const [altaPotreroId, setAltaPotreroId] = useState<string | null>(null);
+    const [altaLoteId, setAltaLoteId] = useState<string | null>(null);
 
     // ── Estado: modo masivo ──────────────────────────────────────────────────
     const [masivoCantidad, setMasivoCantidad] = useState<number | string>(1);
@@ -55,6 +61,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             setNuevoMesesGestacion(null); setEdadEstimada(null);
             setMasivoCantidad(1); setMasivoCategoria('Ternero');
             setMasivoOrigen('PROPIO'); setMasivoPrecio('');
+            setAltaPotreroId(null); setAltaLoteId(null);
         }
     }, [opened]);
 
@@ -121,6 +128,8 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             fecha_servicio: fechaServicioInicial,
             establecimiento_id: campoId,
             en_transito: false,
+            potrero_id: altaPotreroId,
+            lote_id: altaLoteId,
         }]).select();
 
         if (!error && newAnimalData && newAnimalData.length > 0) {
@@ -186,6 +195,8 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             fecha_ingreso: hoyStr,
             establecimiento_id: campoId,
             en_transito: false,
+            potrero_id: altaPotreroId,
+            lote_id: altaLoteId,
         }));
 
         setLoading(true);
@@ -254,6 +265,25 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
                         </Group>
                         {origenModal === 'COMPRADO' && <TextInput mt="sm" label="Precio de Compra ($)" type="number" leftSection={<IconCurrencyDollar size={16}/>} value={precioCompra} onChange={(e) => setPrecioCompra(e.target.value)} />}
 
+                        <Group grow mt="sm">
+                            <Select
+                                label="Potrero (opcional)"
+                                placeholder="Sin asignar"
+                                data={potreros.map((p: any) => ({ value: p.id, label: p.nombre }))}
+                                value={altaPotreroId}
+                                onChange={setAltaPotreroId}
+                                searchable clearable
+                            />
+                            <Select
+                                label="Lote (opcional)"
+                                placeholder="Sin asignar"
+                                data={lotes.map((l: any) => ({ value: l.id, label: l.nombre }))}
+                                value={altaLoteId}
+                                onChange={setAltaLoteId}
+                                searchable clearable
+                            />
+                        </Group>
+
                         <Group grow mt="xl">
                             <Button onClick={() => guardarAnimal(false)} loading={loading} color="teal" variant="outline">Guardar y agregar otro</Button>
                             <Button onClick={() => guardarAnimal(true)} loading={loading} color="teal">Guardar y cerrar</Button>
@@ -295,6 +325,29 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
                                 value={masivoPrecio}
                                 onChange={(e) => setMasivoPrecio(e.target.value)}
                             />
+                        )}
+                        <Group grow mt="sm">
+                            <Select
+                                label="Potrero (opcional)"
+                                placeholder="Sin asignar"
+                                data={potreros.map((p: any) => ({ value: p.id, label: p.nombre }))}
+                                value={altaPotreroId}
+                                onChange={setAltaPotreroId}
+                                searchable clearable
+                            />
+                            <Select
+                                label="Lote (opcional)"
+                                placeholder="Sin asignar"
+                                data={lotes.map((l: any) => ({ value: l.id, label: l.nombre }))}
+                                value={altaLoteId}
+                                onChange={setAltaLoteId}
+                                searchable clearable
+                            />
+                        </Group>
+                        {(altaPotreroId || altaLoteId) && (
+                            <Text size="xs" c="dimmed">
+                                Si elegís un potrero o lote, se asignará a los {cantidadNum} animales del grupo.
+                            </Text>
                         )}
                         <Text size="sm" c="dimmed">
                             Se crearán {cantidadNum} animales con códigos SC-XXX. Podés asignarles caravana después desde la ficha.

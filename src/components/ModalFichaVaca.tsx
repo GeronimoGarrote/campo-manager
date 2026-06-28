@@ -286,7 +286,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             if (isNaN(pesoNum) || pesoNum <= 0 || resultadoInput.includes('-')) { setLoading(false); return alert("❌ ERROR: Peso inválido."); }
         }
     
-        const { data: eventoData, error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: { ...(datosExtra || {}), lote_id_en_momento: animalSel.lote_id ?? null }, costo: Number(costoEvento), establecimiento_id: campoId }]).select('id').single();
+        const { data: eventoData, error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: { ...(datosExtra || {}), lote_id_en_momento: animalSel.lote_id ?? null, lote_nombre_en_momento: animalSel.lote_id ? (lotes.find((l: any) => l.id === animalSel.lote_id)?.nombre ?? null) : null }, costo: Number(costoEvento), establecimiento_id: campoId }]).select('id').single();
 
         if (Number(costoEvento) > 0 && eventoData) {
             await supabase.from('caja').insert({ establecimiento_id: campoId, fecha: fechaEvento.toISOString().split('T')[0], tipo: 'EGRESO', categoria: 'Hacienda (Sanidad/Manejo)', detalle: `Costo ${tipoEventoInput} - Caravana ${animalSel.caravana}`, monto: Number(costoEvento), evento_id: eventoData.id });
@@ -328,7 +328,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             const lAnterior = lotes.find(l => l.id === animalSel.lote_id)?.nombre || 'Sin asignar';
             const desc = `Movido de: ${lAnterior} ➔ A: ${lNom}`;
             
-            eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_origen: lAnterior, lote_destino: lNom, lote_id: editLoteId }, establecimiento_id: campoId });
+            eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_origen: lAnterior, lote_destino: lNom, lote_id: editLoteId, lote_id_en_momento: animalSel.lote_id ?? null }, establecimiento_id: campoId });
         }
     
         const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSel.id);
