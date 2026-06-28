@@ -52,7 +52,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
     const [loteEvCosto, setLoteEvCosto] = useState<string | number>('');
     const [agregarAlLoteIds, setAgregarAlLoteIds] = useState<string[]>([]);
 
-    const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && a.estado !== 'EN TRÁNSITO');
+    const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && !a.en_transito);
     const animalesEnEsteLote = haciendaActiva.filter((a: any) => a.lote_id === loteSel.id);
 
     // Calcular ubicación predominante de los animales del lote

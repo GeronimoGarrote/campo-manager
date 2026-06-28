@@ -131,7 +131,7 @@ export default function Masivos({
         const matchSexo = filterSexo ? animal.sexo === filterSexo : true;
         const matchLote = filterLote ? animal.lote_id === filterLote : true;
         const matchPotrero = filterPotrero ? animal.potrero_id === filterPotrero : true;
-        return matchBusqueda && matchCategoria && matchSexo && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && animal.estado !== 'EN TRÁNSITO';
+        return matchBusqueda && matchCategoria && matchSexo && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && !animal.en_transito;
     });
 
     const toggleSeleccion = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);

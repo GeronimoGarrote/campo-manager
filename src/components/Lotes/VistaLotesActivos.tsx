@@ -4,7 +4,7 @@ import { IconPlus, IconTag, IconHistory } from '@tabler/icons-react';
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 
 export default function VistaLotesActivos({ lotes, animales, eventosLotesGlobal, onAbrirHistorial, onNuevoLote, onAbrirLote }: any) {
-    const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && a.estado !== 'EN TRÁNSITO');
+    const haciendaActiva = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO' && !a.en_transito);
     
     return (
         <>
