@@ -555,6 +555,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                <Group grow mb="sm">
                    <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />
                    {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Estado Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}
+                   {editCategoria === 'Ternero' && ( <Select label="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}]} value={editSexo} onChange={(v) => { setEditSexo(v); if (v === 'H') setEditCastrado(false); }} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}
                </Group>
 
                {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Switch mb="sm" size="md" onLabel="EN LACTANCIA" offLabel="SIN CRÍA" label="¿Está criando a un ternero?" checked={editLactancia} onChange={(e) => setEditLactancia(e.currentTarget.checked)} disabled={!esActivo} color="grape" /> )}
