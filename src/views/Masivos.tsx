@@ -68,6 +68,7 @@ export default function Masivos({
     const [busqueda, setBusqueda] = useState('');
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterSexo, setFilterSexo] = useState<string | null>(null);
+    const [filterEstado, setFilterEstado] = useState<string | null>(null);
     const [filterLote, setFilterLote] = useState<string | null>(null);
     const [filterPotrero, setFilterPotrero] = useState<string | null>(null);
 
@@ -129,9 +130,10 @@ export default function Masivos({
             (animal.caravana_electronica?.trim().toLowerCase().includes(q) ?? false);
         const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
         const matchSexo = filterSexo ? animal.sexo === filterSexo : true;
+        const matchEstado = filterEstado ? animal.estado === filterEstado : true;
         const matchLote = filterLote ? animal.lote_id === filterLote : true;
         const matchPotrero = filterPotrero ? animal.potrero_id === filterPotrero : true;
-        return matchBusqueda && matchCategoria && matchSexo && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && !animal.en_transito;
+        return matchBusqueda && matchCategoria && matchSexo && matchEstado && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && !animal.en_transito;
     });
 
     const toggleSeleccion = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -559,13 +561,30 @@ export default function Masivos({
                 <Button variant="light" color="gray" size="xs" onClick={() => seleccionarGrupo(null)}>Seleccionar TODO lo visible</Button>
                 {selectedIds.length > 0 && <Button variant="outline" color="red" size="xs" onClick={limpiarSeleccion}>Borrar Selección</Button>}
             </Group>
-            <Group mb="md" wrap="nowrap" gap="xs">
+            {/* Desktop */}
+            <Group mb="md" wrap="nowrap" gap="xs" visibleFrom="sm">
                 <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 2}}/>
                 <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
+                <Select placeholder="Estado" data={['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']} value={filterEstado} onChange={setFilterEstado} clearable style={{flex: 1.5}}/>
                 <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
                 <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1.5}}/>
                 <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1.5}}/>
             </Group>
+            {/* Mobile */}
+            <Stack mb="md" gap="xs" hiddenFrom="sm">
+                <Group gap="xs" wrap="nowrap">
+                    <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 1}}/>
+                    <Select placeholder="Estado" data={['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']} value={filterEstado} onChange={setFilterEstado} clearable style={{flex: 1}}/>
+                </Group>
+                <Group gap="xs" wrap="nowrap">
+                    <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
+                    <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                </Group>
+                <Group gap="xs" wrap="nowrap">
+                    <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1}}/>
+                    <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1}}/>
+                </Group>
+            </Stack>
             <Paper withBorder radius="md" h={400} style={{ display: 'flex', flexDirection: 'column' }}>
                 <ScrollArea style={{ flex: 1 }}>
                 <Table stickyHeader>
