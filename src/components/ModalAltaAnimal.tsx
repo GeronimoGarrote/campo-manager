@@ -38,6 +38,8 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
     // ── Estado: modo masivo ──────────────────────────────────────────────────
     const [masivoCantidad, setMasivoCantidad] = useState<number | string>(1);
     const [masivoCategoria, setMasivoCategoria] = useState<string | null>('Ternero');
+    const [masivoSexo, setMasivoSexo] = useState<string | null>('M');
+    const [masivoSexoBloqueado, setMasivoSexoBloqueado] = useState(false);
     const [masivoOrigen, setMasivoOrigen] = useState<string | null>('PROPIO');
     const [masivoPrecio, setMasivoPrecio] = useState<string | number>('');
 
@@ -51,6 +53,13 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
         else { setSexoBloqueado(false); }
     }, [categoria]);
 
+    // Bloquea/desbloquea sexo en modo masivo según categoría
+    useEffect(() => {
+        if (['Vaca', 'Vaquillona'].includes(masivoCategoria || '')) { setMasivoSexo('H'); setMasivoSexoBloqueado(true); }
+        else if (['Toro', 'Novillo'].includes(masivoCategoria || '')) { setMasivoSexo('M'); setMasivoSexoBloqueado(true); }
+        else { setMasivoSexoBloqueado(false); }
+    }, [masivoCategoria]);
+
     // Reset completo al abrir el modal
     useEffect(() => {
         if (opened) {
@@ -59,7 +68,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             setOrigenModal('PROPIO'); setPrecioCompra('');
             setNuevoEstadoReproductivo('VACÍA'); setNuevoLactancia(false);
             setNuevoMesesGestacion(null); setEdadEstimada(null);
-            setMasivoCantidad(1); setMasivoCategoria('Ternero');
+            setMasivoCantidad(1); setMasivoCategoria('Ternero'); setMasivoSexo('M'); setMasivoSexoBloqueado(false);
             setMasivoOrigen('PROPIO'); setMasivoPrecio('');
             setAltaPotreroId(null); setAltaLoteId(null);
         }
@@ -174,9 +183,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             return alert(`Límite de suscripción: podés agregar hasta ${disponibles} animal${disponibles !== 1 ? 'es' : ''} más (tenés ${animalesActivos} activos de ${datosSuscripcion.limite_animales}).`);
         }
 
-        // Sexo por categoría (Ternero sin género explícito → M por defecto)
-        let sexoMasivo = 'M';
-        if (['Vaca', 'Vaquillona', 'Ternera'].includes(masivoCategoria)) sexoMasivo = 'H';
+        const sexoMasivo = masivoSexo || 'M';
 
         // Estado inicial: vacas y vaquillas entran como VACÍA, resto ACTIVO
         let estadoMasivo = 'ACTIVO';
@@ -297,9 +304,17 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
                         <Group grow>
                             <Select
                                 label="Categoría"
-                                data={['Vaca', 'Vaquillona', 'Ternera', 'Ternero', 'Novillo', 'Toro']}
+                                data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']}
                                 value={masivoCategoria}
                                 onChange={setMasivoCategoria}
+                                allowDeselect={false}
+                            />
+                            <Select
+                                label="Sexo"
+                                data={[{ value: 'M', label: 'Macho' }, { value: 'H', label: 'Hembra' }]}
+                                value={masivoSexo}
+                                onChange={setMasivoSexo}
+                                disabled={masivoSexoBloqueado}
                                 allowDeselect={false}
                             />
                             <NumberInput
