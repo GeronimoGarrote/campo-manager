@@ -276,7 +276,7 @@ export default function Masivos({
 
                 nuevosInserts.push({ caravana: codigo, categoria, sexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', fecha_nacimiento: massFecha.toISOString().split('T')[0], fecha_ingreso: massFecha.toISOString().split('T')[0], madre_id: vacaId, establecimiento_id: campoId, potrero_id: vaca.potrero_id ?? null, lote_id: vaca.lote_id ?? null, en_transito: false });
 
-                const nuevoEstadoVaca = vaca.estado.includes('PREÑADA') ? 'PREÑADA Y LACTANDO' : 'EN LACTANCIA';
+                const nuevoEstadoVaca = 'EN LACTANCIA';
                 updatesVacas.push({ id: vacaId, estado: nuevoEstadoVaca });
 
                 const _lid = vaca.lote_id ?? null;
