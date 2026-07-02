@@ -201,7 +201,7 @@ export default function Hacienda({
     const exportarAExcel = () => {
         if (animalesFiltrados.length === 0) return alert("No hay datos para exportar");
         const cabeceras = ['Caravana', 'Categoria', 'Sexo', 'Estado', 'Condicion Sanitaria', 'Anotaciones', 'Ubicacion (Potrero)', 'Parcela', 'Lote (Grupo)', 'Fecha Ingreso'];
-        const filas = animalesFiltrados.map((a: any) => [ a.caravana, a.categoria, a.sexo === 'M' ? 'Macho' : 'Hembra', a.estado, a.condicion || 'SANA', a.detalles || '-', getNombrePotrero(a.potrero_id) || '-', getNombreParcela(a.parcela_id) || '-', getNombreLote(a.lote_id) || '-', a.fecha_ingreso ? formatDate(a.fecha_ingreso) : '-' ]);
+        const filas = animalesFiltrados.map((a: any) => [ a.caravana, a.categoria, a.sexo === 'M' ? 'Macho' : a.sexo === 'H' ? 'Hembra' : '-', a.estado, a.condicion || 'SANA', a.detalles || '-', getNombrePotrero(a.potrero_id) || '-', getNombreParcela(a.parcela_id) || '-', getNombreLote(a.lote_id) || '-', a.fecha_ingreso ? formatDate(a.fecha_ingreso) : '-' ]);
         const contenidoCsv = [ cabeceras.join(';'), ...filas.map((fila: any) => fila.join(';')) ].join('\n');
         const blob = new Blob(["\ufeff", contenidoCsv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `Hacienda_${new Date().toISOString().split('T')[0]}.csv`;
@@ -397,7 +397,7 @@ export default function Hacienda({
                                                     <Badge color="#795548">EN TRÁNSITO</Badge>
                                                 ) : (
                                                     <>
-                                                        {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                        {vaca.categoria === 'Ternero' && vaca.sexo !== 'I' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
                                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
                                                         {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
                                                         

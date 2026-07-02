@@ -24,7 +24,7 @@ type Categoria = 'Salud' | 'Sanidad' | 'Reproducción' | 'Manejo' | 'Movimientos
 
 const TIPO_A_CATEGORIA: Record<string, Categoria> = {
   ENFERMEDAD: 'Salud', LESION: 'Salud', CURACION: 'Salud', TRATAMIENTO: 'Salud', RASPAJE: 'Salud',
-  VACUNACION: 'Sanidad', CAPADO: 'Sanidad',
+  VACUNACION: 'Sanidad', CAPADO: 'Sanidad', DESPARASITACION: 'Sanidad', SUPLEMENTACION: 'Sanidad',
   TACTO: 'Reproducción', SERVICIO: 'Reproducción', PARTO: 'Reproducción', DESTETE: 'Reproducción',
   PESAJE: 'Manejo', APARTADO: 'Manejo', OTRO: 'Manejo',
   CAMBIO_LOTE: 'Movimientos', MOVIMIENTO_POTRERO: 'Movimientos', TRASLADO_SALIDA: 'Movimientos',
@@ -53,6 +53,8 @@ const TIPO_A_ICONO: Record<string, IconComponent> = {
   TRATAMIENTO: IconPill,
   RASPAJE: IconCut,
   VACUNACION: IconVaccine,
+  DESPARASITACION: IconVirus,
+  SUPLEMENTACION: IconPill,
   CAPADO: IconCut,
   TACTO: IconHandStop,
   SERVICIO: IconHeart,
@@ -80,6 +82,7 @@ const TIPO_LABELS: Record<string, string> = {
   COMPRA: 'Compra', TRASLADO_SALIDA: 'Traslado Salida', TRASLADO_INGRESO: 'Ingreso por Red',
   RESTAURACION: 'Restauración', BORRADO: 'Borrado',
   MOVIMIENTO_POTRERO: 'Mov. Potrero', CAMBIO_LOTE: 'Cambio Lote',
+  DESPARASITACION: 'Desparasitación', SUPLEMENTACION: 'Suplementación',
 };
 
 const CATEGORIAS: Categoria[] = ['Salud', 'Sanidad', 'Reproducción', 'Manejo', 'Movimientos', 'Compras', 'Ventas', 'Bajas'];

@@ -90,6 +90,7 @@ export default function Masivos({
     const [massTipoServicio, setMassTipoServicio] = useState<string | null>('TORO');
     const [massTorosIds, setMassTorosIds] = useState<string[]>([]);
     const [massEstablecimientoDestino, setMassEstablecimientoDestino] = useState<string | null>(null);
+    const [massSexoTernero, setMassSexoTernero] = useState<string>('I');
     
     const [esVentaRedMasiva, setEsVentaRedMasiva] = useState(false);
     const [renspaDestinoMasiva, setRenspaDestinoMasiva] = useState('');
@@ -208,6 +209,21 @@ export default function Masivos({
         let msg = `¿Confirmar ${massActividad} para ${selectedIds.length} animal${selectedIds.length !== 1 ? 'es' : ''}?`;
         let warn = '';
 
+        if (massActividad === 'PARTO') {
+            const aptas = selectedIds.filter(id => {
+                const a = animales.find((x: any) => x.id === id);
+                return a && ['Vaca', 'Vaquillona'].includes(a.categoria) && a.estado !== 'LACTANTE' && !a.en_transito;
+            });
+            const descartadas = selectedIds.length - aptas.length;
+            if (aptas.length === 0) {
+                notifications.show({ title: 'Sin animales válidos', message: 'No hay Vacas ni Vaquillona aptas en la selección.', color: 'red' });
+                return;
+            }
+            if (descartadas > 0) warn = `Se descartaron ${descartadas} animales que no son Vacas/Vaquillona o están en tránsito. Se registrarán ${aptas.length} partos.`;
+            idsParaProcesar = aptas;
+            msg = `¿Confirmar PARTO para ${aptas.length} vaca${aptas.length !== 1 ? 's' : ''}?`;
+        }
+
         if (massActividad === 'CAPADO') {
             const machos = animales.filter((a: any) => selectedIds.includes(a.id) && a.sexo === 'M' && a.categoria === 'Ternero');
             idsParaProcesar = machos.map((a: any) => a.id);
@@ -229,6 +245,61 @@ export default function Masivos({
     async function guardarEventoMasivo() {
         if (!massFecha || !campoId) return;
         setLoading(true); const idsParaProcesar = idsPendientes; const fechaStr = massFecha.toISOString(); const batchId = crypto.randomUUID();
+
+        if (massActividad === 'PARTO') {
+            const animalesActivos = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
+            if (datosSuscripcion && animalesActivos + idsParaProcesar.length > datosSuscripcion.limite_animales) {
+                const disponibles = datosSuscripcion.limite_animales - animalesActivos;
+                notifications.show({ title: 'Límite de suscripción', message: `Tu plan permite ${datosSuscripcion.limite_animales} animales. Tenés ${animalesActivos} activos. Solo podés registrar ${disponibles} partos más.`, color: 'orange' });
+                setLoading(false);
+                return;
+            }
+
+            const scNums = animales.map((a: any) => { const m = String(a.caravana).match(/^SC-(\d+)$/i); return m ? parseInt(m[1]) : 0; }).filter((v: number) => v > 0);
+            let scCounter = scNums.length > 0 ? Math.max(...scNums) : 0;
+
+            const nuevosInserts: any[] = [];
+            const eventosInserts: any[] = [];
+            const updatesVacas: { id: string; estado: string }[] = [];
+
+            for (const vacaId of idsParaProcesar) {
+                const vaca = animales.find((a: any) => a.id === vacaId);
+                if (!vaca) continue;
+
+                scCounter++;
+                let codigo = `SC-${String(scCounter).padStart(3, '0')}`;
+                while (animales.some((a: any) => a.caravana === codigo)) { scCounter++; codigo = `SC-${String(scCounter).padStart(3, '0')}`; }
+
+                const sexo = massSexoTernero as 'M' | 'H' | 'I';
+                const categoria = sexo === 'H' ? 'Ternera' : 'Ternero';
+                const sexoLabelP = sexo === 'M' ? 'Macho' : sexo === 'H' ? 'Hembra' : 'Sexo no definido';
+
+                nuevosInserts.push({ caravana: codigo, categoria, sexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', fecha_nacimiento: massFecha.toISOString().split('T')[0], fecha_ingreso: massFecha.toISOString().split('T')[0], madre_id: vacaId, establecimiento_id: campoId, potrero_id: vaca.potrero_id ?? null, lote_id: vaca.lote_id ?? null, en_transito: false });
+
+                const nuevoEstadoVaca = vaca.estado.includes('PREÑADA') ? 'PREÑADA Y LACTANDO' : 'EN LACTANCIA';
+                updatesVacas.push({ id: vacaId, estado: nuevoEstadoVaca });
+
+                const _lid = vaca.lote_id ?? null;
+                eventosInserts.push({ animal_id: vacaId, tipo: 'PARTO', resultado: `Nació ${codigo} (${sexoLabelP})`, detalle: `Parto registrado vía carga masiva`, fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { ternero_caravana: codigo, ternero_sexo: sexo, lote_id_en_momento: _lid, lote_nombre_en_momento: _lid ? (lotes?.find((l: any) => l.id === _lid)?.nombre ?? null) : null, batch_id: batchId } });
+            }
+
+            const { error: errTerneros } = await supabase.from('animales').insert(nuevosInserts);
+            if (errTerneros) {
+                notifications.show({ title: 'Error', message: 'No se pudieron registrar los terneros: ' + errTerneros.message, color: 'red' });
+                setLoading(false);
+                return;
+            }
+
+            for (const upd of updatesVacas) { await supabase.from('animales').update({ estado: upd.estado }).eq('id', upd.id); }
+            await supabase.from('eventos').insert(eventosInserts);
+
+            notifications.show({ title: '¡Partos registrados!', message: `Se registraron ${idsParaProcesar.length} partos y se crearon ${idsParaProcesar.length} terneros con código SC automático.`, color: 'teal' });
+            setMassDetalle(''); setMassCostoUnitario(''); setMassTorosIds([]); setMassSexoTernero('I'); setSelectedIds([]);
+            fetchAnimales(); fetchActividadGlobal();
+            setLoading(false);
+            closeConfirm();
+            return;
+        }
 
         if (massActividad === 'VENTA' || massActividad === 'TRASLADO') {
             const ternerosSeleccionados = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero' && a.estado === 'LACTANTE');
@@ -443,7 +514,7 @@ export default function Masivos({
             setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino('');
             setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario('');
             setMassTorosIds([]); setMassMesesGestacion(null); setMassEstablecimientoDestino(null); setSelectedIds([]);
-            setEsVentaRedMasiva(false); setRenspaDestinoMasiva('');
+            setEsVentaRedMasiva(false); setRenspaDestinoMasiva(''); setMassSexoTernero('I');
             fetchAnimales(); fetchActividadGlobal();
         }
     }
@@ -494,7 +565,7 @@ export default function Masivos({
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
                 <Group grow align="flex-start">
-                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'TRATAMIENTO', 'TRASLADO', 'OTRO'].filter(a => rolActual === 'DUENO' || a !== 'VENTA')} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
+                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'PARTO', 'TRATAMIENTO', 'TRASLADO', 'OTRO'].filter(a => rolActual === 'DUENO' || a !== 'VENTA')} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
                     <TextInput label="Fecha" type="date" value={getLocalDateForInput(massFecha)} onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
                 </Group>
                 
@@ -542,6 +613,22 @@ export default function Masivos({
                 )}
                 {massActividad === 'SERVICIO' && ( <Group grow mt="sm"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={massTipoServicio} onChange={setMassTipoServicio} />{massTipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map((t: any) => ({value: t.id, label: t.caravana}))} value={massTorosIds} onChange={setMassTorosIds} searchable /> )}</Group> )}
                 
+                {massActividad === 'PARTO' && (
+                    <Paper withBorder p="sm" bg="teal.0" mt="sm">
+                        <Text size="sm" fw={700} c="teal.7" mb="xs">Datos de los terneros</Text>
+                        <Select
+                            label="Sexo de los terneros"
+                            description="Podés completarlo después en la ficha de cada uno si no sabés el sexo todavía"
+                            data={[
+                                { value: 'I', label: 'No definido por ahora' },
+                                { value: 'M', label: 'Machos' },
+                                { value: 'H', label: 'Hembras' },
+                            ]}
+                            value={massSexoTernero}
+                            onChange={(v) => setMassSexoTernero(v ?? 'I')}
+                        />
+                    </Paper>
+                )}
                 {massActividad === 'TRASLADO' && (
                     <Paper withBorder p="sm" mt="sm" bg="gray.0">
                         <Select label="Establecimiento de Destino" placeholder="Seleccionar nuevo campo (Propio)" data={establecimientos.filter((e: any) => e.id !== campoId).map((e: any) => ({ value: e.id, label: e.nombre }))} value={massEstablecimientoDestino} onChange={setMassEstablecimientoDestino} leftSection={<IconMapPin size={16}/>} required/>
@@ -566,7 +653,7 @@ export default function Masivos({
                 <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 2}}/>
                 <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
                 <Select placeholder="Estado" data={['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']} value={filterEstado} onChange={setFilterEstado} clearable style={{flex: 1.5}}/>
-                <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: '-'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
                 <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1.5}}/>
                 <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1.5}}/>
             </Group>
@@ -578,7 +665,7 @@ export default function Masivos({
                 </Group>
                 <Group gap="xs" wrap="nowrap">
                     <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
-                    <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                    <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: '-'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
                 </Group>
                 <Group gap="xs" wrap="nowrap">
                     <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1}}/>
@@ -601,7 +688,7 @@ export default function Masivos({
                                             <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>
                                         ) : (
                                             <>
-                                                {animal.categoria === 'Ternero' && (<Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                {animal.categoria === 'Ternero' && animal.sexo !== 'I' && (<Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
                                                 {animal.categoria === 'Ternero' && animal.castrado ? (<Badge color="cyan" size="sm">CAPADO</Badge>) : null}
                                                 {(animal.categoria !== 'Ternero' || animal.estado === 'LACTANTE') && <RenderEstadoBadge estado={animal.estado} />}
                                                 {renderCondicionBadges(animal.condicion)}

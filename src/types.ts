@@ -21,7 +21,7 @@ export type CategoriaAnimal =
   | 'Novillo'
   | 'Toro';
 
-export type SexoAnimal = 'M' | 'H';
+export type SexoAnimal = 'M' | 'H' | 'I';
 
 export type OrigenAnimal = 'PROPIO' | 'COMPRADO' | 'NACIDO';
 

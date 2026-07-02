@@ -234,14 +234,15 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
           if (pesoNacimiento) { const pesoNacNum = parseFloat(pesoNacimiento.replace(/[^\d.]/g, '')); if (isNaN(pesoNacNum) || pesoNacNum <= 0 || pesoNacimiento.includes('-')) { setLoading(false); return alert("❌ ERROR: Peso inválido."); } }
 
           const fechaParto = fechaEvento.toISOString().split('T')[0];
-          const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: caravanaFinalTernero, categoria: 'Ternero', sexo: nuevoTerneroSexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, potrero_id: animalSel.potrero_id, parcela_id: animalSel.parcela_id, lote_id: animalSel.lote_id, en_transito: false }]).select().single();
+          const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: caravanaFinalTernero, categoria: nuevoTerneroSexo === 'H' ? 'Ternera' : 'Ternero', sexo: nuevoTerneroSexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, potrero_id: animalSel.potrero_id, parcela_id: animalSel.parcela_id, lote_id: animalSel.lote_id, en_transito: false }]).select().single();
           if (err) { setLoading(false); return alert("Error: " + err.message); }
           if (pesoNacimiento) await supabase.from('eventos').insert({ animal_id: nuevoTernero.id, tipo: 'PESAJE', resultado: `${pesoNacimiento}kg`, detalle: 'Peso al nacer', fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
 
           nuevoEstado = 'EN LACTANCIA';
           fechaServicioAActualizar = null;
           if (animalSel.categoria === 'Vaquillona') await supabase.from('animales').update({ categoria: 'Vaca' }).eq('id', animalSel.id);
-          resultadoFinal = `Nació ${caravanaFinalTernero} (${nuevoTerneroSexo})`; datosExtra = { ternero_caravana: caravanaFinalTernero, ternero_sexo: nuevoTerneroSexo };
+          const sexoLabel = nuevoTerneroSexo === 'M' ? 'Macho' : nuevoTerneroSexo === 'H' ? 'Hembra' : 'Sexo no definido';
+          resultadoFinal = `Nació ${caravanaFinalTernero} (${sexoLabel})`; datosExtra = { ternero_caravana: caravanaFinalTernero, ternero_sexo: nuevoTerneroSexo };
           if (nuevoTernero) setHijos(prev => [...prev, { id: nuevoTernero.id, caravana: nuevoTernero.caravana, sexo: nuevoTernero.sexo, estado: 'LACTANTE' }]);
         }
         else if (tipoEventoInput === 'DESTETE') {
@@ -503,7 +504,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>
             ) : (
                 <>
-                    {animalSel?.categoria === 'Ternero' && (<Badge color={animalSel.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animalSel.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                    {animalSel?.categoria === 'Ternero' && animalSel.sexo !== 'I' && (<Badge color={animalSel.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animalSel.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
                     {animalSel?.categoria === 'Ternero' && animalSel.castrado ? (<Badge color="cyan" size="sm">CAPADO</Badge>) : null}
                     {(animalSel?.categoria !== 'Ternero' || animalSel.estado === 'LACTANTE') && <RenderEstadoBadge estado={animalSel.estado} />}
                     {renderCondicionBadges(animalSel.condicion)}
@@ -531,7 +532,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                        )}
                
                        {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}
-                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Ej: 1045 — opcional" description="Vacío = SC-xxx automático" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} /><Select label="Sexo" data={['M', 'H']} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
+                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Ej: 1045 — opcional" description="Vacío = SC-xxx automático" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} /><Select label="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}, {value: 'I', label: 'No definido por ahora'}]} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
                        {!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO', 'DESTETE'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}
                        <TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>
                        {adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}
@@ -576,7 +577,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                {hijos.map(h => { 
                                    const isGone = ['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(h.estado); 
                                    return (
-                                       <Badge key={h.id} variant={(isGone || h.ajeno) ? 'light' : 'white'} style={{ cursor: h.ajeno ? 'default' : 'pointer', opacity: (isGone || h.ajeno) ? 0.6 : 1 }} color={h.ajeno ? 'gray' : (h.sexo === 'H' ? 'pink' : 'blue')} onClick={() => !h.ajeno && navegarAHijo(h.id)}>
+                                       <Badge key={h.id} variant={(isGone || h.ajeno) ? 'light' : 'white'} style={{ cursor: h.ajeno ? 'default' : 'pointer', opacity: (isGone || h.ajeno) ? 0.6 : 1 }} color={h.ajeno ? 'gray' : (h.sexo === 'M' ? 'blue' : h.sexo === 'H' ? 'pink' : 'gray')} onClick={() => !h.ajeno && navegarAHijo(h.id)}>
                                            {h.caravana} {h.ajeno && '(En otro campo)'}
                                        </Badge>
                                    )
