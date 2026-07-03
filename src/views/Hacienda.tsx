@@ -121,7 +121,8 @@ export default function Hacienda({
                 if (animal.estado === 'PREÑADA Y LACTANDO') tagsDelAnimal.push('PREÑADA', 'EN LACTANCIA'); else tagsDelAnimal.push(animal.estado);
                 if (animal.condicion) tagsDelAnimal.push(...animal.condicion.split(', '));
                 if (animal.sexo === 'M') tagsDelAnimal.push('MACHO');
-                if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
+                else if (animal.sexo === 'H') tagsDelAnimal.push('HEMBRA');
+                else if (animal.sexo === 'I') tagsDelAnimal.push('NO DEFINIDO');
                 if (animal.castrado) tagsDelAnimal.push('CAPADO');
                 if (animal.destacado) tagsDelAnimal.push('DESTACADO');
                 if (animal.en_transito) tagsDelAnimal.push('EN TRÁNSITO'); 
@@ -292,7 +293,7 @@ export default function Hacienda({
                             <MultiSelect 
                                 label={isMobile ? undefined : "Estado"} 
                                 placeholder={isMobile ? "Estado..." : "Filtrar por estado..."} 
-                                data={['MACHO', 'HEMBRA', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']} 
+                                data={['MACHO', 'HEMBRA', 'NO DEFINIDO', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']}
                                 value={filterAtributos} 
                                 onChange={setFilterAtributos} 
                                 leftSection={<IconFilter size={16}/>} 
@@ -397,7 +398,7 @@ export default function Hacienda({
                                                     <Badge color="#795548">EN TRÁNSITO</Badge>
                                                 ) : (
                                                     <>
-                                                        {vaca.categoria === 'Ternero' && vaca.sexo !== 'I' && (<Badge color={vaca.sexo === 'M' ? 'blue' : 'pink'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                        {vaca.categoria === 'Ternero' && (<Badge color={vaca.sexo === 'M' ? 'blue' : vaca.sexo === 'H' ? 'pink' : 'gray'} variant="light">{vaca.sexo === 'M' ? 'MACHO' : vaca.sexo === 'H' ? 'HEMBRA' : 'NO DEFINIDO'}</Badge>)}
                                                         {vaca.categoria === 'Ternero' && vaca.castrado ? (<Badge color="cyan">CAPADO</Badge>) : null}
                                                         {(vaca.categoria !== 'Ternero' || vaca.estado === 'LACTANTE') && <RenderEstadoBadge estado={vaca.estado} />}
                                                         

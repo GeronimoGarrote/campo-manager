@@ -260,7 +260,7 @@ export default function Masivos({
 
             const nuevosInserts: any[] = [];
             const eventosInserts: any[] = [];
-            const updatesVacas: { id: string; estado: string }[] = [];
+            const updatesVacas: { id: string; estado: string; isVaquillona: boolean }[] = [];
 
             for (const vacaId of idsParaProcesar) {
                 const vaca = animales.find((a: any) => a.id === vacaId);
@@ -277,7 +277,7 @@ export default function Masivos({
                 nuevosInserts.push({ caravana: codigo, categoria, sexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', fecha_nacimiento: massFecha.toISOString().split('T')[0], fecha_ingreso: massFecha.toISOString().split('T')[0], madre_id: vacaId, establecimiento_id: campoId, potrero_id: vaca.potrero_id ?? null, lote_id: vaca.lote_id ?? null, en_transito: false });
 
                 const nuevoEstadoVaca = 'EN LACTANCIA';
-                updatesVacas.push({ id: vacaId, estado: nuevoEstadoVaca });
+                updatesVacas.push({ id: vacaId, estado: nuevoEstadoVaca, isVaquillona: vaca.categoria === 'Vaquillona' });
 
                 const _lid = vaca.lote_id ?? null;
                 eventosInserts.push({ animal_id: vacaId, tipo: 'PARTO', resultado: `Nació ${codigo} (${sexoLabelP})`, detalle: `Parto registrado vía carga masiva`, fecha_evento: fechaStr, establecimiento_id: campoId, datos_extra: { ternero_caravana: codigo, ternero_sexo: sexo, lote_id_en_momento: _lid, lote_nombre_en_momento: _lid ? (lotes?.find((l: any) => l.id === _lid)?.nombre ?? null) : null, batch_id: batchId } });
@@ -290,7 +290,11 @@ export default function Masivos({
                 return;
             }
 
-            for (const upd of updatesVacas) { await supabase.from('animales').update({ estado: upd.estado }).eq('id', upd.id); }
+            for (const upd of updatesVacas) {
+                const camposVaca: any = { estado: upd.estado, fecha_servicio: null, toros_servicio_ids: null };
+                if (upd.isVaquillona) camposVaca.categoria = 'Vaca';
+                await supabase.from('animales').update(camposVaca).eq('id', upd.id);
+            }
             await supabase.from('eventos').insert(eventosInserts);
 
             notifications.show({ title: '¡Partos registrados!', message: `Se registraron ${idsParaProcesar.length} partos y se crearon ${idsParaProcesar.length} terneros con código SC automático.`, color: 'teal' });
@@ -653,7 +657,7 @@ export default function Masivos({
                 <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 2}}/>
                 <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
                 <Select placeholder="Estado" data={['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']} value={filterEstado} onChange={setFilterEstado} clearable style={{flex: 1.5}}/>
-                <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: '-'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: 'S/D'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
                 <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1.5}}/>
                 <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1.5}}/>
             </Group>
@@ -665,7 +669,7 @@ export default function Masivos({
                 </Group>
                 <Group gap="xs" wrap="nowrap">
                     <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
-                    <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: '-'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                    <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: 'S/D'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
                 </Group>
                 <Group gap="xs" wrap="nowrap">
                     <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1}}/>
@@ -688,7 +692,7 @@ export default function Masivos({
                                             <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>
                                         ) : (
                                             <>
-                                                {animal.categoria === 'Ternero' && animal.sexo !== 'I' && (<Badge color={animal.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animal.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                                                {animal.categoria === 'Ternero' && (<Badge color={animal.sexo === 'M' ? 'blue' : animal.sexo === 'H' ? 'pink' : 'gray'} variant="light" size="sm">{animal.sexo === 'M' ? 'MACHO' : animal.sexo === 'H' ? 'HEMBRA' : 'NO DEFINIDO'}</Badge>)}
                                                 {animal.categoria === 'Ternero' && animal.castrado ? (<Badge color="cyan" size="sm">CAPADO</Badge>) : null}
                                                 {(animal.categoria !== 'Ternero' || animal.estado === 'LACTANTE') && <RenderEstadoBadge estado={animal.estado} />}
                                                 {renderCondicionBadges(animal.condicion)}

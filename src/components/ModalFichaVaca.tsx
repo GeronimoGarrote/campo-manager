@@ -315,6 +315,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         if (!animalSel || !campoId) return;
         let finalEstado = editEstado;
         if (['Vaca', 'Vaquillona'].includes(editCategoria || '')) { if (editLactancia) { finalEstado = editEstado === 'PREÑADA' ? 'PREÑADA Y LACTANDO' : 'EN LACTANCIA'; } }
+        else { finalEstado = animalSel.estado; }
         const condStr = editCondicion.length > 0 ? editCondicion.join(', ') : 'SANA';
         const eventosAInsertar = []; const fechaStr = new Date().toISOString();
     
@@ -504,7 +505,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 <Badge color="#795548" size="sm">EN TRÁNSITO</Badge>
             ) : (
                 <>
-                    {animalSel?.categoria === 'Ternero' && animalSel.sexo !== 'I' && (<Badge color={animalSel.sexo === 'M' ? 'blue' : 'pink'} variant="light" size="sm">{animalSel.sexo === 'M' ? 'MACHO' : 'HEMBRA'}</Badge>)}
+                    {animalSel?.categoria === 'Ternero' && (<Badge color={animalSel.sexo === 'M' ? 'blue' : animalSel.sexo === 'H' ? 'pink' : 'gray'} variant="light" size="sm">{animalSel.sexo === 'M' ? 'MACHO' : animalSel.sexo === 'H' ? 'HEMBRA' : 'NO DEFINIDO'}</Badge>)}
                     {animalSel?.categoria === 'Ternero' && animalSel.castrado ? (<Badge color="cyan" size="sm">CAPADO</Badge>) : null}
                     {(animalSel?.categoria !== 'Ternero' || animalSel.estado === 'LACTANTE') && <RenderEstadoBadge estado={animalSel.estado} />}
                     {renderCondicionBadges(animalSel.condicion)}
