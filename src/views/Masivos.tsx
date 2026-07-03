@@ -28,7 +28,7 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
 };
 
 export default function Masivos({
-    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, git ad,
+    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal,
     rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
     lotePreseleccionado = null as string | null,
     onLotePreseleccionadoAplicado,
