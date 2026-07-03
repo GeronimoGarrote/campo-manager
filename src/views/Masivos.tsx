@@ -28,7 +28,7 @@ export const RenderEstadoBadge = ({ estado }: { estado: string | undefined }) =>
 };
 
 export default function Masivos({
-    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, setActiveSection,
+    campoId, animales = [], potreros = [], parcelas = [], lotes = [], establecimientos = [], datosSuscripcion, fetchAnimales, fetchActividadGlobal, git ad,
     rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
     lotePreseleccionado = null as string | null,
     onLotePreseleccionadoAplicado,
@@ -457,8 +457,24 @@ export default function Masivos({
                         if (preñadasIds.length > 0) await supabase.from('animales').update({ estado: 'PREÑADA' }).in('id', preñadasIds);
                         if (vaciasIds.length > 0) await supabase.from('animales').update({ estado: 'VACÍA' }).in('id', vaciasIds);
                     }
-                    const ternerosIds = animales.filter((a: any) => idsParaProcesar.includes(a.id) && a.categoria === 'Ternero').map((a: any) => a.id);
-                    if (ternerosIds.length > 0) await supabase.from('animales').update({ estado: 'ACTIVO' }).in('id', ternerosIds);
+                    const ternerosDestetados = animales.filter((a: any) => idsParaProcesar.includes(a.id) && ['Ternero', 'Ternera'].includes(a.categoria));
+                    const ternerosIds = ternerosDestetados.map((a: any) => a.id);
+                    if (ternerosIds.length > 0) {
+                        await supabase.from('animales').update({ estado: 'ACTIVO' }).in('id', ternerosIds);
+                        const madresAActualizar = new Map<string, string>();
+                        for (const ternero of ternerosDestetados) {
+                            if (ternero.madre_id && !vacasLactandoIds.includes(ternero.madre_id)) {
+                                const madre = animales.find((a: any) => a.id === ternero.madre_id);
+                                if (madre && madre.estado.includes('LACTANCIA')) {
+                                    madresAActualizar.set(madre.id, madre.estado);
+                                }
+                            }
+                        }
+                        for (const [madreId, estadoOriginal] of madresAActualizar.entries()) {
+                            const nuevoEstadoMadre = estadoOriginal.includes('PREÑADA') ? 'PREÑADA' : 'VACÍA';
+                            await supabase.from('animales').update({ estado: nuevoEstadoMadre }).eq('id', madreId);
+                        }
+                    }
                 }
                 if (massActividad === 'TACTO') {
                     if (massTactoResultado === 'PREÑADA') {
