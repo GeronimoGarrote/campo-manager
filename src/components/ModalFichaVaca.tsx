@@ -57,8 +57,9 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [editFechaIngreso, setEditFechaIngreso] = useState<string>('');
     const [editCastrado, setEditCastrado] = useState(false);
     const [editPotreroId, setEditPotreroId] = useState<string | null>(null);
-    const [editParcelaId, setEditParcelaId] = useState<string | null>(null); 
+    const [editParcelaId, setEditParcelaId] = useState<string | null>(null);
     const [editLoteId, setEditLoteId] = useState<string | null>(null);
+    const [editPelaje, setEditPelaje] = useState<string | null>(null);
 
     const [modoBaja, setModoBaja] = useState<string | null>(null);
     const [bajaMotivo, setBajaMotivo] = useState('');
@@ -111,7 +112,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         let repro = 'ACTIVO'; if (animalSel.estado.includes('PREÑADA')) repro = 'PREÑADA'; else if (animalSel.estado.includes('VACÍA') || animalSel.estado === 'EN LACTANCIA') repro = 'VACÍA';
         setEditEstado(repro); setEditLactancia(animalSel.estado.includes('LACTANCIA'));
         setEditCondicion(animalSel.condicion && animalSel.condicion !== 'SANA' ? animalSel.condicion.split(', ') : []); setEditDetalles(animalSel.detalles || '');
-        setEditPotreroId(animalSel.potrero_id || null); setEditParcelaId(animalSel.parcela_id || null); setEditLoteId(animalSel.lote_id || null); setEditFechaNac(animalSel.fecha_nacimiento || ''); setEditFechaIngreso(animalSel.fecha_ingreso || '');
+        setEditPotreroId(animalSel.potrero_id || null); setEditParcelaId(animalSel.parcela_id || null); setEditLoteId(animalSel.lote_id || null); setEditPelaje(animalSel.pelaje || null); setEditFechaNac(animalSel.fecha_nacimiento || ''); setEditFechaIngreso(animalSel.fecha_ingreso || '');
         
         if (animalSel.madre_id) { 
             const m = animales.find(a => a.id === animalSel.madre_id); 
@@ -333,7 +334,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_origen: lAnterior, lote_destino: lNom, lote_id: editLoteId, lote_id_en_momento: animalSel.lote_id ?? null }, establecimiento_id: campoId });
         }
     
-        const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSel.id);
+        const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, pelaje: editPelaje || null, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSel.id);
         if (eventosAInsertar.length > 0) { await supabase.from('eventos').insert(eventosAInsertar); }
         if (!error) { alert("Datos actualizados"); onUpdate(); }
     }
@@ -567,7 +568,8 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                    {editPotreroId && <Select label="Parcela" placeholder="General" data={parcelas.filter(p => p.potrero_id === editPotreroId).map(p => ({value: p.id, label: p.nombre}))} value={editParcelaId} onChange={setEditParcelaId} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} />}
                </Group>
                <Select label="Lote (Grupo)" placeholder="Sin asignar" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={editLoteId} onChange={setEditLoteId} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} mb="sm" />
-               
+               <Select label="Pelaje" placeholder="Sin especificar" data={['Negro', 'Colorado', 'Careta Negro', 'Careta Colorado', 'Blanco y Negro']} value={editPelaje} onChange={setEditPelaje} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} mb="sm" />
+
                {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
                {nombresTorosCartel && ( <Paper withBorder p="xs" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '4px solid #fa5252' }}><Group gap="xs"><ThemeIcon color="pink" variant="light" size="sm"><IconInfoCircle size={14}/></ThemeIcon><Text size="sm" c="pink.9">En servicio con Toro/s: <Text span fw={700}>{nombresTorosCartel}</Text></Text></Group></Paper> )}
                {['Vaca'].includes(editCategoria || '') && ( 

@@ -6,7 +6,7 @@ import { useLectorAllflex } from '../hooks/useLectorAllflex';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import AllflexScanner from '../components/AllflexScanner';
 import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert, Modal, Stack } from '@mantine/core';
-import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle, IconFilter } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
@@ -67,7 +67,7 @@ export default function Masivos({
 
     const [busqueda, setBusqueda] = useState('');
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
-    const [filterSexo, setFilterSexo] = useState<string | null>(null);
+    const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterEstado, setFilterEstado] = useState<string | null>(null);
     const [filterLote, setFilterLote] = useState<string | null>(null);
     const [filterPotrero, setFilterPotrero] = useState<string | null>(null);
@@ -130,11 +130,22 @@ export default function Masivos({
             animal.caravana.trim().toLowerCase().includes(q) ||
             (animal.caravana_electronica?.trim().toLowerCase().includes(q) ?? false);
         const matchCategoria = filterCategoria ? animal.categoria === filterCategoria : true;
-        const matchSexo = filterSexo ? animal.sexo === filterSexo : true;
         const matchEstado = filterEstado ? animal.estado === filterEstado : true;
         const matchLote = filterLote ? animal.lote_id === filterLote : true;
         const matchPotrero = filterPotrero ? animal.potrero_id === filterPotrero : true;
-        return matchBusqueda && matchCategoria && matchSexo && matchEstado && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && !animal.en_transito;
+
+        let matchAtributos = true;
+        if (filterAtributos.length > 0) {
+            const tags: string[] = [];
+            if (animal.sexo === 'M') tags.push('MACHO');
+            else if (animal.sexo === 'H') tags.push('HEMBRA');
+            else if (animal.sexo === 'I') tags.push('NO DEFINIDO');
+            if (animal.castrado) tags.push('CAPADO');
+            if (animal.condicion) tags.push(...animal.condicion.split(', '));
+            matchAtributos = filterAtributos.every((f: string) => tags.includes(f));
+        }
+
+        return matchBusqueda && matchCategoria && matchAtributos && matchEstado && matchLote && matchPotrero && animal.estado !== 'VENDIDO' && animal.estado !== 'MUERTO' && animal.estado !== 'ELIMINADO' && !animal.en_transito;
     });
 
     const toggleSeleccion = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -673,7 +684,7 @@ export default function Masivos({
                 <TextInput placeholder="Buscar caravana..." leftSection={<IconSearch size={14}/>} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{flex: 2}}/>
                 <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1.5}}/>
                 <Select placeholder="Estado" data={['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']} value={filterEstado} onChange={setFilterEstado} clearable style={{flex: 1.5}}/>
-                <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: 'S/D'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                <MultiSelect placeholder="Atributos" data={['MACHO', 'HEMBRA', 'NO DEFINIDO', 'CAPADO', 'ENFERMA', 'LASTIMADA']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={14}/>} clearable style={{flex: 1.5}}/>
                 <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1.5}}/>
                 <Select placeholder="Lote" data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))} value={filterLote} onChange={setFilterLote} clearable leftSection={<IconTag size={14}/>} style={{flex: 1.5}}/>
             </Group>
@@ -685,7 +696,7 @@ export default function Masivos({
                 </Group>
                 <Group gap="xs" wrap="nowrap">
                     <Select placeholder="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Ternera', 'Toro', 'Novillo']} value={filterCategoria} onChange={setFilterCategoria} clearable style={{flex: 1}}/>
-                    <Select placeholder="Sexo" data={[{value: 'M', label: 'M'}, {value: 'H', label: 'H'}, {value: 'I', label: 'S/D'}]} value={filterSexo} onChange={setFilterSexo} clearable style={{width: 80, flexShrink: 0}}/>
+                    <MultiSelect placeholder="Atributos" data={['MACHO', 'HEMBRA', 'NO DEFINIDO', 'CAPADO', 'ENFERMA', 'LASTIMADA']} value={filterAtributos} onChange={setFilterAtributos} leftSection={<IconFilter size={14}/>} clearable style={{flex: 1}}/>
                 </Group>
                 <Group gap="xs" wrap="nowrap">
                     <Select placeholder="Potrero" data={potreros.map((p: any) => ({value: p.id, label: p.nombre}))} value={filterPotrero} onChange={setFilterPotrero} clearable leftSection={<IconMapPin size={14}/>} style={{flex: 1}}/>

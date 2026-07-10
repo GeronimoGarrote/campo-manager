@@ -28,6 +28,13 @@ export type OrigenAnimal = 'PROPIO' | 'COMPRADO' | 'NACIDO';
 /** Valores base de condición; el campo puede contener combinaciones separadas por ', ' */
 export type CondicionBase = 'SANA' | 'ENFERMA' | 'LASTIMADA';
 
+export type PelajeAnimal =
+  | 'Negro'
+  | 'Colorado'
+  | 'Careta Negro'
+  | 'Careta Colorado'
+  | 'Blanco y Negro';
+
 export type TipoEvento =
   | 'PESAJE'
   | 'ENFERMEDAD'
@@ -123,6 +130,7 @@ export interface Animal {
   toro_servicio_id?: string;
   toros_servicio_ids?: string[];
   en_transito?: boolean;
+  pelaje?: PelajeAnimal;
 }
 
 export interface Evento {
