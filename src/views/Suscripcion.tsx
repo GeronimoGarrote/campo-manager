@@ -374,7 +374,7 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                 <Text size="sm" ff="monospace">
                                     Alias: <Text span fw={700} c="blue.8">Rodeocontrol</Text>
                                 </Text>
-                                <CopyButton value="ggeroo">
+                                <CopyButton value="Rodeocontrol">
                                     {({ copied, copy }) => (
                                         <ActionIcon color={copied ? 'teal' : 'blue'} variant="subtle" onClick={copy}>
                                             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
