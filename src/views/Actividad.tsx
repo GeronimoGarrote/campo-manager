@@ -262,7 +262,7 @@ export default function Actividad({ eventosGlobales }: { eventosGlobales: Evento
       <Group justify="space-between" align="center">
         <Group gap="xs" align="center">
           <Title order={3}>Registros de Actividad</Title>
-          <Badge size="xl" circle color="blue" variant="filled">{eventosFiltrados.length}</Badge>
+          <Text fw={700} size="xl" c="blue">{eventosFiltrados.length}</Text>
         </Group>
         <Group gap="xs" mr={{ base: 0, md: 'md' }}>
           <Button

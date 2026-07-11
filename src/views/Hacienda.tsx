@@ -193,14 +193,14 @@ export default function Hacienda({
             .update({ caravana_electronica: eidInputVal.trim() || null })
             .eq('id', animalParaEid.id);
         setSavingEid(false);
-        if (error) { alert('Error: ' + error.message); return; }
+        if (error) { notifications.show({ title: 'Error', message: error.message, color: 'red' }); return; }
         fetchAnimales();
         setAnimalParaEid(null);
         setEidInputVal('');
     }
 
     const exportarAExcel = () => {
-        if (animalesFiltrados.length === 0) return alert("No hay datos para exportar");
+        if (animalesFiltrados.length === 0) { notifications.show({ title: 'Sin datos', message: 'No hay animales para exportar con los filtros actuales.', color: 'orange' }); return; }
         const cabeceras = ['Caravana', 'Categoria', 'Sexo', 'Estado', 'Condicion Sanitaria', 'Anotaciones', 'Ubicacion (Potrero)', 'Parcela', 'Lote (Grupo)', 'Fecha Ingreso'];
         const filas = animalesFiltrados.map((a: any) => [ a.caravana, a.categoria, a.sexo === 'M' ? 'Macho' : a.sexo === 'H' ? 'Hembra' : '-', a.estado, a.condicion || 'SANA', a.detalles || '-', getNombrePotrero(a.potrero_id) || '-', getNombreParcela(a.parcela_id) || '-', getNombreLote(a.lote_id) || '-', a.fecha_ingreso ? formatDate(a.fecha_ingreso) : '-' ]);
         const contenidoCsv = [ cabeceras.join(';'), ...filas.map((fila: any) => fila.join(';')) ].join('\n');
@@ -214,7 +214,7 @@ export default function Hacienda({
             <Group justify="space-between" align="center">
                 <Group gap="xs" align="center">
                     <Title order={3}>{activeSection === 'hacienda' ? 'Hacienda Activa' : 'Archivo de Bajas'}</Title>
-                    <Badge size="xl" circle color="blue" variant="filled">{animalesFiltrados.length}</Badge>
+                    <Text fw={700} size="xl" c="blue">{animalesFiltrados.length}</Text>
                 </Group>
                 
                 <Group gap="xs" mr={{ base: 0, md: 'md' }}>

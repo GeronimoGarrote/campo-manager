@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Stack, TextInput, Group, Select, Switch, Button, Text, Alert, Badge, SegmentedControl } from '@mantine/core';
 import { IconBabyCarriage, IconCalendarEvent, IconCurrencyDollar, IconScan, IconInfoCircle, IconPlus, IconLink } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../supabase';
 
 interface Props {
@@ -79,7 +80,7 @@ export default function ModalAltaDesdeBaston({
     // ------------------------------------------------------------------ //
     async function guardarNuevo() {
         if (datosSuscripcion && animalesActivos.length >= datosSuscripcion.limite_animales) {
-            alert(`Límite de tu plan alcanzado (${datosSuscripcion.limite_animales} animales). Mejorá tu plan para agregar más.`);
+            notifications.show({ title: 'Límite alcanzado', message: `Tu plan permite hasta ${datosSuscripcion.limite_animales} animales. Mejorá tu plan para agregar más.`, color: 'red' });
             return;
         }
         if (!campoId) return;
@@ -91,7 +92,7 @@ export default function ModalAltaDesdeBaston({
             const yaExiste = animalesActivos.some(
                 a => a.caravana.toLowerCase() === caravanaFinal.toLowerCase()
             );
-            if (yaExiste) { alert('Ya existe un animal activo con esa caravana visual.'); return; }
+            if (yaExiste) { notifications.show({ title: 'Caravana duplicada', message: 'Ya existe un animal activo con esa caravana visual.', color: 'red' }); return; }
         }
 
         setLoading(true);
@@ -127,7 +128,7 @@ export default function ModalAltaDesdeBaston({
             establecimiento_id: campoId, en_transito: false,
         }]).select();
 
-        if (error) { alert('Error: ' + error.message); setLoading(false); return; }
+        if (error) { notifications.show({ title: 'Error', message: error.message, color: 'red' }); setLoading(false); return; }
 
         const animalId = data![0].id;
 
@@ -161,7 +162,7 @@ export default function ModalAltaDesdeBaston({
     //  FLUJO B: Vincular EID a animal ya existente
     // ------------------------------------------------------------------ //
     async function vincularAExistente() {
-        if (!animalExistenteId) { alert('Seleccioná un animal de la lista.'); return; }
+        if (!animalExistenteId) { notifications.show({ title: 'Animal requerido', message: 'Seleccioná un animal de la lista.', color: 'orange' }); return; }
         setLoading(true);
         const update: Record<string, string> = { caravana_electronica: caravanaElectronica.trim() };
         if (reemplazarCaravanaVisual) update.caravana = caravanaElectronica.trim();
@@ -169,7 +170,7 @@ export default function ModalAltaDesdeBaston({
             .update(update)
             .eq('id', animalExistenteId);
         setLoading(false);
-        if (error) { alert('Error: ' + error.message); return; }
+        if (error) { notifications.show({ title: 'Error', message: error.message, color: 'red' }); return; }
         onSuccess(animalExistenteId);
         onClose();
     }

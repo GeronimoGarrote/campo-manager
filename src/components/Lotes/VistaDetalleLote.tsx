@@ -3,6 +3,7 @@ import { Group, Title, Badge, Button, SimpleGrid, Paper, Text, ActionIcon, Tabs,
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle, IconCalendar, IconArchive, IconPigMoney, IconPlaylistAdd, IconMapPin } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../../supabase';
 import ModalVentaLote from './ModalVentaLote';
 
@@ -33,6 +34,9 @@ const CustomTooltipMulti = ({ active, payload }: any) => {
 export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, campoId, lotes, animales, potreros, parcelas, establecimientos, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, fetchHistoricosGlobal, abrirFichaVaca, checkNombreDuplicado, onIrAMasivosConLote }: any) {
     const [loading, setLoading] = useState(false);
     const [modalVentaOpen, { open: openModalVenta, close: closeModalVenta }] = useDisclosure(false);
+    const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void; color?: string } | null>(null);
+    const [renombrarOpen, { open: openRenombrar, close: closeRenombrar }] = useDisclosure(false);
+    const [renombrarNuevoNombre, setRenombrarNuevoNombre] = useState('');
     const [batchModalOpen, { open: openBatchModal, close: closeBatchModal }] = useDisclosure(false);
     const [eventosLoteFicha, setEventosLoteFicha] = useState<any[]>([]);
     const [eventosAnimalesLote, setEventosAnimalesLote] = useState<any[]>([]);
@@ -173,18 +177,33 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         return <Text size="sm">{parcNom ? `${pNom} (${parcNom})` : pNom}</Text>;
     }
 
-    async function renombrarLoteGrupo(id: string, nombreActual: string) {
-        const nuevoNombre = prompt("Nuevo nombre del Lote:", nombreActual);
-        if (nuevoNombre === null || nuevoNombre === nombreActual) return;
-        if (await checkNombreDuplicado(nuevoNombre, id)) { alert("Ya existe un lote con ese nombre."); return; }
-        await supabase.from('lotes').update({ nombre: nuevoNombre }).eq('id', id);
-        fetchLotes(); onLoteModificado({...loteSel, nombre: nuevoNombre});
+    function renombrarLoteGrupo(_id: string, nombreActual: string) {
+        setRenombrarNuevoNombre(nombreActual);
+        openRenombrar();
     }
 
-    async function borrarLoteGrupo(id: string) {
-        if (!confirm("¿Borrar grupo? Los animales quedarán sin lote asignado.")) return;
-        animales.forEach((a: any) => { if (a.lote_id === id) a.lote_id = null; });
-        await supabase.from('lotes').delete().eq('id', id); fetchLotes(); fetchAnimales(); onVolver();
+    async function ejecutarRenombrar() {
+        const nuevoNombre = renombrarNuevoNombre.trim();
+        if (!nuevoNombre || nuevoNombre === loteSel.nombre) { closeRenombrar(); return; }
+        if (await checkNombreDuplicado(nuevoNombre, loteSel.id)) {
+            notifications.show({ title: 'Nombre duplicado', message: 'Ya existe un lote con ese nombre.', color: 'orange' });
+            return;
+        }
+        await supabase.from('lotes').update({ nombre: nuevoNombre }).eq('id', loteSel.id);
+        fetchLotes(); onLoteModificado({ ...loteSel, nombre: nuevoNombre });
+        closeRenombrar();
+    }
+
+    function borrarLoteGrupo(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar el grupo? Los animales quedarán sin lote asignado.',
+            color: 'red',
+            onConfirm: async () => {
+                animales.forEach((a: any) => { if (a.lote_id === id) a.lote_id = null; });
+                await supabase.from('lotes').delete().eq('id', id);
+                fetchLotes(); fetchAnimales(); onVolver();
+            },
+        });
     }
 
     const cambiarFiltroTiempo = (val: string) => {
@@ -310,8 +329,15 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         setLineasAnimalesLote(Array.from(caravanasPresentes)); setDatosGraficoLote(dataGrafico); setLoadingGraficoLote(false);
     }
 
-    async function sacarAnimalDeLote(animalId: string) {
-        if (!confirm("¿Quitar este animal del lote?")) return;
+    function sacarAnimalDeLote(animalId: string) {
+        setConfirmModal({
+            mensaje: '¿Quitar este animal del lote?',
+            color: 'orange',
+            onConfirm: () => _ejecutarSacarAnimal(animalId),
+        });
+    }
+
+    async function _ejecutarSacarAnimal(animalId: string) {
         const animal = animales.find((a: any) => a.id === animalId);
         const loteAnteriorId = animal?.lote_id;
         if (animal) animal.lote_id = null;
@@ -356,18 +382,44 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         }
     }
 
-    async function borrarEventoLote(id: string) {
-        if(!confirm("¿Borrar registro?")) return;
-        await supabase.from('lotes_eventos').delete().eq('id', id); setEventosLoteFicha((prev: any[]) => prev.filter((e: any) => e.id !== id)); fetchEventosLotesGlobal();
+    function borrarEventoLote(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar este registro del lote?',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('lotes_eventos').delete().eq('id', id);
+                setEventosLoteFicha((prev: any[]) => prev.filter((e: any) => e.id !== id));
+                fetchEventosLotesGlobal();
+            },
+        });
     }
 
-    async function cerrarLoteFinal() {
-        if (animalesEnEsteLote.length === 0) return alert("El lote está vacío.");
-        if (!confirm(`¿Estás seguro de FINALIZAR el ciclo del lote "${loteSel.nombre}"?\nSe guardará en el historial y el lote será eliminado.`)) return;
-        setLoading(true); const idsAnimales = animalesEnEsteLote.map((a: any) => a.id);
+    function cerrarLoteFinal() {
+        if (animalesEnEsteLote.length === 0) {
+            notifications.show({ title: 'Lote vacío', message: 'El lote no tiene animales asignados.', color: 'orange' });
+            return;
+        }
+        setConfirmModal({
+            mensaje: `¿Finalizar el ciclo del lote "${loteSel.nombre}"? Se guardará en el historial y el lote será eliminado.`,
+            color: 'grape',
+            onConfirm: () => _ejecutarCierreLote(),
+        });
+    }
+
+    async function _ejecutarCierreLote() {
+        setLoading(true);
+        const idsAnimales = animalesEnEsteLote.map((a: any) => a.id);
         const nuevoHistorico = { establecimiento_id: campoId, lote_id: loteSel.id, nombre_lote: loteSel.nombre, cantidad_animales: animalesEnEsteLote.length, peso_inicial: statsGraficoLote.totalInicio || statsGraficoLote.inicio || 0, peso_final: statsGraficoLote.totalActual || statsGraficoLote.actual || 0, ganancia_promedio: statsGraficoLote.ganancia || 0, adpv: statsGraficoLote.adpv || '0', dias_ciclo: statsGraficoLote.dias || 0, vendido: false, animales_ids: idsAnimales };
         const { error } = await supabase.from('lotes_historicos').insert([nuevoHistorico]);
-        if (!error) { await supabase.from('animales').update({ lote_id: null }).in('id', idsAnimales); await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id); await supabase.from('lotes').delete().eq('id', loteSel.id); fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver(); alert("Ciclo finalizado con éxito."); } else alert("Error al cerrar: " + error.message);
+        if (!error) {
+            await supabase.from('animales').update({ lote_id: null }).in('id', idsAnimales);
+            await supabase.from('lotes_eventos').delete().eq('lote_id', loteSel.id);
+            await supabase.from('lotes').delete().eq('id', loteSel.id);
+            fetchAnimales(); fetchLotes(); fetchHistoricosGlobal(); onVolver();
+            notifications.show({ title: 'Ciclo finalizado', message: 'El lote fue archivado en el historial.', color: 'teal' });
+        } else {
+            notifications.show({ title: 'Error al cerrar', message: error.message, color: 'red' });
+        }
         setLoading(false);
     }
 
@@ -581,6 +633,28 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                         ))}
                     </Table.Tbody>
                 </Table>
+            </Modal>
+
+            {/* Modal confirmación */}
+            <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm" zIndex={3000}>
+                <Stack>
+                    <Text>{confirmModal?.mensaje}</Text>
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                        <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
+
+            {/* Modal renombrar lote */}
+            <Modal opened={renombrarOpen} onClose={closeRenombrar} title={<Text fw={700}>Renombrar Lote</Text>} centered size="sm" zIndex={3000}>
+                <Stack>
+                    <TextInput label="Nuevo nombre" value={renombrarNuevoNombre} onChange={(e) => setRenombrarNuevoNombre(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ejecutarRenombrar()} autoFocus />
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={closeRenombrar}>Cancelar</Button>
+                        <Button color="grape" onClick={ejecutarRenombrar}>Guardar</Button>
+                    </Group>
+                </Stack>
             </Modal>
         </>
     );

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Modal, TextInput, Button, Stack, Text, Center, ThemeIcon } from '@mantine/core';
+import { Modal, TextInput, Button, Stack, Text, Center, ThemeIcon, Group } from '@mantine/core';
 import { IconLock } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../supabase';
 
 import VistaLotesActivos from '../components/Lotes/VistaLotesActivos';
@@ -19,6 +20,7 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, es
     const [nuevoLoteNombre, setNuevoLoteNombre] = useState('');
     const [loading, setLoading] = useState(false);
     const [todosLosHistoricos, setTodosLosHistoricos] = useState<any[]>([]);
+    const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void; color?: string } | null>(null);
 
     useEffect(() => {
         if (campoId) fetchHistoricosGlobal();
@@ -47,13 +49,13 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, es
         if (!nuevoLoteNombre || !campoId) return;
         setLoading(true);
         if (await checkNombreDuplicado(nuevoLoteNombre)) {
-            alert("Ya existe un lote (activo o cerrado) con ese nombre. Elegí uno distinto para evitar confusiones.");
+            notifications.show({ title: 'Nombre duplicado', message: 'Ya existe un lote (activo o cerrado) con ese nombre. Elegí uno distinto.', color: 'orange' });
             setLoading(false); return;
         }
 
         const { error } = await supabase.from('lotes').insert([{ nombre: nuevoLoteNombre, establecimiento_id: campoId }]);
         if (error) {
-            alert("Error al crear lote: " + error.message);
+            notifications.show({ title: 'Error al crear lote', message: error.message, color: 'red' });
         } else {
             setNuevoLoteNombre('');
             fetchLotes();
@@ -63,14 +65,19 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, es
     }
 
     // --- ACÁ ESTÁ LA FUNCIÓN QUE FALTABA ---
-    async function borrarLoteHistorico(id: string) {
-        if (!confirm("¿Estás seguro de eliminar este registro histórico? Esta acción no se puede deshacer.")) return;
-        const { error } = await supabase.from('lotes_historicos').delete().eq('id', id);
-        if (!error) { 
-            fetchHistoricosGlobal(); 
-        } else { 
-            alert("Error al borrar: " + error.message); 
-        }
+    function borrarLoteHistorico(id: string) {
+        setConfirmModal({
+            mensaje: '¿Eliminar este registro histórico? Esta acción no se puede deshacer.',
+            color: 'red',
+            onConfirm: async () => {
+                const { error } = await supabase.from('lotes_historicos').delete().eq('id', id);
+                if (!error) {
+                    fetchHistoricosGlobal();
+                } else {
+                    notifications.show({ title: 'Error al borrar', message: error.message, color: 'red' });
+                }
+            },
+        });
     }
 
     // --- RENDERIZADO CONDICIONAL DE VISTAS ---
@@ -123,7 +130,17 @@ export default function Lotes({ campoId, lotes, animales, potreros, parcelas, es
 
     return (
         <>
-            <VistaLotesActivos 
+            <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm">
+                <Stack>
+                    <Text>{confirmModal?.mensaje}</Text>
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                        <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
+
+            <VistaLotesActivos
                 lotes={lotes} 
                 animales={animales} 
                 eventosLotesGlobal={eventosLotesGlobal} 

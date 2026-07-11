@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Stack, TextInput, Group, Select, Switch, Button, Text, SegmentedControl, NumberInput } from '@mantine/core';
 import { IconBabyCarriage, IconCalendarEvent, IconCurrencyDollar } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../supabase';
 
 interface ModalAltaAnimalProps {
@@ -90,7 +91,8 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
     async function guardarAnimal(cerrarModal: boolean = true) {
         const animalesActivos = animales.filter(a => !['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(a.estado)).length;
         if (datosSuscripcion && animalesActivos >= datosSuscripcion.limite_animales) {
-            return alert(`Límite alcanzado...`);
+            notifications.show({ title: 'Límite alcanzado', message: `Tu plan no permite agregar más animales. Actualizá tu suscripción.`, color: 'red' });
+            return;
         }
         if (!campoId) return;
 
@@ -100,7 +102,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             caravanaFinal = generarCodigosSC(1)[0];
         } else {
             const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravanaFinal.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
-            if (yaExiste) return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana.");
+            if (yaExiste) { notifications.show({ title: 'Caravana duplicada', message: 'Ya existe un animal activo con esa caravana.', color: 'red' }); return; }
         }
 
         setLoading(true);
@@ -168,7 +170,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
             setEdadEstimada(null); setNuevoLactancia(false);
             onSuccess();
             if (cerrarModal) onClose();
-        } else if (error) { alert("Error: " + error.message); }
+        } else if (error) { notifications.show({ title: 'Error', message: error.message, color: 'red' }); }
         setLoading(false);
     }
 
@@ -180,7 +182,8 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
         const animalesActivos = animales.filter(a => !['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(a.estado)).length;
         if (datosSuscripcion && animalesActivos + cantidad > datosSuscripcion.limite_animales) {
             const disponibles = Math.max(0, datosSuscripcion.limite_animales - animalesActivos);
-            return alert(`Límite de suscripción: podés agregar hasta ${disponibles} animal${disponibles !== 1 ? 'es' : ''} más (tenés ${animalesActivos} activos de ${datosSuscripcion.limite_animales}).`);
+            notifications.show({ title: 'Límite de suscripción', message: `Podés agregar hasta ${disponibles} animal${disponibles !== 1 ? 'es' : ''} más (tenés ${animalesActivos} activos de ${datosSuscripcion.limite_animales}).`, color: 'red' });
+            return;
         }
 
         const sexoMasivo = masivoSexo || 'M';
@@ -208,7 +211,7 @@ export default function ModalAltaAnimal({ opened, onClose, campoId, animales, on
 
         setLoading(true);
         const { error } = await supabase.from('animales').insert(inserts);
-        if (error) { setLoading(false); return alert('Error: ' + error.message); }
+        if (error) { setLoading(false); notifications.show({ title: 'Error', message: error.message, color: 'red' }); return; }
 
         if (masivoOrigen === 'COMPRADO' && masivoPrecio) {
             await supabase.from('caja').insert({

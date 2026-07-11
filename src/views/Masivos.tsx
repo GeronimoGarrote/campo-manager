@@ -6,7 +6,7 @@ import { useLectorAllflex } from '../hooks/useLectorAllflex';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import AllflexScanner from '../components/AllflexScanner';
 import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert, Modal, Stack } from '@mantine/core';
-import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle, IconFilter } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle, IconFilter, IconWeight } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
@@ -91,6 +91,7 @@ export default function Masivos({
     const [massTorosIds, setMassTorosIds] = useState<string[]>([]);
     const [massEstablecimientoDestino, setMassEstablecimientoDestino] = useState<string | null>(null);
     const [massSexoTernero, setMassSexoTernero] = useState<string>('I');
+    const [massPesoTotal, setMassPesoTotal] = useState('');
     
     const [esVentaRedMasiva, setEsVentaRedMasiva] = useState(false);
     const [renspaDestinoMasiva, setRenspaDestinoMasiva] = useState('');
@@ -205,6 +206,13 @@ export default function Masivos({
             notifications.show({ title: 'Datos incompletos', message: 'Seleccioná al menos un toro', color: 'red' });
             return;
         }
+        if (massActividad === 'PESAJE_PROMEDIO') {
+            const pesoNum = Number(massPesoTotal);
+            if (!massPesoTotal || isNaN(pesoNum) || pesoNum <= 0) {
+                notifications.show({ title: 'Datos incompletos', message: 'Ingresá el peso total del lote', color: 'red' });
+                return;
+            }
+        }
         if (massActividad === 'TRASLADO') {
             if (!massEstablecimientoDestino) {
                 notifications.show({ title: 'Datos incompletos', message: 'Falta el establecimiento de destino', color: 'red' });
@@ -256,6 +264,47 @@ export default function Masivos({
     async function guardarEventoMasivo() {
         if (!massFecha || !campoId) return;
         setLoading(true); const idsParaProcesar = idsPendientes; const fechaStr = massFecha.toISOString(); const batchId = crypto.randomUUID();
+
+        if (massActividad === 'PESAJE_PROMEDIO') {
+            const pesoTotal = Number(massPesoTotal);
+            const pesoPorAnimal = pesoTotal / idsParaProcesar.length;
+            const pesoFormateado = `${Number.isInteger(pesoPorAnimal) ? pesoPorAnimal : pesoPorAnimal.toFixed(1)}kg`;
+            const detallePromedio = `[PROMEDIO ${idsParaProcesar.length} animales — total ${pesoTotal}kg]${massDetalle ? ` ${massDetalle}` : ''}`;
+
+            const inserts = idsParaProcesar.map((animalId: string) => {
+                const anim = animales.find((a: any) => a.id === animalId);
+                const _lid = anim?.lote_id ?? null;
+                return {
+                    animal_id: animalId,
+                    fecha_evento: fechaStr,
+                    tipo: 'PESAJE',
+                    resultado: pesoFormateado,
+                    detalle: detallePromedio,
+                    datos_extra: {
+                        peso_total_lote: pesoTotal,
+                        cantidad_animales: idsParaProcesar.length,
+                        tipo_pesaje: 'PROMEDIO',
+                        batch_id: batchId,
+                        lote_id_en_momento: _lid,
+                        lote_nombre_en_momento: _lid ? (lotes.find((l: any) => l.id === _lid)?.nombre ?? null) : null,
+                    },
+                    costo: Number(massCostoUnitario) || 0,
+                    establecimiento_id: campoId,
+                };
+            });
+
+            const { error } = await supabase.from('eventos').insert(inserts);
+            setLoading(false);
+            closeConfirm();
+            if (error) {
+                notifications.show({ title: 'Error', message: error.message, color: 'red' });
+            } else {
+                notifications.show({ title: '¡Pesaje registrado!', message: `Promedio de ${pesoFormateado} aplicado a ${idsParaProcesar.length} animal${idsParaProcesar.length !== 1 ? 'es' : ''}.`, color: 'teal', autoClose: 4000 });
+                setMassDetalle(''); setMassPesoTotal(''); setMassCostoUnitario(''); setSelectedIds([]);
+                fetchAnimales(); fetchActividadGlobal();
+            }
+            return;
+        }
 
         if (massActividad === 'PARTO') {
             const animalesActivos = animales.filter((a: any) => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
@@ -545,7 +594,7 @@ export default function Masivos({
             setMassDetalle(''); setMassPrecioVenta(''); setMassKilosTotales(''); setMassGastosVenta(''); setMassDestino('');
             setMassPotreroDestino(null); setMassParcelaDestino(null); setMassLoteDestino(null); setMassCostoUnitario('');
             setMassTorosIds([]); setMassMesesGestacion(null); setMassEstablecimientoDestino(null); setSelectedIds([]);
-            setEsVentaRedMasiva(false); setRenspaDestinoMasiva(''); setMassSexoTernero('I');
+            setEsVentaRedMasiva(false); setRenspaDestinoMasiva(''); setMassSexoTernero('I'); setMassPesoTotal('');
             fetchAnimales(); fetchActividadGlobal();
         }
     }
@@ -596,7 +645,13 @@ export default function Masivos({
             <Paper p="md" mb="xl" radius="md" withBorder bg="violet.0">
                 <Text fw={700} size="lg" mb="sm" c="violet">1. Datos del Evento</Text>
                 <Group grow align="flex-start">
-                    <Select label="Tipo de Actividad" data={['VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION', 'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE', 'VENTA', 'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'PARTO', 'TRATAMIENTO', 'TRASLADO', 'OTRO'].filter(a => rolActual === 'DUENO' || a !== 'VENTA')} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
+                    <Select label="Tipo de Actividad" data={[
+                        'VACUNACION', 'DESPARASITACION', 'SUPLEMENTACION',
+                        { value: 'PESAJE_PROMEDIO', label: 'PESAJE (Promedio)' },
+                        'MOVIMIENTO_POTRERO', 'CAMBIO_LOTE',
+                        ...(rolActual === 'DUENO' ? ['VENTA'] : []),
+                        'DESTETE', 'CAPADO', 'RASPAJE', 'TACTO', 'SERVICIO', 'PARTO', 'TRATAMIENTO', 'TRASLADO', 'OTRO',
+                    ]} value={massActividad} onChange={setMassActividad} allowDeselect={false}/>
                     <TextInput label="Fecha" type="date" value={getLocalDateForInput(massFecha)} onChange={(e) => setMassFecha(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)}/>
                 </Group>
                 
@@ -658,6 +713,27 @@ export default function Masivos({
                             value={massSexoTernero}
                             onChange={(v) => setMassSexoTernero(v ?? 'I')}
                         />
+                    </Paper>
+                )}
+                {massActividad === 'PESAJE_PROMEDIO' && (
+                    <Paper withBorder p="sm" mt="sm" bg="blue.0">
+                        <Group align="flex-end" grow>
+                            <TextInput
+                                label="Peso Total del Lote (kg)"
+                                placeholder="Ej: 2250"
+                                type="number"
+                                value={massPesoTotal}
+                                onChange={(e) => setMassPesoTotal(e.target.value)}
+                                leftSection={<IconWeight size={16}/>}
+                                required
+                            />
+                            {massPesoTotal && Number(massPesoTotal) > 0 && selectedIds.length > 0 && (
+                                <Paper p="xs" bg="blue.1" radius="sm" style={{ flex: 1, alignSelf: 'flex-end' }}>
+                                    <Text size="xs" c="blue.7">Promedio por animal</Text>
+                                    <Text fw={700} c="blue.9">{(Number(massPesoTotal) / selectedIds.length).toFixed(1)} kg</Text>
+                                </Paper>
+                            )}
+                        </Group>
                     </Paper>
                 )}
                 {massActividad === 'TRASLADO' && (
@@ -734,7 +810,7 @@ export default function Masivos({
                 </Table>
                 </ScrollArea>
             </Paper>
-            {selectedIds.length > 0 && ( <Paper shadow="xl" p="md" radius="md" withBorder bg="gray.0" style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}><Group><Button size="lg" color="violet" loading={loading} onClick={prepararYConfirmar}>CONFIRMAR {massActividad}</Button></Group></Paper> )}
+            {selectedIds.length > 0 && ( <Paper shadow="xl" p="md" radius="md" withBorder bg="gray.0" style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, border: '2px solid #7950f2' }}><Group><Button size="lg" color="violet" loading={loading} onClick={prepararYConfirmar}>CONFIRMAR {massActividad === 'PESAJE_PROMEDIO' ? 'PESAJE PROMEDIO' : massActividad}</Button></Group></Paper> )}
 
             <Modal opened={confirmOpened} onClose={closeConfirm} title="Confirmar acción" centered>
                 <Stack>

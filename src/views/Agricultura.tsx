@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Group, Title, Badge, Button, SimpleGrid, Card, Paper, Text, ActionIcon, Tabs, TextInput, Select, Table, Modal, Stack, Center, ThemeIcon } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus, IconTractor, IconEdit, IconArrowLeft, IconLeaf, IconMapPin, IconList, IconCurrencyDollar, IconCheck, IconTrash, IconLock } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
@@ -13,9 +14,18 @@ export default function Agricultura({
     rolActual = 'DUENO', potreroIdAAbrir, onPotreroAbierto
 }: any) {
     const [loading, setLoading] = useState(false);
-    
+
     // Navegación interna
     const [potreroSel, setPotreroSel] = useState<any | null>(null);
+
+    // Modal editar potrero
+    const [editPotreroOpen, { open: openEditPotrero, close: closeEditPotrero }] = useDisclosure(false);
+    const [editPotreroId, setEditPotreroId] = useState<string | null>(null);
+    const [editPotreroNombre, setEditPotreroNombre] = useState('');
+    const [editPotreroHas, setEditPotreroHas] = useState('');
+
+    // Modal confirmación genérica
+    const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void; color?: string } | null>(null);
 
     // Modal Nuevo Potrero
     const [modalPotreroOpen, { open: openModalPotrero, close: closeModalPotrero }] = useDisclosure(false);
@@ -50,20 +60,30 @@ export default function Agricultura({
         if (!error) { setNombrePotrero(''); setHasPotrero(''); fetchPotreros(); closeModalPotrero(); } 
     }
 
-    async function editarPotrero(id: string, nombreActual: string, hasActual: number) {
-        const nuevoNombre = prompt("Nuevo nombre del Potrero:", nombreActual);
-        if (!nuevoNombre) return;
-        const nuevasHas = prompt("Hectáreas totales:", hasActual.toString());
-        if (nuevasHas === null) return;
-        await supabase.from('potreros').update({ nombre: nuevoNombre, hectareas: Number(nuevasHas) }).eq('id', id);
-        fetchPotreros();
-        if (potreroSel?.id === id) setPotreroSel({ ...potreroSel, nombre: nuevoNombre, hectareas: Number(nuevasHas) });
+    function editarPotrero(id: string, nombreActual: string, hasActual: number) {
+        setEditPotreroId(id);
+        setEditPotreroNombre(nombreActual);
+        setEditPotreroHas(hasActual.toString());
+        openEditPotrero();
     }
 
-    async function borrarPotrero(id: string) { 
-        if(!confirm("¿BORRAR POTRERO? Se perderán las labores y parcelas.")) return; 
-        await supabase.from('potreros').delete().eq('id', id); 
-        fetchPotreros(); fetchParcelas(); setPotreroSel(null); 
+    async function ejecutarEditPotrero() {
+        if (!editPotreroId || !editPotreroNombre.trim()) return;
+        await supabase.from('potreros').update({ nombre: editPotreroNombre.trim(), hectareas: Number(editPotreroHas) }).eq('id', editPotreroId);
+        fetchPotreros();
+        if (potreroSel?.id === editPotreroId) setPotreroSel({ ...potreroSel, nombre: editPotreroNombre.trim(), hectareas: Number(editPotreroHas) });
+        closeEditPotrero();
+    }
+
+    function borrarPotrero(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar el potrero? Se perderán las labores y parcelas asociadas.',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('potreros').delete().eq('id', id);
+                fetchPotreros(); fetchParcelas(); setPotreroSel(null);
+            },
+        });
     }
 
     async function abrirFicha(potrero: any) { 
@@ -90,10 +110,15 @@ export default function Agricultura({
         } 
     }
 
-    async function borrarLabor(id: string) { 
-        if(!confirm("¿Borrar?")) return; 
-        await supabase.from('labores').delete().eq('id', id); 
-        setLaboresFicha(laboresFicha.filter(l => l.id !== id)); 
+    function borrarLabor(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar este registro de labor?',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('labores').delete().eq('id', id);
+                setLaboresFicha(laboresFicha.filter(l => l.id !== id));
+            },
+        });
     }
 
     // --- FUNCIONES PARCELAS ---
@@ -103,9 +128,15 @@ export default function Agricultura({
         setNuevaParcelaNombre(''); setNuevaParcelaHas(''); fetchParcelas();
     }
 
-    async function borrarParcela(id: string) {
-        if(!confirm("¿Borrar parcela? Los animales adentro quedarán asignados solo al potrero general.")) return;
-        await supabase.from('parcelas').delete().eq('id', id); fetchParcelas();
+    function borrarParcela(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar la parcela? Los animales quedarán asignados solo al potrero general.',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('parcelas').delete().eq('id', id);
+                fetchParcelas();
+            },
+        });
     }
 
     const getNombreParcela = (id?: string) => { if(!id) return null; const p = parcelas.find((parc: any) => parc.id === id); return p ? p.nombre : null; };
@@ -228,6 +259,29 @@ export default function Agricultura({
                         </Tabs.Panel>
                     </Tabs>
                 </Paper>
+
+            {/* Modal editar potrero */}
+            <Modal opened={editPotreroOpen} onClose={closeEditPotrero} title={<Text fw={700}>Editar Potrero</Text>} centered>
+                <Stack>
+                    <TextInput label="Nombre del Potrero" value={editPotreroNombre} onChange={(e) => setEditPotreroNombre(e.target.value)} />
+                    <TextInput label="Hectáreas" type="number" value={editPotreroHas} onChange={(e) => setEditPotreroHas(e.target.value)} />
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={closeEditPotrero}>Cancelar</Button>
+                        <Button color="lime" onClick={ejecutarEditPotrero}>Guardar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
+
+            {/* Modal confirmación */}
+            <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm">
+                <Stack>
+                    <Text>{confirmModal?.mensaje}</Text>
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                        <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
             </>
         );
     }
@@ -275,6 +329,29 @@ export default function Agricultura({
                     <TextInput label="Nombre del Potrero" placeholder="Ej: Potrero del Fondo" value={nombrePotrero} onChange={(e) => setNombrePotrero(e.target.value)} />
                     <TextInput label="Hectáreas" type="number" placeholder="Ej: 50" value={hasPotrero} onChange={(e) => setHasPotrero(e.target.value)} />
                     <Button onClick={guardarPotrero} loading={loading} color="lime" fullWidth mt="md">Crear Potrero</Button>
+                </Stack>
+            </Modal>
+
+            {/* Modal editar potrero */}
+            <Modal opened={editPotreroOpen} onClose={closeEditPotrero} title={<Text fw={700}>Editar Potrero</Text>} centered>
+                <Stack>
+                    <TextInput label="Nombre del Potrero" value={editPotreroNombre} onChange={(e) => setEditPotreroNombre(e.target.value)} />
+                    <TextInput label="Hectáreas" type="number" value={editPotreroHas} onChange={(e) => setEditPotreroHas(e.target.value)} />
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={closeEditPotrero}>Cancelar</Button>
+                        <Button color="lime" onClick={ejecutarEditPotrero}>Guardar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
+
+            {/* Modal confirmación */}
+            <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm">
+                <Stack>
+                    <Text>{confirmModal?.mensaje}</Text>
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                        <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                    </Group>
                 </Stack>
             </Modal>
         </>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Stack, Alert, TextInput, Select, Group, NumberInput, Paper, Text, Button, Title, Switch } from '@mantine/core';
 import { IconInfoCircle, IconCurrencyDollar, IconTruckDelivery } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../../supabase';
 
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
@@ -36,7 +37,7 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
     }
 
     async function ejecutarVentaLote() {
-        if (!ventaPrecioTotal || !ventaFecha || !campoId || animalesEnEsteLote.length === 0) return alert("Faltan datos para la venta.");
+        if (!ventaPrecioTotal || !ventaFecha || !campoId || animalesEnEsteLote.length === 0) { notifications.show({ title: 'Datos incompletos', message: 'Completá todos los campos para registrar la venta.', color: 'red' }); return; }
         setLoadingVenta(true);
 
         const fechaIso = ventaFecha.toISOString().split('T')[0];
@@ -66,12 +67,12 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
         };
 
         if (esVentaRed) {
-            if (!renspaDestino.trim()) { setLoadingVenta(false); return alert("Ingresá el RENSPA del comprador."); }
+            if (!renspaDestino.trim()) { setLoadingVenta(false); notifications.show({ title: 'RENSPA requerido', message: 'Ingresá el RENSPA del comprador.', color: 'red' }); return; }
 
             const { data, error: rpcErr } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
             const dest = data as any;
-            if (rpcErr || !dest) { setLoadingVenta(false); return alert("No se encontró ningún campo con ese RENSPA."); }
-            if (dest.id === campoId) { setLoadingVenta(false); return alert("No podés transferirte a vos mismo."); }
+            if (rpcErr || !dest) { setLoadingVenta(false); notifications.show({ title: 'Campo no encontrado', message: 'No se encontró ningún campo con ese RENSPA.', color: 'red' }); return; }
+            if (dest.id === campoId) { setLoadingVenta(false); notifications.show({ title: 'Destino inválido', message: 'No podés transferirte a vos mismo.', color: 'red' }); return; }
 
             const nombreOrigen = establecimientos?.find((e: any) => e.id === campoId)?.nombre || 'Campo Desconocido';
 
@@ -84,7 +85,7 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
                 origen_nombre: nombreOrigen,
                 estado: 'PENDIENTE'
             });
-            if (errTransf) { setLoadingVenta(false); return alert("Error al crear la transferencia: " + errTransf.message); }
+            if (errTransf) { setLoadingVenta(false); notifications.show({ title: 'Error al crear transferencia', message: errTransf.message, color: 'red' }); return; }
 
             const { data: ventaData } = await supabase.from('ventas').insert([{
                 establecimiento_id: campoId,
@@ -128,10 +129,10 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
 
             resetForm();
             onVentaExitosa();
-            alert(`¡Lote enviado a ${dest.nombre}! Los animales quedan EN TRÁNSITO hasta que el comprador acepte. El movimiento se registró en Caja.`);
+            notifications.show({ title: 'Lote enviado', message: `Lote enviado a ${dest.nombre}. Los animales quedan EN TRÁNSITO hasta que el comprador acepte. El movimiento se registró en Caja.`, color: 'teal' });
         } else {
             const { error } = await supabase.from('lotes_historicos').insert([nuevoHistorico]);
-            if (error) { setLoadingVenta(false); return alert("Error: " + error.message); }
+            if (error) { setLoadingVenta(false); notifications.show({ title: 'Error', message: error.message, color: 'red' }); return; }
 
             await supabase.from('animales').update({ estado: 'VENDIDO', lote_id: null }).in('id', idsAnimales);
 
@@ -170,7 +171,7 @@ export default function ModalVentaLote({ opened, onClose, loteSel, animalesEnEst
 
             resetForm();
             onVentaExitosa();
-            alert("¡Lote VENDIDO con éxito! El movimiento se registró en Caja.");
+            notifications.show({ title: 'Lote vendido', message: 'El lote fue vendido con éxito. El movimiento se registró en Caja.', color: 'teal' });
         }
 
         setLoadingVenta(false);

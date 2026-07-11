@@ -1,8 +1,20 @@
-import { useState, useEffect } from 'react'; 
+import { useState, useEffect, useRef } from 'react';
 import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack, SimpleGrid } from '@mantine/core'; 
 import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp, IconScan } from '@tabler/icons-react';
 import { supabase } from '../supabase';
+
+// Cache de sesión: persiste entre fichas mientras la app esté abierta
+let ultimoEventoCache: {
+    tipo: string;
+    resultado: string;
+    detalle: string;
+    costo: string | number;
+    tactoResultado: string | null;
+    tipoServicio: string | null;
+    torosIdsInput: string[];
+} | null = null;
 
 interface ModalFichaVacaProps {
     opened: boolean;
@@ -70,6 +82,12 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [esVentaRed, setEsVentaRed] = useState(false);
     const [renspaDestino, setRenspaDestino] = useState('');
 
+    const cacheToApply = useRef<typeof ultimoEventoCache>(null);
+
+    const [confirmBajaOpen, { open: openConfirmBaja, close: closeConfirmBaja }] = useDisclosure(false);
+    const [confirmBorrarOpen, { open: openConfirmBorrar, close: closeConfirmBorrar }] = useDisclosure(false);
+    const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void; color?: string } | null>(null);
+
     // --- ESTADOS PARA EDICIÓN DE EVENTOS ---
     const [modalEditOpen, { open: openEdit, close: closeEdit }] = useDisclosure(false);
     const [editEvId, setEditEvId] = useState<string | null>(null);
@@ -90,7 +108,30 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         }
     }, [opened, animalSelId, animalSel?.caravana]);
 
-    useEffect(() => { setResultadoInput(''); setTorosIdsInput([]); setNuevoTerneroCaravana(''); setPesoNacimiento(''); setCostoEvento(''); setAdpvCalculado(null); setMesesGestacion(null); }, [tipoEventoInput]);
+    useEffect(() => {
+        const cache = cacheToApply.current;
+        if (cache) {
+            cacheToApply.current = null;
+            setResultadoInput(cache.resultado);
+            setDetalleInput(cache.detalle);
+            setCostoEvento(cache.costo);
+            setTactoResultado(cache.tactoResultado || 'PREÑADA');
+            setTipoServicio(cache.tipoServicio || 'TORO');
+            setTorosIdsInput(cache.torosIdsInput);
+            setNuevoTerneroCaravana('');
+            setPesoNacimiento('');
+            setAdpvCalculado(null);
+            setMesesGestacion(null);
+        } else {
+            setResultadoInput('');
+            setTorosIdsInput([]);
+            setNuevoTerneroCaravana('');
+            setPesoNacimiento('');
+            setCostoEvento('');
+            setAdpvCalculado(null);
+            setMesesGestacion(null);
+        }
+    }, [tipoEventoInput]);
     
     useEffect(() => {
         if (tipoEventoInput === 'PESAJE' && resultadoInput && eventosFicha.length > 0) {
@@ -127,7 +168,45 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         const { data: pesoData } = await supabase.from('eventos').select('resultado').eq('animal_id', animalSel.id).eq('tipo', 'PESAJE').order('fecha_evento', { ascending: false }).limit(1);
         setUltimoPeso(pesoData && pesoData.length > 0 ? pesoData[0].resultado : '-');
 
-        setFechaEvento(new Date()); setTipoEventoInput('PESAJE'); setModoBaja(null);
+        setFechaEvento(new Date()); setModoBaja(null);
+        const tipoOpciones = (() => {
+            const base = ['PESAJE', 'ENFERMEDAD', 'LESION', 'CURACION', 'TRATAMIENTO', 'VACUNACION', 'OTRO'];
+            if (['Vaca', 'Vaquillona'].includes(animalSel.categoria)) return [...base, 'TACTO', 'SERVICIO', 'PARTO', 'DESTETE'];
+            if (animalSel.categoria === 'Ternero') return animalSel.sexo === 'M' ? [...base, 'CAPADO', 'DESTETE'] : [...base, 'DESTETE'];
+            if (animalSel.categoria === 'Toro') return [...base, 'RASPAJE', 'APARTADO'];
+            return base;
+        })();
+        const cache = ultimoEventoCache;
+        const tipoAplicar = (cache && tipoOpciones.includes(cache.tipo)) ? cache.tipo : 'PESAJE';
+        if (cache && tipoOpciones.includes(cache.tipo)) {
+            if (tipoAplicar !== tipoEventoInput) {
+                cacheToApply.current = cache;
+            } else {
+                // tipo no cambia → el effect no dispara → aplicar manualmente
+                setResultadoInput(cache.resultado);
+                setDetalleInput(cache.detalle);
+                setCostoEvento(cache.costo);
+                setTactoResultado(cache.tactoResultado || 'PREÑADA');
+                setTipoServicio(cache.tipoServicio || 'TORO');
+                setTorosIdsInput(cache.torosIdsInput);
+                setNuevoTerneroCaravana('');
+                setPesoNacimiento('');
+                setAdpvCalculado(null);
+                setMesesGestacion(null);
+            }
+        } else {
+            setDetalleInput('');
+            if (tipoAplicar === tipoEventoInput) {
+                setResultadoInput('');
+                setCostoEvento('');
+                setTorosIdsInput([]);
+                setNuevoTerneroCaravana('');
+                setPesoNacimiento('');
+                setAdpvCalculado(null);
+                setMesesGestacion(null);
+            }
+        }
+        setTipoEventoInput(tipoAplicar);
     }
 
     async function recargarEventos(id: string) { const { data } = await supabase.from('eventos').select('*').eq('animal_id', id).order('fecha_evento', { ascending: false }).order('created_at', { ascending: false }); if (data) setEventosFicha(data); }
@@ -136,12 +215,16 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         if (data && data.toros_servicio_ids && data.toros_servicio_ids.length > 0) { const nombres = animales.filter(a => data.toros_servicio_ids!.includes(a.id)).map(a => a.caravana).join(' - '); setNombresTorosCartel(nombres || null); }
     }
     
-    async function borrarEvento(ev: { id: string; tipo: string; costo?: number }) {
-        if (!confirm("¿Borrar evento?")) return;
-        await supabase.from('eventos').delete().eq('id', ev.id);
-        // El egreso en caja se elimina automáticamente via ON DELETE CASCADE (evento_id FK)
-        if (animalSelId) recargarEventos(animalSelId);
-        onUpdate();
+    function borrarEvento(ev: { id: string; tipo: string; costo?: number }) {
+        setConfirmModal({
+            mensaje: '¿Borrar este evento del historial?',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('eventos').delete().eq('id', ev.id);
+                if (animalSelId) recargarEventos(animalSelId);
+                onUpdate();
+            },
+        });
     }
 
     const navegarAHijo = async (hijoId: string) => {
@@ -183,12 +266,12 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     // ------------------------------------
 
     async function guardarEventoVaca() {
-        if (!animalSel || !tipoEventoInput || !fechaEvento || !campoId) return alert("Faltan datos");
+        if (!animalSel || !tipoEventoInput || !fechaEvento || !campoId) { notifications.show({ title: 'Datos incompletos', message: 'Completá todos los campos del evento.', color: 'red' }); return; }
 
         if (tipoEventoInput === 'PARTO') {
             const animalesActivos = animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length;
             if (datosSuscripcion && animalesActivos >= datosSuscripcion.limite_animales) {
-                return alert(`Límite alcanzado (${datosSuscripcion.limite_animales} animales). No podés registrar nuevos nacimientos. Por favor, mejorá tu plan.`);
+                notifications.show({ title: 'Límite alcanzado', message: `Tu plan permite hasta ${datosSuscripcion.limite_animales} animales. No podés registrar nuevos nacimientos.`, color: 'red' }); return;
             }
         }
 
@@ -230,13 +313,13 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
           const caravanaFinalTernero = nuevoTerneroCaravana.trim() || `SC-${String(scMax + 1).padStart(3, '0')}`;
           if (nuevoTerneroCaravana.trim()) {
             const yaExiste = animales.some(a => a.caravana.toLowerCase() === caravanaFinalTernero.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(a.estado));
-            if (yaExiste) { setLoading(false); return alert("❌ ERROR: Ya existe un animal ACTIVO con esa caravana."); }
+            if (yaExiste) { setLoading(false); notifications.show({ title: 'Caravana duplicada', message: 'Ya existe un animal activo con esa caravana.', color: 'red' }); return; }
           }
-          if (pesoNacimiento) { const pesoNacNum = parseFloat(pesoNacimiento.replace(/[^\d.]/g, '')); if (isNaN(pesoNacNum) || pesoNacNum <= 0 || pesoNacimiento.includes('-')) { setLoading(false); return alert("❌ ERROR: Peso inválido."); } }
+          if (pesoNacimiento) { const pesoNacNum = parseFloat(pesoNacimiento.replace(/[^\d.]/g, '')); if (isNaN(pesoNacNum) || pesoNacNum <= 0 || pesoNacimiento.includes('-')) { setLoading(false); notifications.show({ title: 'Peso inválido', message: 'El peso al nacer debe ser un número positivo.', color: 'red' }); return; } }
 
           const fechaParto = fechaEvento.toISOString().split('T')[0];
           const { data: nuevoTernero, error: err } = await supabase.from('animales').insert([{ caravana: caravanaFinalTernero, categoria: nuevoTerneroSexo === 'H' ? 'Ternera' : 'Ternero', sexo: nuevoTerneroSexo, estado: 'LACTANTE', condicion: 'SANA', origen: 'NACIDO', madre_id: animalSel.id, fecha_nacimiento: fechaParto, fecha_ingreso: fechaParto, establecimiento_id: campoId, potrero_id: animalSel.potrero_id, parcela_id: animalSel.parcela_id, lote_id: animalSel.lote_id, en_transito: false }]).select().single();
-          if (err) { setLoading(false); return alert("Error: " + err.message); }
+          if (err) { setLoading(false); notifications.show({ title: 'Error', message: err.message, color: 'red' }); return; }
           if (pesoNacimiento) await supabase.from('eventos').insert({ animal_id: nuevoTernero.id, tipo: 'PESAJE', resultado: `${pesoNacimiento}kg`, detalle: 'Peso al nacer', fecha_evento: fechaEvento.toISOString(), establecimiento_id: campoId });
 
           nuevoEstado = 'EN LACTANCIA';
@@ -276,7 +359,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         else if (tipoEventoInput === 'SERVICIO') { 
             fechaServicioAActualizar = fechaEvento.toISOString().split('T')[0];
             if (tipoServicio === 'TORO') {
-                if (torosIdsInput.length === 0) { setLoading(false); return alert("Seleccioná al menos un toro"); }
+                if (torosIdsInput.length === 0) { setLoading(false); notifications.show({ title: 'Toro requerido', message: 'Seleccioná al menos un toro para el servicio.', color: 'orange' }); return; }
                 const nombres = animales.filter(a => torosIdsInput.includes(a.id)).map(a => a.caravana).join(', ');
                 datosExtra = { toros_caravanas: nombres }; resultadoFinal = `Con: ${nombres}`; torosToUpdate = torosIdsInput;
             } else { resultadoFinal = 'IA'; }
@@ -285,7 +368,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     
         if (tipoEventoInput === 'PESAJE') {
             const pesoNum = parseFloat(resultadoInput.replace(/[^\d.]/g, ''));
-            if (isNaN(pesoNum) || pesoNum <= 0 || resultadoInput.includes('-')) { setLoading(false); return alert("❌ ERROR: Peso inválido."); }
+            if (isNaN(pesoNum) || pesoNum <= 0 || resultadoInput.includes('-')) { setLoading(false); notifications.show({ title: 'Peso inválido', message: 'Ingresá un valor de peso positivo.', color: 'red' }); return; }
         }
     
         const { data: eventoData, error } = await supabase.from('eventos').insert([{ animal_id: animalSel.id, fecha_evento: fechaEvento.toISOString(), tipo: tipoEventoInput, resultado: resultadoFinal, detalle: detalleInput, datos_extra: { ...(datosExtra || {}), lote_id_en_momento: animalSel.lote_id ?? null, lote_nombre_en_momento: animalSel.lote_id ? (lotes.find((l: any) => l.id === animalSel.lote_id)?.nombre ?? null) : null }, costo: Number(costoEvento), establecimiento_id: campoId }]).select('id').single();
@@ -309,7 +392,21 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             await supabase.from('eventos').insert(torosEvents);
         }
         setEditCondicion(nuevasCondiciones); setEditCastrado(esCastrado); if(nuevoEstado) setEditEstado(nuevoEstado.includes('PREÑADA') ? 'PREÑADA' : nuevoEstado.includes('VACÍA') || nuevoEstado.includes('LACTANCIA') ? 'VACÍA' : 'ACTIVO'); setEditLactancia(nuevoEstado.includes('LACTANCIA')); setLoading(false);
-        if (!error) { recargarEventos(animalSel.id); if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal); setResultadoInput(''); setDetalleInput(''); setTorosIdsInput([]); setNuevoTerneroCaravana(''); setPesoNacimiento(''); setCostoEvento(''); setAdpvCalculado(null); setMesesGestacion(null); onUpdate(); actualizarCartelToros(animalSel.id); }
+        if (!error) {
+            ultimoEventoCache = {
+                tipo: tipoEventoInput!,
+                resultado: tipoEventoInput === 'PESAJE' ? '' : resultadoInput,
+                detalle: detalleInput,
+                costo: costoEvento,
+                tactoResultado,
+                tipoServicio,
+                torosIdsInput: [...torosIdsInput],
+            };
+            recargarEventos(animalSel.id);
+            if (tipoEventoInput === 'PESAJE') setUltimoPeso(resultadoFinal);
+            setResultadoInput(''); setDetalleInput(''); setTorosIdsInput([]); setNuevoTerneroCaravana(''); setPesoNacimiento(''); setCostoEvento(''); setAdpvCalculado(null); setMesesGestacion(null);
+            onUpdate(); actualizarCartelToros(animalSel.id);
+        }
     }
 
     async function actualizarAnimal() {
@@ -336,15 +433,24 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     
         const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, pelaje: editPelaje || null, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSel.id);
         if (eventosAInsertar.length > 0) { await supabase.from('eventos').insert(eventosAInsertar); }
-        if (!error) { alert("Datos actualizados"); onUpdate(); }
+        if (!error) { notifications.show({ title: 'Datos actualizados', message: 'Los cambios fueron guardados.', color: 'teal' }); onUpdate(); }
     }
 
-    async function confirmarBaja() { 
-        if (!animalSel || !modoBaja || !campoId) return; 
+    function validarYAbrirConfirmBaja() {
+        if (!animalSel || !modoBaja || !campoId) return;
+        if (modoBaja === 'VENDIDO') {
+            if (!bajaPrecio) { notifications.show({ title: 'Datos incompletos', message: 'Ingresá el precio de venta', color: 'red' }); return; }
+            if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) { notifications.show({ title: 'Datos incompletos', message: 'Ingresá los kilos totales', color: 'red' }); return; }
+            if (!esVentaRed && !bajaMotivo) { notifications.show({ title: 'Datos incompletos', message: 'Ingresá el destino / comprador', color: 'red' }); return; }
+            if (esVentaRed && !renspaDestino) { notifications.show({ title: 'Datos incompletos', message: 'Ingresá el RENSPA del comprador', color: 'red' }); return; }
+        }
+        if (modoBaja === 'MUERTO' && !bajaMotivo) { notifications.show({ title: 'Datos incompletos', message: 'Ingresá la causa de muerte', color: 'red' }); return; }
+        if (modoBaja === 'TRASLADO' && !bajaMotivo) { notifications.show({ title: 'Datos incompletos', message: 'Seleccioná el campo de destino', color: 'red' }); return; }
+        openConfirmBaja();
+    }
 
-        if (modoBaja === 'VENDIDO') { if (!bajaPrecio) return alert("Ingresá el precio"); if (bajaModalidadVenta === 'KILO' && !bajaKilosTotales) return alert("Faltan los kilos totales"); }
-        if (modoBaja === 'MUERTO' && !bajaMotivo) return alert("Ingresá la causa"); 
-        if (!confirm(`¿Confirmar ${modoBaja === 'TRASLADO' ? 'traslado' : 'salida'}?`)) return; 
+    async function confirmarBaja() {
+        if (!animalSel || !modoBaja || !campoId) return;
         
         setLoading(true); const fechaStr = new Date().toISOString();
  
@@ -371,7 +477,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         }
  
         if (modoBaja === 'TRASLADO') {
-            if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
+            if (!bajaMotivo) { setLoading(false); notifications.show({ title: 'Error', message: 'Seleccioná el campo de destino', color: 'red' }); return; }
             const nombreDestino = establecimientos.find(e => e.id === bajaMotivo)?.nombre; const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre;
             const { data: destAnimals } = await supabase.from('animales').select('caravana').eq('establecimiento_id', bajaMotivo).in('estado', ['ACTIVO', 'PREÑADA', 'VACÍA', 'EN SERVICIO', 'APARTADO', 'EN LACTANCIA', 'LACTANTE', 'PREÑADA Y LACTANDO']);
             const destCaravanas = destAnimals?.map(a => a.caravana.toLowerCase()) || [];
@@ -387,16 +493,16 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             const gastosTotales = Number(bajaGastosVenta) || 0;
  
             if (esVentaRed) {
-                if (!renspaDestino) { setLoading(false); return alert("Ingresá el RENSPA."); }
+                if (!renspaDestino) { setLoading(false); notifications.show({ title: 'Datos incompletos', message: 'Ingresá el RENSPA del comprador', color: 'red' }); return; }
                 const { data, error: rpcErr } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: renspaDestino.trim() }).single();
-                const dest = data as any; 
+                const dest = data as any;
 
-                if (rpcErr || !dest) { setLoading(false); return alert("No se encontró RENSPA."); }
-                if (dest.id === campoId) { setLoading(false); return alert("No podés transferirte a vos mismo."); }
+                if (rpcErr || !dest) { setLoading(false); notifications.show({ title: 'RENSPA no encontrado', message: 'No se encontró ningún campo con ese RENSPA', color: 'red' }); return; }
+                if (dest.id === campoId) { setLoading(false); notifications.show({ title: 'Error', message: 'No podés transferirte a vos mismo', color: 'red' }); return; }
                 const nombreOrigen = establecimientos.find(e => e.id === campoId)?.nombre || 'Campo Desconocido';
- 
+
                 const { error: errTransf } = await supabase.from('transferencias').insert({ campo_origen_id: campoId, campo_destino_id: dest.id, animales_ids: [animalSel.id], precio_total: totalIngreso, detalles: `Venta animal ${animalSel.caravana}`, origen_nombre: nombreOrigen, estado: 'PENDIENTE' });
-                if (errTransf) { setLoading(false); return alert("Error al transferir: " + errTransf.message); }
+                if (errTransf) { setLoading(false); notifications.show({ title: 'Error al transferir', message: errTransf.message, color: 'red' }); return; }
 
                 const animalSnapshot = [{ caravana: animalSel.caravana, categoria: animalSel.categoria, sexo: animalSel.sexo }];
                 const { data: ventaRedData } = await supabase.from('ventas').insert([{ establecimiento_id: campoId, fecha: fechaStr.split('T')[0], tipo: 'RED', destino: dest.nombre, modalidad: bajaModalidadVenta, monto_total: totalIngreso, gastos_total: gastosTotales, animales_ids: [animalSel.id], animales_detalle: animalSnapshot }]).select('id').single();
@@ -406,7 +512,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 await supabase.from('eventos').insert({ animal_id: animalSel.id, tipo: 'VENTA', resultado: 'VENDIDO', detalle: `En tránsito a: ${dest.nombre} - Total: $${totalIngreso}`, datos_extra: { destino: dest.nombre, modalidad: bajaModalidadVenta, ingreso_total: totalIngreso, gastos: gastosTotales, caravana_origen: animalSel.caravana }, establecimiento_id: campoId, costo: totalIngreso });
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
             } else {
-                if (!bajaMotivo) { setLoading(false); return alert("Seleccioná el destino"); }
+                if (!bajaMotivo) { setLoading(false); notifications.show({ title: 'Datos incompletos', message: 'Ingresá el destino / comprador', color: 'red' }); return; }
                 const { data: ventaData } = await supabase
                     .from('ventas')
                     .insert([{
@@ -435,7 +541,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 if(animalSel.categoria === 'Toro') await desvincularToroDeVacas(animalSel.id);
             }
         } else {
-            if (!bajaMotivo) { setLoading(false); return alert("Ingresá la causa de muerte"); }
+            if (!bajaMotivo) { setLoading(false); notifications.show({ title: 'Datos incompletos', message: 'Ingresá la causa de muerte', color: 'red' }); return; }
             await supabase.from('animales').update({ estado: 'MUERTO', detalle_baja: `Causa: ${bajaMotivo}`, toros_servicio_ids: null, en_transito: false }).eq('id', animalSel.id); 
             await supabase.from('eventos').insert([{ animal_id: animalSel.id, tipo: 'BAJA', resultado: 'MUERTO', detalle: `Causa: ${bajaMotivo}`, datos_extra: { causa: bajaMotivo }, establecimiento_id: campoId }]); 
             await supabase.from('agenda').delete().eq('animal_id', animalSel.id).eq('completado', false);
@@ -445,19 +551,28 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         onClose(); onUpdate();
     }
 
-    async function restaurarAnimal() { 
-        if (!animalSel || !confirm("¿Restaurar a Hacienda Activa?")) return; 
-        if (animalSel.estado === 'VENDIDO') { await supabase.from('caja').delete().eq('establecimiento_id', campoId).eq('categoria', 'Hacienda (Venta/Compra)').like('detalle', `Venta animal ${animalSel.caravana} -%`); }
-        await supabase.from('animales').update({ estado: 'ACTIVO', detalle_baja: null, en_transito: false }).eq('id', animalSel.id); 
-        await supabase.from('eventos').insert([{ animal_id: animalSel.id, tipo: 'RESTAURACION', resultado: 'Reingreso', detalle: 'Restaurado', establecimiento_id: campoId! }]); 
-        onClose(); onUpdate(); 
+    function restaurarAnimal() {
+        if (!animalSel) return;
+        setConfirmModal({
+            mensaje: `¿Restaurar a ${animalSel.caravana} a Hacienda Activa?`,
+            color: 'teal',
+            onConfirm: async () => {
+                if (animalSel.estado === 'VENDIDO') { await supabase.from('caja').delete().eq('establecimiento_id', campoId).eq('categoria', 'Hacienda (Venta/Compra)').like('detalle', `Venta animal ${animalSel.caravana} -%`); }
+                await supabase.from('animales').update({ estado: 'ACTIVO', detalle_baja: null, en_transito: false }).eq('id', animalSel.id);
+                await supabase.from('eventos').insert([{ animal_id: animalSel.id, tipo: 'RESTAURACION', resultado: 'Reingreso', detalle: 'Restaurado', establecimiento_id: campoId! }]);
+                onClose(); onUpdate();
+            },
+        });
     }
 
-    async function borrarAnimalDefinitivo() {
+    function borrarAnimalDefinitivo() {
         if (!animalSel) return;
-        const msg = "⚠️ ¿BORRAR DEFINITIVAMENTE?\n\nEl animal se ocultará de la lista de bajas para siempre.\n\nIMPORTANTE: Sus eventos pasados (pesajes, vacunas, partos) NO se borrarán para mantener la integridad de las estadísticas y los balances económicos del campo.\n\n¿Desea continuar?";
-        if (!confirm(msg)) return;
+        openConfirmBorrar();
+    }
 
+    async function ejecutarBorradoDefinitivo() {
+        if (!animalSel || !campoId) return;
+        closeConfirmBorrar();
         await supabase.from('animales').update({ estado: 'ELIMINADO' }).eq('id', animalSel.id);
         await supabase.from('eventos').insert({
             animal_id: animalSel.id,
@@ -651,13 +766,71 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                        <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
                                    </Stack> 
                                )}
-                               <Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'} onClick={confirmarBaja} loading={loading}>Confirmar Acción</Button>
+                               <Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'} onClick={validarYAbrirConfirmBaja} loading={loading}>Confirmar Acción</Button>
                            </Paper>
                        )}
                    </> 
                ) : ( <Paper p="md" bg="gray.1" ta="center"><Text c="dimmed" size="sm" mb="md">Este animal se encuentra {animalSel?.en_transito ? 'en tránsito hacia el comprador' : 'archivado'}.</Text>{!animalSel?.en_transito && <Button fullWidth variant="outline" color="blue" leftSection={<IconArrowBackUp/>} onClick={restaurarAnimal}>Restaurar a Hacienda Activa</Button>}</Paper> )}
             </Tabs.Panel>
         </Tabs>
+
+        {/* MODAL CONFIRMACIÓN DE BAJA (VENTA / TRASLADO / MUERTE) */}
+        <Modal
+            opened={confirmBajaOpen}
+            onClose={closeConfirmBaja}
+            title={
+                <Text fw={700} c={modoBaja === 'VENDIDO' ? 'orange.7' : modoBaja === 'TRASLADO' ? 'blue.7' : 'red.7'}>
+                    {modoBaja === 'VENDIDO' ? 'Confirmar Venta' : modoBaja === 'TRASLADO' ? 'Confirmar Traslado' : 'Confirmar Muerte'}
+                </Text>
+            }
+            centered
+            zIndex={3000}
+            size="sm"
+        >
+            <Stack>
+                <Alert
+                    color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'}
+                    icon={modoBaja === 'VENDIDO' ? <IconCurrencyDollar size={16}/> : modoBaja === 'TRASLADO' ? <IconTractor size={16}/> : <IconSkull size={16}/>}
+                >
+                    {modoBaja === 'VENDIDO' && <>¿Confirmar la venta de <b>{animalSel?.caravana}</b>? El animal pasará a Archivo de Bajas.</>}
+                    {modoBaja === 'TRASLADO' && <>¿Confirmar el traslado de <b>{animalSel?.caravana}</b> al otro establecimiento?</>}
+                    {modoBaja === 'MUERTO' && <>¿Confirmar la muerte de <b>{animalSel?.caravana}</b>? El animal pasará a Archivo de Bajas.</>}
+                </Alert>
+                <Group justify="flex-end" mt="xs">
+                    <Button variant="default" onClick={closeConfirmBaja} disabled={loading}>Cancelar</Button>
+                    <Button
+                        color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'}
+                        loading={loading}
+                        onClick={() => { closeConfirmBaja(); confirmarBaja(); }}
+                    >
+                        Confirmar
+                    </Button>
+                </Group>
+            </Stack>
+        </Modal>
+
+        {/* MODAL CONFIRMACIÓN BORRADO DEFINITIVO */}
+        <Modal
+            opened={confirmBorrarOpen}
+            onClose={closeConfirmBorrar}
+            title={<Text fw={700} c="red.7">Borrar Definitivamente</Text>}
+            centered
+            zIndex={3000}
+            size="sm"
+        >
+            <Stack>
+                <Alert color="red" icon={<IconTrash size={16}/>} title="Acción irreversible">
+                    <b>{animalSel?.caravana}</b> se ocultará de la lista de bajas para siempre.
+                </Alert>
+                <Text size="sm" c="dimmed">
+                    Sus eventos pasados (pesajes, vacunas, partos) <b>no se borrarán</b> para mantener la integridad de las estadísticas y balances del campo.
+                </Text>
+                <Group justify="flex-end" mt="xs">
+                    <Button variant="default" onClick={closeConfirmBorrar}>Cancelar</Button>
+                    <Button color="red" onClick={ejecutarBorradoDefinitivo}>Borrar definitivamente</Button>
+                </Group>
+            </Stack>
+        </Modal>
 
         {/* MODAL INTERNO PARA EDITAR EL EVENTO (Ahora es autónomo) */}
         <Modal opened={modalEditOpen} onClose={closeEdit} title={<Text fw={700}>Editar Evento</Text>} centered zIndex={3000}>
@@ -666,6 +839,17 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 <TextInput label="Resultado" value={editEvRes} onChange={(e) => setEditEvRes(e.target.value)}/>
                 <Textarea label="Detalle" value={editEvDet} onChange={(e) => setEditEvDet(e.target.value)}/>
                 <Button onClick={handleGuardarEdicionEvento} fullWidth mt="md">Guardar Cambios</Button>
+            </Stack>
+        </Modal>
+
+        {/* MODAL CONFIRMACIÓN GENÉRICA */}
+        <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm" zIndex={3000}>
+            <Stack>
+                <Text>{confirmModal?.mensaje}</Text>
+                <Group justify="flex-end" mt="xs">
+                    <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                    <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                </Group>
             </Stack>
         </Modal>
 

@@ -82,6 +82,13 @@ export default function App() {
 
   // Modales Internos (Configuración)
   const [modalConfigOpen, { open: openModalConfig, close: closeModalConfig }] = useDisclosure(false);
+  const [confirmBorrarCampoOpen, { open: openConfirmBorrarCampo, close: closeConfirmBorrarCampo }] = useDisclosure(false);
+  const [campoPendienteEliminar, setCampoPendienteEliminar] = useState<{ id: string; nombre: string } | null>(null);
+  const [palabraConfirmacion, setPalabraConfirmacion] = useState('');
+  const [editarCampoOpen, { open: openEditarCampo, close: closeEditarCampo }] = useDisclosure(false);
+  const [campoPendienteEditar, setCampoPendienteEditar] = useState<{ id: string; nombre: string; renspa: string } | null>(null);
+  const [editNombreCampo, setEditNombreCampo] = useState('');
+  const [editRenspaCampo, setEditRenspaCampo] = useState('');
 
   // Onboarding y Ayuda
   const [tourOpened, { open: openTour, close: closeTour }] = useDisclosure(false);
@@ -342,48 +349,74 @@ export default function App() {
       
       const camposPropios = establecimientos.filter(e => rolesPorCampo[e.id] === 'DUENO');
       if (datosSuscripcion && camposPropios.length >= datosSuscripcion.limite_establecimientos) {
-          alert(`Límite alcanzado. Tu plan actual solo permite ${datosSuscripcion.limite_establecimientos} establecimiento(s). Por favor, mejorá tu plan para agregar más.`);
+          notifications.show({ title: 'Límite alcanzado', message: `Tu plan permite hasta ${datosSuscripcion.limite_establecimientos} establecimiento(s). Mejorá tu plan para agregar más.`, color: 'red' });
           return;
       }
 
       if (nuevoCampoRenspa) {
           const { data: camposConRenspa } = await supabase.rpc('buscar_campo_por_renspa', { buscar_renspa: nuevoCampoRenspa.trim() });
           if (Array.isArray(camposConRenspa) && camposConRenspa.length > 0) {
-              alert(`El RENSPA "${nuevoCampoRenspa}" ya está registrado en el sistema.`);
+              notifications.show({ title: 'RENSPA duplicado', message: `El RENSPA "${nuevoCampoRenspa}" ya está registrado en el sistema.`, color: 'orange' });
               return;
           }
       }
 
       const { error } = await supabase.from('establecimientos').insert([{ nombre: nuevoCampoNombre, renspa: nuevoCampoRenspa, user_id: session?.user.id }]);
-      if (error) alert("Error: " + error.message);
+      if (error) notifications.show({ title: 'Error al crear campo', message: error.message, color: 'red' });
       else { setNuevoCampoNombre(''); setNuevoCampoRenspa(''); loadCampos(); }
   }
   
-  async function borrarCampo(id: string) { 
-      const confirmacion = prompt("⚠️ PELIGRO EXTREMO ⚠️\nEstás por borrar este campo y TODAS sus vacas, eventos, caja y potreros para siempre. Esta acción NO se puede deshacer.\n\nEscribí la palabra ELIMINAR en mayúsculas para confirmar:");
-      
-      if (confirmacion !== "ELIMINAR") {
-          if (confirmacion !== null) alert("Acción cancelada. La palabra de seguridad no coincide.");
-          return;
-      }
-
-      const { error } = await supabase.from('establecimientos').delete().eq('id', id); 
-      
-      if (error) {
-          console.error("Falla en Supabase:", error);
-          alert("Error real: " + error.message + "\nDetalles: " + error.details); 
-      } else { 
-          alert("Establecimiento y todos sus datos eliminados correctamente.");
-          if (id === campoId) { 
-              const restantes = establecimientos.filter(e => e.id !== id); 
-              if (restantes.length > 0) setCampoId(restantes[0].id); 
-              else window.location.reload(); 
-          } 
-          loadCampos(); 
-      } 
+  function borrarCampo(id: string) {
+      const campo = establecimientos.find(e => e.id === id);
+      if (!campo) return;
+      setCampoPendienteEliminar({ id, nombre: campo.nombre });
+      setPalabraConfirmacion('');
+      openConfirmBorrarCampo();
   }
 
-  async function editarCampo(id: string, nombreActual: string, renspaActual?: string) { const nuevoNombre = prompt("Nuevo nombre del establecimiento:", nombreActual); if (nuevoNombre === null) return; const nuevoRenspa = prompt("Número de RENSPA:", renspaActual || ''); if (nuevoRenspa === null) return; await supabase.from('establecimientos').update({ nombre: nuevoNombre, renspa: nuevoRenspa }).eq('id', id); loadCampos(); }
+  async function ejecutarBorradoCampo() {
+      if (!campoPendienteEliminar) return;
+      if (palabraConfirmacion !== 'ELIMINAR') {
+          notifications.show({ title: 'Palabra incorrecta', message: 'Escribí exactamente ELIMINAR en mayúsculas', color: 'red' });
+          return;
+      }
+      const { id } = campoPendienteEliminar;
+      closeConfirmBorrarCampo();
+      const { error } = await supabase.from('establecimientos').delete().eq('id', id);
+      if (error) {
+          console.error("Falla en Supabase:", error);
+          notifications.show({ title: 'Error al eliminar', message: error.message, color: 'red' });
+      } else {
+          notifications.show({ title: 'Establecimiento eliminado', message: 'El establecimiento y todos sus datos fueron eliminados', color: 'teal' });
+          if (id === campoId) {
+              const restantes = establecimientos.filter(e => e.id !== id);
+              if (restantes.length > 0) setCampoId(restantes[0].id);
+              else window.location.reload();
+          }
+          loadCampos();
+      }
+      setCampoPendienteEliminar(null);
+      setPalabraConfirmacion('');
+  }
+
+  function editarCampo(id: string, nombreActual: string, renspaActual?: string) {
+      setCampoPendienteEditar({ id, nombre: nombreActual, renspa: renspaActual || '' });
+      setEditNombreCampo(nombreActual);
+      setEditRenspaCampo(renspaActual || '');
+      openEditarCampo();
+  }
+
+  async function ejecutarEdicionCampo() {
+      if (!campoPendienteEditar) return;
+      if (!editNombreCampo.trim()) {
+          notifications.show({ title: 'Datos incompletos', message: 'El nombre no puede estar vacío', color: 'red' });
+          return;
+      }
+      await supabase.from('establecimientos').update({ nombre: editNombreCampo.trim(), renspa: editRenspaCampo.trim() || null }).eq('id', campoPendienteEditar.id);
+      closeEditarCampo();
+      setCampoPendienteEditar(null);
+      loadCampos();
+  }
 
   // Funciones de gestión del equipo
   async function fetchEquipo() {
@@ -897,6 +930,69 @@ export default function App() {
         onAbrirTour={openTour}
       />
       <SugerenciaDescarga />
+
+      {/* MODAL EDICIÓN DE ESTABLECIMIENTO */}
+      <Modal
+        opened={editarCampoOpen}
+        onClose={closeEditarCampo}
+        title={<Text fw={700}>Editar establecimiento</Text>}
+        centered
+        size="sm"
+        zIndex={3000}
+      >
+        <Stack>
+          <TextInput
+            label="Nombre"
+            placeholder="Nombre del establecimiento"
+            value={editNombreCampo}
+            onChange={(e) => setEditNombreCampo(e.target.value)}
+            required
+          />
+          <TextInput
+            label="RENSPA"
+            placeholder="Ej: 01.002.0.00000/00"
+            value={editRenspaCampo}
+            onChange={(e) => setEditRenspaCampo(e.target.value)}
+          />
+          <Group justify="flex-end" mt="xs">
+            <Button variant="default" onClick={closeEditarCampo}>Cancelar</Button>
+            <Button color="teal" onClick={ejecutarEdicionCampo}>Guardar cambios</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* MODAL CONFIRMACIÓN BORRADO DE ESTABLECIMIENTO */}
+      <Modal
+        opened={confirmBorrarCampoOpen}
+        onClose={() => { closeConfirmBorrarCampo(); setPalabraConfirmacion(''); }}
+        title={<Text fw={700} c="red.7">Eliminar establecimiento</Text>}
+        centered
+        size="sm"
+        zIndex={3000}
+      >
+        <Stack>
+          <Alert color="red" icon={<IconTrash size={16}/>} title="⚠️ Acción irreversible">
+            Estás por eliminar <b>{campoPendienteEliminar?.nombre}</b> y <b>todos sus datos</b>: animales, eventos, caja y potreros. Esto no se puede deshacer.
+          </Alert>
+          <TextInput
+            label="Para confirmar, escribí ELIMINAR en mayúsculas"
+            placeholder="ELIMINAR"
+            value={palabraConfirmacion}
+            onChange={(e) => setPalabraConfirmacion(e.target.value)}
+            error={palabraConfirmacion.length > 0 && palabraConfirmacion !== 'ELIMINAR' ? 'Debe decir exactamente ELIMINAR' : null}
+          />
+          <Group justify="flex-end" mt="xs">
+            <Button variant="default" onClick={() => { closeConfirmBorrarCampo(); setPalabraConfirmacion(''); }}>Cancelar</Button>
+            <Button
+              color="red"
+              disabled={palabraConfirmacion !== 'ELIMINAR'}
+              onClick={ejecutarBorradoCampo}
+            >
+              Eliminar definitivamente
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={iosInstallOpen}

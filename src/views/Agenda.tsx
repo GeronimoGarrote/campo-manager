@@ -43,6 +43,7 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
     const [filtro, setFiltro] = useState<FiltroActivo>('todas');
     const [loading, setLoading] = useState(false);
     const [completadasOpen, { toggle: toggleCompletadas }] = useDisclosure(false);
+    const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void; color?: string } | null>(null);
 
     const [modalOpen, { open: openModal, close: closeModal }] = useDisclosure(false);
     const [nuevaTareaTitulo, setNuevaTareaTitulo] = useState('');
@@ -119,10 +120,15 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
         fetchAgenda();
     }
 
-    async function borrarTareaAgenda(id: string) {
-        if (!confirm('¿Borrar tarea de la agenda?')) return;
-        await supabase.from('agenda').delete().eq('id', id);
-        fetchAgenda();
+    function borrarTareaAgenda(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar esta tarea de la agenda?',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('agenda').delete().eq('id', id);
+                fetchAgenda();
+            },
+        });
     }
 
     async function postergarTarea(id: string, fechaActual: string) {
@@ -398,6 +404,17 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
                     </Collapse>
                 </>
             )}
+
+            {/* Modal confirmación */}
+            <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm">
+                <Stack>
+                    <Text>{confirmModal?.mensaje}</Text>
+                    <Group grow mt="sm">
+                        <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                        <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                    </Group>
+                </Stack>
+            </Modal>
 
             {/* Modal Nueva Tarea */}
             <Modal

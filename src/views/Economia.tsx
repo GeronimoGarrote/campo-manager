@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Title, Paper, Text, Group, Card, SimpleGrid, ThemeIcon, Table, Badge, ActionIcon, ScrollArea, Modal, Stack, TextInput, Select, NumberInput, Button, Tooltip, CloseButton, Menu, Center, PasswordInput, SegmentedControl, Checkbox } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { IconCurrencyDollar, IconTrendingUp, IconTrendingDown, IconPlus, IconTrash, IconReceipt, IconSearch, IconFilter, IconCalendar, IconTruckDelivery, IconCheck, IconEye, IconEyeOff, IconLock, IconLockOpen, IconInfoCircle, IconPackage } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
@@ -46,6 +47,7 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
   const [savedPin, setSavedPin] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [modalPinOpen, { open: openModalPin, close: closeModalPin }] = useDisclosure(false);
+  const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void; color?: string } | null>(null);
   const [nuevoPin, setNuevoPin] = useState('');
   const [loadingPin, setLoadingPin] = useState(false);
   // -----------------------------------
@@ -132,7 +134,7 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
       setIsLocked(false);
       setPinInput('');
     } else {
-      alert("❌ Clave incorrecta");
+      notifications.show({ title: 'Clave incorrecta', message: 'La clave ingresada no es correcta.', color: 'red' });
     }
   };
 
@@ -141,11 +143,11 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
     const { error } = await supabase.from('establecimientos').update({ pin_caja: nuevoPin || null }).eq('id', campoId);
     setLoadingPin(false);
     if (error) {
-      alert("Error al actualizar la clave en la nube: " + error.message);
+      notifications.show({ title: 'Error al guardar clave', message: error.message, color: 'red' });
     } else {
       setSavedPin(nuevoPin || null);
       if (!nuevoPin) setIsLocked(false);
-      alert(nuevoPin ? "🔒 Clave configurada. Se pedirá en todos los dispositivos." : "🔓 Clave eliminada para todos.");
+      notifications.show({ title: nuevoPin ? 'Clave configurada' : 'Clave eliminada', message: nuevoPin ? 'Se pedirá en todos los dispositivos.' : 'La clave fue eliminada para todos.', color: nuevoPin ? 'teal' : 'gray' });
       closeModalPin();
     }
   };
@@ -280,16 +282,21 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
         ? (precioUnitarioInput !== '' && cantidadInput !== '' ? Number(precioUnitarioInput) * Number(cantidadInput) : 0)
         : Number(montoInput);
 
-    if (!fechaInput || !tipoInput || !categoriaInput || !detalleInput || !campoId)
-      return alert("Completá todos los campos para registrar el movimiento en caja.");
-    if (tipoInput === 'EGRESO' && modoMonto === 'total' && montoInput === '')
-      return alert("Completá todos los campos para registrar el movimiento en caja.");
-    if (tipoInput === 'EGRESO' && modoMonto === 'unitario' && (precioUnitarioInput === '' || cantidadInput === ''))
-      return alert("Ingresá precio unitario y cantidad.");
-    if (tipoInput === 'INGRESO' && montoInput === '')
-      return alert("Completá todos los campos para registrar el movimiento en caja.");
-    if (tipoInput === 'TRASLADO' && !campoDestinoInsumo)
-      return alert("Seleccioná el establecimiento de destino para el traslado.");
+    if (!fechaInput || !tipoInput || !categoriaInput || !detalleInput || !campoId) {
+      notifications.show({ title: 'Campos incompletos', message: 'Completá todos los campos para registrar el movimiento.', color: 'red' }); return;
+    }
+    if (tipoInput === 'EGRESO' && modoMonto === 'total' && montoInput === '') {
+      notifications.show({ title: 'Monto requerido', message: 'Ingresá el monto total del movimiento.', color: 'red' }); return;
+    }
+    if (tipoInput === 'EGRESO' && modoMonto === 'unitario' && (precioUnitarioInput === '' || cantidadInput === '')) {
+      notifications.show({ title: 'Datos incompletos', message: 'Ingresá precio unitario y cantidad.', color: 'red' }); return;
+    }
+    if (tipoInput === 'INGRESO' && montoInput === '') {
+      notifications.show({ title: 'Monto requerido', message: 'Ingresá el monto del ingreso.', color: 'red' }); return;
+    }
+    if (tipoInput === 'TRASLADO' && !campoDestinoInsumo) {
+      notifications.show({ title: 'Destino requerido', message: 'Seleccioná el establecimiento de destino para el traslado.', color: 'red' }); return;
+    }
 
     setLoading(true);
     if (tipoInput === 'TRASLADO') {
@@ -331,7 +338,7 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
       }
 
       const { error } = await supabase.from('caja').insert([insertData]);
-      if (error) alert("Error guardando el movimiento: " + error.message);
+      if (error) notifications.show({ title: 'Error al guardar', message: error.message, color: 'red' });
     }
 
     setLoading(false);
@@ -376,8 +383,15 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
     openVentaModal();
   }
 
-  async function borrarMovimientoManual(mov: Movimiento) {
-    if (!confirm("¿Borrar este movimiento manual de la caja?")) return;
+  function borrarMovimientoManual(mov: Movimiento) {
+    setConfirmModal({
+      mensaje: '¿Borrar este movimiento manual de la caja?',
+      color: 'red',
+      onConfirm: () => _ejecutarBorradoMovimiento(mov),
+    });
+  }
+
+  async function _ejecutarBorradoMovimiento(mov: Movimiento) {
     if (mov.categoria === 'Traslado Insumo' && mov.tipo === 'EGRESO') {
       await supabase.from('caja').delete().eq('id', mov.id);
       const baseDetalle = mov.detalle.split(': ')[1] || '';
@@ -554,6 +568,17 @@ export default function Economia({ campoId, establecimientos = [], rolActual = '
           </Table>
         </ScrollArea>
       </Paper>
+
+      {/* MODAL CONFIRMACIÓN */}
+      <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm">
+        <Stack>
+          <Text>{confirmModal?.mensaje}</Text>
+          <Group grow mt="sm">
+            <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+            <Button color={confirmModal?.color || 'red'} onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* MODAL CONFIGURAR CLAVE */}
       <Modal opened={modalPinOpen} onClose={closeModalPin} title={<Text fw={700}>Seguridad de la Caja</Text>} centered>

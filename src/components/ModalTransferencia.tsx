@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Stack, Alert, Text, ScrollArea, Table, Badge, TextInput, Select, Group, Button } from '@mantine/core';
 import { IconTruckDelivery } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { supabase } from '../supabase';
 
 interface ModalTransferenciaProps {
@@ -20,6 +21,7 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
     const [animalesEntrantes, setAnimalesEntrantes] = useState<any[]>([]);
     const [nuevasCaravanasMap, setNuevasCaravanasMap] = useState<Record<string, string>>({});
     const [transfPotreroId, setTransfPotreroId] = useState<string | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ mensaje: string; onConfirm: () => void } | null>(null);
 
     useEffect(() => {
         if (opened && transfActiva) {
@@ -48,14 +50,15 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
         const cantidadEntrante = transfActiva.animales_ids.length;
 
         if (datosSuscripcion && (animalesActivos + cantidadEntrante) > datosSuscripcion.limite_animales) {
-            return alert(`Límite excedido. Tenés ${animalesActivos} animales y querés ingresar un lote de ${cantidadEntrante}. Tu plan solo permite hasta ${datosSuscripcion.limite_animales} animales. Mejorá tu suscripción para aceptar el ingreso.`);
+            notifications.show({ title: 'Límite excedido', message: `Tenés ${animalesActivos} animales y querés ingresar ${cantidadEntrante}. Tu plan permite hasta ${datosSuscripcion.limite_animales}. Mejorá tu suscripción.`, color: 'red' });
+            return;
         }
 
         const hayErrores = animalesEntrantes.some(a => {
             const val = nuevasCaravanasMap[a.id] ?? a.caravana;
             return animales.some(localA => localA.caravana.toLowerCase() === val.toLowerCase() && !['ELIMINADO', 'VENDIDO', 'MUERTO'].includes(localA.estado));
         });
-        if (hayErrores) return alert("Por favor corregí las caravanas duplicadas antes de aceptar.");
+        if (hayErrores) { notifications.show({ title: 'Caravanas duplicadas', message: 'Corregí las caravanas duplicadas antes de aceptar.', color: 'red' }); return; }
 
         setLoading(true);
 
@@ -72,7 +75,7 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
         });
 
         if (error) {
-            alert("Error al procesar el ingreso: " + error.message);
+            notifications.show({ title: 'Error al procesar', message: error.message, color: 'red' });
         } else {
             onSuccess();
             onClose();
@@ -80,27 +83,40 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
         setLoading(false);
     }
 
-    async function rechazarTransferencia() {
-        if (!transfActiva || !confirm("¿Rechazar transferencia? Los animales volverán al campo de origen.")) return;
-        setLoading(true);
-
-        const { error } = await supabase.rpc('rechazar_transferencia', {
-            p_transfer_id: transfActiva.id,
-            p_campo_destino: campoId
+    function rechazarTransferencia() {
+        if (!transfActiva) return;
+        setConfirmModal({
+            mensaje: '¿Rechazar la transferencia? Los animales volverán al campo de origen.',
+            onConfirm: async () => {
+                setLoading(true);
+                const { error } = await supabase.rpc('rechazar_transferencia', {
+                    p_transfer_id: transfActiva.id,
+                    p_campo_destino: campoId
+                });
+                if (error) {
+                    notifications.show({ title: 'Error al rechazar', message: error.message, color: 'red' });
+                } else {
+                    onSuccess();
+                    onClose();
+                }
+                setLoading(false);
+            },
         });
-
-        if (error) {
-            alert("Error al rechazar: " + error.message);
-        } else {
-            onSuccess();
-            onClose();
-        }
-        setLoading(false);
     }
 
     if (!transfActiva) return null;
 
     return (
+        <>
+        <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm" zIndex={3000}>
+            <Stack>
+                <Text>{confirmModal?.mensaje}</Text>
+                <Group grow mt="sm">
+                    <Button variant="default" onClick={() => setConfirmModal(null)}>Cancelar</Button>
+                    <Button color="red" onClick={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>Confirmar</Button>
+                </Group>
+            </Stack>
+        </Modal>
         <Modal opened={opened} onClose={onClose} title={<Text fw={700} size="lg">Hacienda Entrante por Red</Text>} centered size="xl">
             <Stack>
                 <Alert color="blue" icon={<IconTruckDelivery size={16}/>}>
@@ -162,5 +178,6 @@ export default function ModalTransferencia({ opened, onClose, transfActiva, camp
                 )}
             </Stack>
         </Modal>
+        </>
     );
 }
