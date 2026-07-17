@@ -1,21 +1,30 @@
 import {
     Title, Card, Group, Text, Badge, Button, Paper,
     Stack, Divider, ActionIcon, CopyButton, ThemeIcon,
-    SimpleGrid, Tooltip, Center
+    SimpleGrid, Center, Alert, Progress
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
     IconCheck, IconCopy, IconBrandWhatsapp, IconMail,
     IconGift, IconCalendar, IconMilk, IconBuilding,
-    IconInfinity, IconQuestionMark, IconCreditCard
+    IconInfinity, IconCreditCard, IconAlertTriangle
 } from '@tabler/icons-react';
 import { useRef, useState } from 'react';
+import { type Suscripcion as SuscripcionData, type PlanSuscripcion } from '../types';
 
 interface SuscripcionProps {
     animalesTotales: number;
     establecimientosTotales: number;
-    datosSuscripcion: any;
+    datosSuscripcion: SuscripcionData | null;
     rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO';
+    estaVencido: boolean;
+}
+
+interface PlanInfo {
+    titulo: string;
+    color: string;
+    precio?: string;
+    tagline?: string;
 }
 
 const formatDate = (dateString?: string) => {
@@ -24,24 +33,13 @@ const formatDate = (dateString?: string) => {
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
 };
 
-const calcularProgresoSeguro = (actual: any, limite: any, esPremium: boolean) => {
-    if (esPremium) return 100;
-    const numActual = Number(actual) || 0;
-    const numLimite = Math.max(1, Number(limite) || 100);
-    const porcentaje = Math.floor((numActual / numLimite) * 100);
-    return (Number.isNaN(porcentaje) || porcentaje < 0) ? 0 : Math.min(porcentaje, 100);
-};
-
-export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion, rolActual = 'DUENO' }: SuscripcionProps) {
+export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion, rolActual = 'DUENO', estaVencido }: SuscripcionProps) {
     const pagoRef = useRef<HTMLDivElement>(null);
+    const planesRef = useRef<HTMLDivElement>(null);
     const [highlightPago, setHighlightPago] = useState(false);
     const isMobile = useMediaQuery('(max-width: 768px)', false);
 
     if (!datosSuscripcion) return null;
-
-    const estaVencido = datosSuscripcion.fecha_vencimiento
-        ? new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59') < new Date()
-        : false;
 
     if (rolActual !== 'DUENO' && estaVencido) {
         return (
@@ -74,57 +72,17 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
         diasRestantes = (Number.isNaN(diasCalc) || diasCalc < 0) ? 0 : diasCalc;
     }
 
-    const planesInfo: any = {
+    // Única fuente de títulos, precios y taglines de los planes (las cards leen de acá)
+    const planesInfo: Record<string, PlanInfo> = {
         'PRUEBA': { titulo: 'Plan de Prueba', color: 'orange' },
-        'BASICO': {
-            titulo: 'Plan Básico',
-            precio: '$ 35.000 / mes',
-            tagline: 'Para productores chicos',
-            color: 'teal',
-            caracteristicas: [
-                'Hasta 100 animales por establecimiento',
-                'Un solo establecimiento',
-                'Transferencia de animales entre usuarios',
-                'Gestión completa de Sanidad e Historial',
-                'Control de Economía y Cuentas',
-                'Alerta automática de Partos Estimados',
-                'Clasificación por Lotes y Nutrición',
-                'Carga Masiva de Animales',
-                'Módulo de Agricultura y Potreros',
-                'Soporte técnico'
-            ]
-        },
-        'PRO': {
-            titulo: 'Plan Profesional',
-            precio: '$ 50.000 / mes',
-            tagline: 'Para productores medianos',
-            color: 'blue',
-            caracteristicas: [
-                'TODO lo incluido en el Plan Básico',
-                'Hasta 3 establecimientos',
-                'Hasta 300 animales por establecimiento',
-                'Soporte técnico prioritario',
-                'Backup de datos mensual'
-            ]
-        },
-        'PREMIUM': {
-            titulo: 'Plan Premium',
-            precio: '$ 75.000 / mes',
-            tagline: 'Para grandes productores',
-            color: 'teal',
-            caracteristicas: [
-                'Todo lo incluido en el Plan Profesional',
-                'Establecimientos ilimitados',
-                'Animales ilimitados',
-                'Soporte técnico VIP',
-                'Backup de datos semanal'
-            ]
-        }
+        'BASICO': { titulo: 'Plan Básico', color: 'teal', precio: '$ 35.000', tagline: 'Para productores chicos' },
+        'PRO': { titulo: 'Plan Profesional', color: 'blue', precio: '$ 50.000', tagline: 'Para productores medianos' },
+        'PREMIUM': { titulo: 'Plan Premium', color: 'teal', precio: '$ 75.000', tagline: 'Para grandes productores' },
     };
 
     const handleContact = (tipo: 'WA' | 'MAIL', plan: string, extraMsg: string = "") => {
         const userIdAbreviado = datosSuscripcion.user_id ? datosSuscripcion.user_id.substring(0, 8) + '...' : 'Desconocido';
-        const msg = `Hola! Me interesa ${extraMsg || `mejorar mi cuenta de RodeoControl al Plan ${plan}`}. Mi ID de cuenta es: ${userIdAbreviado}`;
+        const msg = `Hola! Me interesa ${extraMsg || `mejorar mi cuenta de RodeoControl al ${planesInfo[plan]?.titulo ?? plan}`}. Mi ID de cuenta es: ${userIdAbreviado}`;
         if (tipo === 'WA') {
             window.open(`https://wa.me/5492345505575?text=${encodeURIComponent(msg)}`, '_blank');
         } else {
@@ -138,22 +96,24 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
         setTimeout(() => setHighlightPago(false), 1600);
     };
 
-    const planActual = datosSuscripcion.plan_nombre;
+    const scrollToPlanes = () => {
+        planesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const planActual: PlanSuscripcion = datosSuscripcion.plan_nombre ?? 'BASICO';
+    const esPrueba = planActual === 'PRUEBA';
     const planOrder = ['PRUEBA', 'BASICO', 'PRO', 'PREMIUM'];
     const currentPlanIndex = planOrder.indexOf(planActual);
     const infoPlanActual = planesInfo[planActual] || planesInfo['BASICO'];
     const _rawRef = datosSuscripcion.user_id?.substring(0, 8).toUpperCase() ?? '';
     const codigoReferido = _rawRef.substring(0, 4) + '-' + _rawRef.substring(4, 8);
 
-    // Unused in render but kept as existing business logic
-    void calcularProgresoSeguro;
-
     const getPlanCTA = (planKey: string) => {
         const planIdx = planOrder.indexOf(planKey);
         const planColor = planesInfo[planKey]?.color || 'teal';
 
         if (planActual === 'PRUEBA') {
-            return <Button fullWidth variant="filled" color="teal" onClick={() => handleContact('WA', planKey)}>Iniciar plan</Button>;
+            return <Button fullWidth variant="filled" color="teal" onClick={() => handleContact('WA', planKey, `iniciar el ${planesInfo[planKey]?.titulo ?? planKey} de RodeoControl`)}>Iniciar plan</Button>;
         }
 
         if (planKey === planActual) {
@@ -192,6 +152,39 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
         { icon: <IconCheck size={13} />, text: 'Backup semanal', direct: false },
     ];
 
+    const badgeEstado = estaVencido ? (
+        <Badge color="red" variant="light" size="lg">VENCIDO</Badge>
+    ) : !datosSuscripcion.fecha_vencimiento ? (
+        <Badge color="gray" variant="light" size="lg">Sin vencimiento</Badge>
+    ) : diasRestantes === 0 ? (
+        <Badge color="red" variant="light" size="lg">Vence hoy</Badge>
+    ) : diasRestantes <= 7 ? (
+        <Badge color="orange" variant="light" size="lg">
+            Vence en {diasRestantes} día{diasRestantes !== 1 ? 's' : ''}
+        </Badge>
+    ) : (
+        <Badge color="teal" variant="light" size="lg">
+            {diasRestantes} días restantes
+        </Badge>
+    );
+
+    const botonBanner = esPrueba ? (
+        <Button variant="filled" color="teal" size="sm" onClick={scrollToPlanes}>Elegir plan</Button>
+    ) : (
+        <Button variant="outline" color={infoPlanActual.color} size="sm" onClick={scrollToPago}>Renovar</Button>
+    );
+
+    // Mensaje para los botones genéricos de contacto de la card de pago
+    const msgContactoGeneral = esPrueba
+        ? 'activar un plan de RodeoControl'
+        : `renovar o cambiar mi ${infoPlanActual.titulo} de RodeoControl`;
+
+    const pctAnimales = esPremium
+        ? 0
+        : Math.min(100, Math.floor((animalesTotales / Math.max(1, datosSuscripcion.limite_animales)) * 100));
+    const colorUsoAnimales = pctAnimales >= 90 ? 'red' : pctAnimales >= 70 ? 'orange' : 'teal';
+    const cercaDelLimite = !esPremium && !estaVencido && pctAnimales >= 90;
+
     const bannerStats = (
         <Group gap="xl" wrap={isMobile ? 'wrap' : 'nowrap'}>
             <Stack gap={2} align="center">
@@ -201,7 +194,12 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                 </Group>
                 {esPremium
                     ? <Text style={{ fontSize: '28px', fontWeight: 700, lineHeight: 1 }}>∞</Text>
-                    : <Text size="lg" fw={600}>{animalesTotales} / {datosSuscripcion.limite_animales}</Text>
+                    : (
+                        <>
+                            <Text size="lg" fw={600}>{animalesTotales} / {datosSuscripcion.limite_animales}</Text>
+                            <Progress value={pctAnimales} color={colorUsoAnimales} size="sm" radius="xl" w={110} />
+                        </>
+                    )
                 }
             </Stack>
             <Stack gap={2} align="center">
@@ -237,6 +235,73 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
     return (
         <Stack gap="xl">
 
+            {/* ── AVISO DE CUENTA VENCIDA ── */}
+            {estaVencido && (
+                <Alert
+                    color="red"
+                    variant="light"
+                    radius="md"
+                    icon={<IconAlertTriangle size={22} />}
+                    title={esPrueba
+                        ? 'Tu período de prueba terminó'
+                        : `Tu plan venció el ${formatDate(datosSuscripcion.fecha_vencimiento)}`}
+                >
+                    <Stack gap="sm">
+                        <Text size="sm">
+                            {esPrueba
+                                ? 'Para seguir usando RodeoControl elegí uno de los planes de abajo, transferí al alias y mandanos el comprobante por WhatsApp. Activamos tu cuenta en menos de 24 horas.'
+                                : 'Para seguir usando RodeoControl transferí el valor de tu plan al alias y mandanos el comprobante por WhatsApp. Reactivamos tu cuenta en menos de 24 horas.'}
+                        </Text>
+                        <Group gap="sm">
+                            <Button
+                                color="green"
+                                leftSection={<IconBrandWhatsapp size={16} />}
+                                onClick={() => handleContact('WA', planActual, esPrueba
+                                    ? 'activar un plan de RodeoControl, mi período de prueba terminó'
+                                    : `renovar mi ${infoPlanActual.titulo} de RodeoControl, ya hice la transferencia y mando el comprobante`)}
+                            >
+                                {esPrueba ? 'Contactar por WhatsApp' : 'Ya pagué, enviar comprobante'}
+                            </Button>
+                            <Button variant="outline" color="red" onClick={scrollToPago}>
+                                Ver datos de pago
+                            </Button>
+                        </Group>
+                    </Stack>
+                </Alert>
+            )}
+
+            {/* ── AVISO PREVIO AL VENCIMIENTO (7 días) ── */}
+            {!estaVencido && datosSuscripcion.fecha_vencimiento && diasRestantes <= 7 && (
+                <Alert
+                    color="orange"
+                    variant="light"
+                    radius="md"
+                    icon={<IconAlertTriangle size={22} />}
+                    title={diasRestantes === 0
+                        ? 'Tu plan vence hoy'
+                        : `Tu plan vence el ${formatDate(datosSuscripcion.fecha_vencimiento)}`}
+                >
+                    <Stack gap="sm">
+                        <Text size="sm">
+                            Renovalo antes para no quedarte sin acceso: transferí al alias
+                            y mandanos el comprobante por WhatsApp.
+                        </Text>
+                        <Group gap="sm">
+                            <Button
+                                color="green"
+                                leftSection={<IconBrandWhatsapp size={16} />}
+                                onClick={() => handleContact('WA', planActual, `renovar mi ${infoPlanActual.titulo} de RodeoControl`)}
+                            >
+                                Renovar por WhatsApp
+                            </Button>
+                            <Button variant="outline" color="orange" onClick={scrollToPago}>
+                                Ver datos de pago
+                            </Button>
+                        </Group>
+                    </Stack>
+                </Alert>
+            )}
+
             {/* ── SECCIÓN 1: BANNER PLAN ACTUAL ── */}
             <Card withBorder shadow="sm" radius="md" p="md">
                 {isMobile ? (
@@ -247,10 +312,8 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         </div>
                         {bannerStats}
                         <Group justify="space-between">
-                            <Badge color={diasRestantes > 2 ? 'teal' : 'red'} variant="light" size="lg">
-                                {datosSuscripcion.estado === 'ACTIVO' ? `${diasRestantes} días restantes` : 'VENCIDO'}
-                            </Badge>
-                            <Button variant="outline" color={infoPlanActual.color} size="sm" onClick={scrollToPago}>Renovar</Button>
+                            {badgeEstado}
+                            {botonBanner}
                         </Group>
                     </Stack>
                 ) : (
@@ -261,27 +324,72 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         </div>
                         {bannerStats}
                         <Group gap="sm" wrap="nowrap">
-                            <Badge color={diasRestantes > 2 ? 'teal' : 'red'} variant="light" size="lg">
-                                {datosSuscripcion.estado === 'ACTIVO' ? `${diasRestantes} días restantes` : 'VENCIDO'}
-                            </Badge>
-                            <Button variant="outline" color={infoPlanActual.color} size="sm" onClick={scrollToPago}>Renovar</Button>
+                            {badgeEstado}
+                            {botonBanner}
                         </Group>
                     </Group>
                 )}
             </Card>
 
+            {/* ── AVISO DE CERCANÍA AL LÍMITE DE ANIMALES (upsell) ── */}
+            {cercaDelLimite && (
+                <Alert
+                    color="orange"
+                    variant="light"
+                    radius="md"
+                    icon={<IconMilk size={22} />}
+                    title="Estás cerca del límite de animales"
+                >
+                    <Stack gap="sm">
+                        <Text size="sm">
+                            Tenés {animalesTotales} de los {datosSuscripcion.limite_animales} animales
+                            que permite tu plan.{' '}
+                            {esPrueba
+                                ? 'Activá un plan para seguir sumando animales.'
+                                : planActual === 'PRO'
+                                    ? 'El Plan Premium te da animales y establecimientos ilimitados.'
+                                    : 'El Plan Profesional te da hasta 300 animales por establecimiento.'}
+                        </Text>
+                        <Group gap="sm">
+                            {esPrueba ? (
+                                <Button color="teal" onClick={scrollToPlanes}>Ver planes</Button>
+                            ) : (
+                                <Button
+                                    color="teal"
+                                    leftSection={<IconBrandWhatsapp size={16} />}
+                                    onClick={() => handleContact('WA', planActual === 'PRO' ? 'PREMIUM' : 'PRO')}
+                                >
+                                    {planActual === 'PRO' ? 'Consultar por el Premium' : 'Consultar por el Profesional'}
+                                </Button>
+                            )}
+                        </Group>
+                    </Stack>
+                </Alert>
+            )}
+
             {/* ── SECCIÓN 2: TRES PLANES LADO A LADO ── */}
-            <div>
+            <div ref={planesRef}>
                 <Text size="xs" c="dimmed" mb="sm">PLANES DISPONIBLES</Text>
                 <SimpleGrid cols={isMobile ? 1 : 3} spacing="md">
 
                     {/* BÁSICO */}
-                    <Card withBorder shadow="sm" radius="md" p="md" style={{ display: 'flex', flexDirection: 'column' }}>
-                        <Title order={4} mb={4}>Plan Básico</Title>
+                    <Card
+                        withBorder shadow="sm" radius="md" p="md"
+                        style={{
+                            display: 'flex', flexDirection: 'column',
+                            ...(planActual === 'BASICO' ? { border: '2px solid var(--mantine-color-teal-6)' } : {})
+                        }}
+                    >
+                        {planActual === 'BASICO' && (
+                            <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                                <Badge color="teal" variant="filled">Tu plan actual</Badge>
+                            </div>
+                        )}
+                        <Title order={4} mb={4}>{planesInfo['BASICO'].titulo}</Title>
                         <Text size="xl" fw={900} mb={2}>
-                            $ 35.000<Text span size="sm" fw={400} c="dimmed"> / mes</Text>
+                            {planesInfo['BASICO'].precio}<Text span size="sm" fw={400} c="dimmed"> / mes</Text>
                         </Text>
-                        <Text size="xs" c="dimmed" mb="md">Para productores chicos</Text>
+                        <Text size="xs" c="dimmed" mb="md">{planesInfo['BASICO'].tagline}</Text>
                         <Divider mb="md" />
                         <Stack gap="xs" mb="lg" style={{ flexGrow: 1 }}>
                             {basicoFeatures.map((f, i) => (
@@ -300,13 +408,15 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         style={{ display: 'flex', flexDirection: 'column', border: '2px solid var(--mantine-color-blue-6)' }}
                     >
                         <div style={{ textAlign: 'center', marginBottom: 8 }}>
-                            <Badge color="blue" variant="filled">Más popular</Badge>
+                            <Badge color="blue" variant="filled">
+                                {planActual === 'PRO' ? 'Tu plan actual' : 'Más popular'}
+                            </Badge>
                         </div>
-                        <Title order={4} mb={4} c="blue.7">Plan Profesional</Title>
+                        <Title order={4} mb={4} c="blue.7">{planesInfo['PRO'].titulo}</Title>
                         <Text size="xl" fw={900} mb={2} c="blue.7">
-                            $ 50.000<Text span size="sm" fw={400} c="dimmed"> / mes</Text>
+                            {planesInfo['PRO'].precio}<Text span size="sm" fw={400} c="dimmed"> / mes</Text>
                         </Text>
-                        <Text size="xs" c="dimmed" mb="md">Para productores medianos</Text>
+                        <Text size="xs" c="dimmed" mb="md">{planesInfo['PRO'].tagline}</Text>
                         <Divider mb="md" />
                         <Stack gap="xs" mb="lg" style={{ flexGrow: 1 }}>
                             {proFeatures.map((f, i) => (
@@ -332,11 +442,11 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                                 <Badge color="teal" variant="filled">Tu plan actual</Badge>
                             </div>
                         )}
-                        <Title order={4} mb={4} c="teal.7">Plan Premium</Title>
+                        <Title order={4} mb={4} c="teal.7">{planesInfo['PREMIUM'].titulo}</Title>
                         <Text size="xl" fw={900} mb={2} c="teal.7">
-                            $ 75.000<Text span size="sm" fw={400} c="dimmed"> / mes</Text>
+                            {planesInfo['PREMIUM'].precio}<Text span size="sm" fw={400} c="dimmed"> / mes</Text>
                         </Text>
-                        <Text size="xs" c="dimmed" mb="md">Para grandes productores</Text>
+                        <Text size="xs" c="dimmed" mb="md">{planesInfo['PREMIUM'].tagline}</Text>
                         <Divider mb="md" />
                         <Stack gap="xs" mb="lg" style={{ flexGrow: 1 }}>
                             {premiumFeatures.map((f, i) => (
@@ -366,23 +476,22 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         boxShadow: highlightPago ? '0 0 0 3px var(--mantine-color-teal-5)' : undefined,
                     }}
                 >
-                    <Group gap="xs" mb="sm" align="center">
-                        <Text fw={700} size="sm">¿Cómo renovar o cambiar de plan?</Text>
-                        <Tooltip
-                            label="Procesamos los pagos por transferencia bancaria. Es simple: transferís, nos mandás el comprobante y activamos tu plan en menos de 24hs."
-                            multiline
-                            w={280}
-                            withArrow
-                        >
-                            <ThemeIcon size="md" color="blue" variant="filled" radius="xl">
-                                <IconQuestionMark size={16} />
-                            </ThemeIcon>
-                        </Tooltip>
-                    </Group>
+                    <Text fw={700} size="sm" mb="sm">¿Cómo renovar o cambiar de plan?</Text>
 
-                    <Text size="xs" c="dimmed" mb="md">
-                        Hacé la transferencia al alias y mandanos el comprobante con tu ID de cuenta.
-                    </Text>
+                    <Stack gap={8} mb="md">
+                        <Group gap="xs" wrap="nowrap">
+                            {stepDot('1')}
+                            <Text size="xs">Transferí el valor de tu plan al alias o CBU de abajo</Text>
+                        </Group>
+                        <Group gap="xs" wrap="nowrap">
+                            {stepDot('2')}
+                            <Text size="xs">Mandanos el comprobante por WhatsApp junto con tu ID de cuenta</Text>
+                        </Group>
+                        <Group gap="xs" wrap="nowrap">
+                            {stepDot('3')}
+                            <Text size="xs">Activamos tu plan en menos de 24 horas</Text>
+                        </Group>
+                    </Stack>
 
                     <Paper withBorder p="sm" radius="md" mb="sm">
                         <Stack gap="xs">
@@ -430,14 +539,14 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         <Button
                             color="green" variant="light" size="sm"
                             leftSection={<IconBrandWhatsapp size={16} />}
-                            onClick={() => handleContact('WA', planActual)}
+                            onClick={() => handleContact('WA', planActual, msgContactoGeneral)}
                         >
                             WhatsApp
                         </Button>
                         <Button
                             color="blue" variant="light" size="sm"
                             leftSection={<IconMail size={16} />}
-                            onClick={() => handleContact('MAIL', planActual)}
+                            onClick={() => handleContact('MAIL', planActual, msgContactoGeneral)}
                         >
                             Email
                         </Button>
@@ -489,8 +598,18 @@ export default function Suscripcion({ animalesTotales = 0, establecimientosTotal
                         </Group>
                     </Paper>
 
-                    <Text size="xs" c="dimmed" ta="center">
-                        Compartilo por WhatsApp o de palabra con tus colegas.
+                    <Button
+                        fullWidth color="green" variant="light"
+                        leftSection={<IconBrandWhatsapp size={16} />}
+                        onClick={() => {
+                            const msg = `Hola! Te recomiendo RodeoControl para llevar el control del campo desde el celular: ${window.location.origin}. Si te suscribís, mencioná mi código de referido ${codigoReferido} al pagar.`;
+                            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                        }}
+                    >
+                        Compartir por WhatsApp
+                    </Button>
+                    <Text size="xs" c="dimmed" ta="center" mt="xs">
+                        También podés pasarle el código de palabra.
                     </Text>
                 </Card>
 

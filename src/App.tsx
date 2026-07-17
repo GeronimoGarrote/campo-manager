@@ -7,7 +7,8 @@ import '@mantine/notifications/styles.css';
 import { Notifications, notifications } from '@mantine/notifications';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
-import logoRodeo from './assets/logo.png'; 
+import { type Suscripcion as SuscripcionData } from './types';
+import logoRodeo from './assets/loggo_header.png';
 
 // Vistas
 import Login from './views/Login';
@@ -99,7 +100,7 @@ export default function App() {
   const [nuevoCampoRenspa, setNuevoCampoRenspa] = useState('');
 
   // Estado de la suscripción agregado
-  const [datosSuscripcion, setDatosSuscripcion] = useState<any>(null);
+  const [datosSuscripcion, setDatosSuscripcion] = useState<SuscripcionData | null>(null);
 
   // Token de invitación (leído una sola vez desde la URL)
   const [invToken, setInvToken] = useState<string | null>(() =>
@@ -152,22 +153,6 @@ export default function App() {
       if (!done) openTour();
     }
   }, [session?.user.id]);
-
-  // Si hay token Y sesión activa → procesar invitación sin mostrar AceptarInvitacion
-  useEffect(() => {
-    if (!session || !invToken) return;
-    const token = invToken;
-    setInvToken(null);
-    window.history.replaceState({}, '', window.location.pathname);
-    supabase.rpc('aceptar_invitacion', { p_token: token }).then(({ data }) => {
-      if (data?.ok) {
-        notifications.show({ title: '¡Bienvenido al campo!', message: `Fuiste agregado como ${data.rol}.`, color: 'teal', autoClose: 5000 });
-        loadCampos();
-      } else {
-        notifications.show({ title: 'Invitación no procesada', message: data?.error || 'Invitación inválida o vencida.', color: 'orange', autoClose: 6000 });
-      }
-    });
-  }, [session, invToken]);
 
   useEffect(() => {
     if (!campoId || !session) return;
@@ -307,7 +292,8 @@ export default function App() {
               plan_nombre: 'BASICO',
               limite_animales: 100,
               limite_establecimientos: 1,
-              estado: 'ACTIVO'
+              estado: 'ACTIVO',
+              user_id: ownerUserId
           });
       }
   }
@@ -511,10 +497,10 @@ export default function App() {
   return (
     <MantineProvider>
         <Notifications position="top-right" zIndex={9999} />
-        {!session && invToken ? (
+        {invToken ? (
             <AceptarInvitacion
                 token={invToken}
-                onSuccess={() => { setInvToken(null); window.history.replaceState({}, '', window.location.pathname); }}
+                onSuccess={() => { setInvToken(null); window.history.replaceState({}, '', window.location.pathname); loadCampos(); }}
             />
         ) : !session ? (
             <Login
@@ -672,9 +658,10 @@ export default function App() {
               {activeSection === 'suscripcion' && (
                   <Suscripcion
                       animalesTotales={animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length}
-                      establecimientosTotales={establecimientos.length}
+                      establecimientosTotales={establecimientos.filter(e => rolesPorCampo[e.id] === 'DUENO').length}
                       datosSuscripcion={datosSuscripcion}
                       rolActual={rolActual}
+                      estaVencido={estaVencido}
                   />
               )}
             </AppShell.Main>

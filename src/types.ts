@@ -90,7 +90,7 @@ export type EstadoTransferencia = 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA';
 
 export type TipoAgenda = 'MANUAL' | 'PARTO_ESTIMADO';
 
-export type PlanSuscripcion = 'BASICO';
+export type PlanSuscripcion = 'PRUEBA' | 'BASICO' | 'PRO' | 'PREMIUM';
 
 export type EstadoSuscripcion = 'ACTIVO' | 'VENCIDO' | 'SUSPENDIDO';
 
@@ -253,13 +253,14 @@ export interface Agenda {
 }
 
 export interface Suscripcion {
-  id: string;
+  // id opcional: App.tsx sintetiza una suscripción default (sin fila en DB) cuando no existe
+  id?: string;
   user_id?: string;
   plan_nombre?: PlanSuscripcion;
   estado?: EstadoSuscripcion;
   fecha_vencimiento?: string;
-  limite_animales?: number;
-  limite_establecimientos?: number;
+  limite_animales: number;
+  limite_establecimientos: number;
   link_pago_mp?: string;
   notas_admin?: string;
 }
