@@ -32,7 +32,7 @@ import ModalFichaVaca from './components/ModalFichaVaca';
 import ModalTransferencia from './components/ModalTransferencia';
 import ModalGraficoPeso from './components/ModalGraficoPeso';
 
-interface Establecimiento { id: string; nombre: string; renspa?: string; }
+interface Establecimiento { id: string; nombre: string; renspa?: string; user_id: string; }
 interface Animal { id: string; caravana: string; caravana_electronica?: string; categoria: string; sexo: string; estado: string; condicion: string; origen: string; detalle_baja?: string; detalles?: string; destacado?: boolean; fecha_nacimiento?: string; fecha_ingreso?: string; madre_id?: string; castrado?: boolean; establecimiento_id: string; potrero_id?: string; parcela_id?: string; lote_id?: string; toros_servicio_ids?: string[]; en_transito?: boolean; }
 interface Evento { id: string; created_at: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; costo?: number; datos_extra?: any; animales?: { caravana: string } }
 
@@ -281,19 +281,21 @@ export default function App() {
   }
   
   async function fetchSuscripcion() {
-      // 1. Verificamos que haya alguien logueado
-      if (!session?.user.id) return;
+      if (!session?.user.id || !campoId) return;
 
-      // 2. Buscamos el plan usando el ID del usuario
+      const campoActual = establecimientos.find(e => e.id === campoId);
+      if (!campoActual) return;
+
+      const ownerUserId = campoActual.user_id;
+
       const { data, error } = await supabase
           .from('suscripciones')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('user_id', ownerUserId)
           .single();
 
       if (error && error.code !== 'PGRST116') { console.error('[fetchSuscripcion]', error); return; }
       if (data) {
-          // --- SANITIZACIÓN ANTI-NaN ---
           const dataLimpia = {
               ...data,
               limite_animales: Number(data.limite_animales) || 100,
@@ -301,12 +303,11 @@ export default function App() {
           };
           setDatosSuscripcion(dataLimpia);
       } else {
-          // Default si aún no tiene registro en la tabla
-          setDatosSuscripcion({ 
-              plan_nombre: 'BASICO', 
-              limite_animales: 100, 
-              limite_establecimientos: 1, 
-              estado: 'ACTIVO' 
+          setDatosSuscripcion({
+              plan_nombre: 'BASICO',
+              limite_animales: 100,
+              limite_establecimientos: 1,
+              estado: 'ACTIVO'
           });
       }
   }
@@ -645,13 +646,12 @@ export default function App() {
                           }
                         ].filter(g => g.items.length > 0)}
                         value={campoId}
-                        onChange={(val) => setCampoId(val)}
+                        onChange={(val) => { setCampoId(val); setDatosSuscripcion(null); }}
                         allowDeselect={false}
                         leftSection={<IconBuilding size={16}/>}
                         variant="filled"
                         style={{ flex: 1 }}
                         comboboxProps={{ zIndex: 1001 }}
-                        disabled={estaVencido}
                       />
                       <ActionIcon variant="light" color="gray" size="lg" onClick={() => { openModalConfig(); if (rolActual === 'DUENO') fetchEquipo(); }} title="Gestionar Campos" style={{ width: 36, height: 36 }} disabled={estaVencido}><IconSettings size={20}/></ActionIcon>
                   </Group>
@@ -670,10 +670,11 @@ export default function App() {
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}
               
               {activeSection === 'suscripcion' && (
-                  <Suscripcion 
-                      animalesTotales={animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length} 
-                      establecimientosTotales={establecimientos.length} 
-                      datosSuscripcion={datosSuscripcion} 
+                  <Suscripcion
+                      animalesTotales={animales.filter(a => a.estado !== 'VENDIDO' && a.estado !== 'MUERTO' && a.estado !== 'ELIMINADO').length}
+                      establecimientosTotales={establecimientos.length}
+                      datosSuscripcion={datosSuscripcion}
+                      rolActual={rolActual}
                   />
               )}
             </AppShell.Main>

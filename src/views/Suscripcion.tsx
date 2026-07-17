@@ -1,13 +1,13 @@
 import {
     Title, Card, Group, Text, Badge, Button, Paper,
     Stack, Divider, ActionIcon, CopyButton, ThemeIcon,
-    SimpleGrid, Tooltip
+    SimpleGrid, Tooltip, Center
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
     IconCheck, IconCopy, IconBrandWhatsapp, IconMail,
     IconGift, IconCalendar, IconMilk, IconBuilding,
-    IconInfinity, IconQuestionMark
+    IconInfinity, IconQuestionMark, IconCreditCard
 } from '@tabler/icons-react';
 import { useRef, useState } from 'react';
 
@@ -15,6 +15,7 @@ interface SuscripcionProps {
     animalesTotales: number;
     establecimientosTotales: number;
     datosSuscripcion: any;
+    rolActual?: 'DUENO' | 'PEON' | 'VETERINARIO';
 }
 
 const formatDate = (dateString?: string) => {
@@ -31,12 +32,38 @@ const calcularProgresoSeguro = (actual: any, limite: any, esPremium: boolean) =>
     return (Number.isNaN(porcentaje) || porcentaje < 0) ? 0 : Math.min(porcentaje, 100);
 };
 
-export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion }: SuscripcionProps) {
+export default function Suscripcion({ animalesTotales = 0, establecimientosTotales = 0, datosSuscripcion, rolActual = 'DUENO' }: SuscripcionProps) {
     const pagoRef = useRef<HTMLDivElement>(null);
     const [highlightPago, setHighlightPago] = useState(false);
     const isMobile = useMediaQuery('(max-width: 768px)', false);
 
     if (!datosSuscripcion) return null;
+
+    const estaVencido = datosSuscripcion.fecha_vencimiento
+        ? new Date(datosSuscripcion.fecha_vencimiento + 'T23:59:59') < new Date()
+        : false;
+
+    if (rolActual !== 'DUENO' && estaVencido) {
+        return (
+            <Center h={400}>
+                <Stack align="center" gap="md" maw={380} ta="center">
+                    <ThemeIcon size={64} radius="xl" color="orange" variant="light">
+                        <IconCreditCard size={32} />
+                    </ThemeIcon>
+                    <Title order={3}>Acceso temporalmente suspendido</Title>
+                    <Text c="dimmed" size="sm">
+                        El dueño de este campo necesita renovar su suscripción
+                        para que puedas seguir trabajando. Avisale para que
+                        pueda regularizar el pago.
+                    </Text>
+                    <Text size="xs" c="dimmed" mt="sm">
+                        Podés cambiar a otro campo desde el selector
+                        de abajo a la izquierda.
+                    </Text>
+                </Stack>
+            </Center>
+        );
+    }
 
     const esPremium = datosSuscripcion.plan_nombre === 'PREMIUM';
 
