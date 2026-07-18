@@ -32,6 +32,8 @@ export default function Masivos({
     rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
     lotePreseleccionado = null as string | null,
     onLotePreseleccionadoAplicado,
+    idsPreseleccionados = null as string[] | null,
+    onIdsPreseleccionadosAplicados,
 }: any) {
     const [loading, setLoading] = useState(false);
     const [lectorActivo, setLectorActivo] = useState(false);
@@ -124,6 +126,14 @@ export default function Masivos({
             seleccionarGrupo(null);
         }
     }, [filterLote]);
+
+    // Efecto 3: preselección directa de IDs desde Sesiones de Bastón
+    useEffect(() => {
+        if (idsPreseleccionados && idsPreseleccionados.length > 0) {
+            setSelectedIds(idsPreseleccionados);
+            onIdsPreseleccionadosAplicados?.();
+        }
+    }, [idsPreseleccionados]);
 
     const animalesFiltrados = animales.filter((animal: any) => {
         const q = busqueda.trim().toLowerCase();

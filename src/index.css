@@ -3,3 +3,12 @@ body {
   padding: 0;
   background-color: #f8f9fa; /* Un gris muy clarito para que no encandile */
 }
+
+/* Recharts 3 hace focuseable el SVG del gráfico: sin esto,
+   al clickear cualquier gráfico aparece el borde negro de foco */
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-wrapper *:focus,
+.recharts-wrapper *:focus-visible {
+  outline: none;
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider, Alert, Anchor } from '@mantine/core';
+import { Box, Title, Text, Stack, Group, ThemeIcon, Container, Paper, TextInput, PasswordInput, Button, Divider, Alert, Anchor, Image } from '@mantine/core';
 import { IconCheck, IconMail, IconBrandWhatsapp, IconAlertCircle, IconInfoCircle, IconArrowLeft } from '@tabler/icons-react';
-import logoRodeo from '../assets/loggoblanco.png';
+import logoRodeo from '../assets/loggo_header.png';
 
 export default function Login({
     email, setEmail,
@@ -63,8 +63,13 @@ export default function Login({
             {/* LADO IZQUIERDO (PC) */}
             <Box visibleFrom="md" style={{ flex: 1, padding: '4rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: 'white', background: 'linear-gradient(135deg, #20c997 0%, #087f5b 50%, #042b1e 100%)' }}>
                 <div>
-                    <img src={logoRodeo} alt="RodeoControl Logo" style={{ height: 105, width: 'auto' }} />
-                    <Title order={1} mt="xl" style={{ color: 'white', fontSize: '3.5rem', letterSpacing: '-1px' }}>RodeoControl</Title>
+                    <Group gap="xl" align="flex-start" mb="xl">
+                        <Image src={logoRodeo} alt="RodeoControl Logo" h={112} w="auto" />
+                        {/* mt calibrado para que la R arranque a la altura del doblez de la caravana */}
+                        <Title order={1} c="white" fw={800} mt={42} style={{ fontSize: '3.2rem', letterSpacing: '-1px' }}>
+                            RodeoControl
+                        </Title>
+                    </Group>
                     <Text size="xl" mt="md" fw={500} style={{ color: 'rgba(255,255,255,0.9)', maxWidth: 500 }}>
                         Gestión inteligente, trazabilidad absoluta y control total del rodeo para tus establecimientos ganaderos.
                     </Text>

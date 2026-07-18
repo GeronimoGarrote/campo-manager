@@ -1,7 +1,7 @@
 import { useEffect, useState} from 'react';
 import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover, Divider, Paper, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus, IconDownload } from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus, IconDownload, IconScan } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { Notifications, notifications } from '@mantine/notifications';
@@ -22,6 +22,7 @@ import Hacienda from './views/Hacienda';
 import Actividad from './views/Actividad';
 import Suscripcion from './views/Suscripcion';
 import AceptarInvitacion from './views/AceptarInvitacion';
+import SesionesBaston from './views/SesionesBaston';
 
 // Modales Refactorizados
 import ModalAltaAnimal from './components/ModalAltaAnimal';
@@ -68,6 +69,7 @@ export default function App() {
   const [potreroIdAAbrir, setPotreroIdAAbrir] = useState<string | null>(null);
   const [loteIdAAbrir, setLoteIdAAbrir] = useState<string | null>(null);
   const [lotePreseleccionadoMasivos, setLotePreseleccionadoMasivos] = useState<string | null>(null);
+  const [idsPreseleccionadosMasivos, setIdsPreseleccionadosMasivos] = useState<string[] | null>(null);
 
   // Controladores de Modales Extraídos
   const [modalAltaOpen, { open: openModalAlta, close: closeModalAlta }] = useDisclosure(false);
@@ -605,6 +607,7 @@ export default function App() {
                   <NavLink label="Lotes y Nutrición" leftSection={<IconTag size={20}/>} active={activeSection === 'lotes' || activeSection === 'lote_detalle'} onClick={() => { setActiveSection('lotes'); toggle(); }} color="grape" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <NavLink label="Agenda / Tareas" leftSection={<IconCalendarEvent size={20}/>} active={activeSection === 'agenda'} onClick={() => { setActiveSection('agenda'); toggle(); }} color="orange" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <NavLink label="Eventos Masivos" leftSection={<IconPlaylistAdd size={20}/>} active={activeSection === 'masivos'} onClick={() => { setActiveSection('masivos'); toggle(); }} color="violet" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
+                  <NavLink label="Sesiones de Bastón" leftSection={<IconScan size={20}/>} active={activeSection === 'sesiones_baston'} onClick={() => { setActiveSection('sesiones_baston'); toggle(); }} color="teal" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <NavLink label="Archivo / Bajas" leftSection={<IconArchive size={20}/>} active={activeSection === 'bajas'} onClick={() => { setActiveSection('bajas'); toggle(); }} color="red" variant="light" style={{ borderRadius: 8 }} disabled={estaVencido}/>
                   <Text size="xs" fw={700} c="dimmed" mt="xl" mb="sm">AGRICULTURA</Text>
                   <NavLink label="Potreros y Siembra" leftSection={<IconTractor size={20}/>} active={activeSection === 'agricultura' || activeSection === 'potrero_detalle'} onClick={() => { setActiveSection('agricultura'); toggle(); }} color="lime" variant="filled" style={{ borderRadius: 8 }} disabled={estaVencido}/>
@@ -649,10 +652,25 @@ export default function App() {
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} animales={animales} abrirFichaVaca={abrirFichaVaca} potreros={potreros} lotes={lotes} onAbrirPotrero={abrirPotreroDesdeAgenda} onAbrirLote={abrirLoteDesdeAgenda} />}
               {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} establecimientos={establecimientos} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} loteIdAAbrir={loteIdAAbrir} onLoteAbierto={() => setLoteIdAAbrir(null)} onIrAMasivosConLote={irAMasivosConLote}/>}
-              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} lotePreseleccionado={lotePreseleccionadoMasivos} onLotePreseleccionadoAplicado={() => setLotePreseleccionadoMasivos(null)} />}
+              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} lotePreseleccionado={lotePreseleccionadoMasivos} onLotePreseleccionadoAplicado={() => setLotePreseleccionadoMasivos(null)} idsPreseleccionados={idsPreseleccionadosMasivos} onIdsPreseleccionadosAplicados={() => setIdsPreseleccionadosMasivos(null)} />}
               {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} />}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} lotes={lotes} potreros={potreros} animales={animales} />}
               {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} potreroIdAAbrir={potreroIdAAbrir} onPotreroAbierto={() => setPotreroIdAAbrir(null)} />}
+              {activeSection === 'sesiones_baston' && campoId && (
+                  <SesionesBaston
+                      animales={animales}
+                      potreros={potreros}
+                      lotes={lotes}
+                      campoId={campoId}
+                      rolActual={rolActual}
+                      session={session}
+                      onCargarEnMasivos={(ids) => {
+                          setIdsPreseleccionadosMasivos(ids);
+                          setActiveSection('masivos');
+                      }}
+                      fetchAnimales={fetchAnimales}
+                  />
+              )}
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}
               
               {activeSection === 'suscripcion' && (

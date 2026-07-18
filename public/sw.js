@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rc-static-v2';
+const CACHE_NAME = 'rc-static-v4';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -12,7 +12,10 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (url.origin !== self.location.origin || e.request.mode === 'navigate') {
+  // Íconos y manifest quedan fuera del caché del SW: si se cachearan,
+  // la estrategia cache-first los serviría viejos para siempre
+  const esIconoOManifest = /favicon|apple-touch-icon|web-app-manifest|\.webmanifest$|\.ico$/.test(url.pathname);
+  if (url.origin !== self.location.origin || e.request.mode === 'navigate' || esIconoOManifest) {
     return;
   }
   e.respondWith(

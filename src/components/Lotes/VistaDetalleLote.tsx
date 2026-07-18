@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Group, Title, Badge, Button, SimpleGrid, Paper, Text, ActionIcon, Tabs, MultiSelect, Table, TextInput, Select, Stack, Tooltip, ThemeIcon, Alert, Divider, Modal } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle, IconCalendar, IconArchive, IconPigMoney, IconPlaylistAdd, IconMapPin } from '@tabler/icons-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { IconPlus, IconTag, IconEdit, IconArrowLeft, IconTrash, IconList, IconLeaf, IconChartDots, IconUnlink, IconCurrencyDollar, IconCheck, IconInfoCircle, IconCalendar, IconArchive, IconPigMoney, IconPlaylistAdd, IconMapPin, IconHandClick } from '@tabler/icons-react';
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { notifications } from '@mantine/notifications';
 import { supabase } from '../../supabase';
 import ModalVentaLote from './ModalVentaLote';
@@ -10,26 +10,6 @@ import ModalVentaLote from './ModalVentaLote';
 const formatDate = (dateString: string) => { if (!dateString) return '-'; const parts = dateString.split('T')[0].split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; };
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
 
-const CustomTooltipMulti = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-        const data = payload[0].payload;
-        const meta = data._meta || {};
-        const animalKeys = Object.keys(data).filter((k: string) => k !== 'fecha' && k !== 'timestamp' && k !== '_meta' && k !== 'Promedio Lote' && k !== 'Promedio Estimado');
-        const cantAnimales = animalKeys.length;
-        const promedioLote = data['Promedio Lote'];
-        const promedioEst = data['Promedio Estimado'];
-
-        return (
-            <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', minWidth: '220px' }}>
-                <p style={{ margin: 0, fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '8px', fontSize: '14px', color: '#343a40' }}>Fecha: {data.fecha}</p>
-                {cantAnimales > 0 && (<div style={{ marginBottom: '10px' }}><p style={{ margin: 0, fontSize: '13px', color: '#495057', marginBottom: '4px' }}>Animales pesados en fecha: <b>{cantAnimales}</b></p></div>)}
-                {promedioLote && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Lote: {promedioLote} kg</p>{meta['Promedio Lote'] && (<p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>Rendimiento: <span style={{color: meta['Promedio Lote'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Lote'].diff > 0 ? '+' : ''}{meta['Promedio Lote'].diff} kg</span> ({meta['Promedio Lote'].adpv} kg/día)</p>)}</div>)}
-                {promedioEst && (<div style={{ borderTop: '1px dashed #ced4da', paddingTop: '8px', marginTop: '8px' }}><p style={{ margin: 0, color: '#be4bdb', fontWeight: 'bold', fontSize: '14px' }}>Promedio Estimado: {promedioEst} kg</p>{meta['Promedio Estimado'] && (<p style={{ margin: 0, color: '#868e96', fontSize: '12px', paddingLeft: '8px', marginTop: '4px' }}>Rendimiento: <span style={{color: meta['Promedio Estimado'].diff > 0 ? '#12b886' : '#fa5252', fontWeight: 600}}>{meta['Promedio Estimado'].diff > 0 ? '+' : ''}{meta['Promedio Estimado'].diff} kg</span> ({meta['Promedio Estimado'].adpv} kg/día)</p>)}</div>)}
-            </div>
-        );
-    }
-    return null;
-};
 
 export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, campoId, lotes, animales, potreros, parcelas, establecimientos, fetchLotes, fetchAnimales, fetchEventosLotesGlobal, fetchActividadGlobal, fetchHistoricosGlobal, abrirFichaVaca, checkNombreDuplicado, onIrAMasivosConLote }: any) {
     const [loading, setLoading] = useState(false);
@@ -46,6 +26,8 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
     const [loadingGraficoLote, setLoadingGraficoLote] = useState(false);
     const [statsGraficoLote, setStatsGraficoLote] = useState({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' });
     const [isLoteEstimated, setIsLoteEstimated] = useState(false);
+    const [puntoSeleccionado, setPuntoSeleccionado] = useState<any>(null);
+    const [mostrarIndividuales, setMostrarIndividuales] = useState(false);
     const [filtroTiempo, setFiltroTiempo] = useState<string>('TODOS');
     const [fechaDesde, setFechaDesde] = useState<Date | null>(null);
     const [fechaHasta, setFechaHasta] = useState<Date | null>(null);
@@ -74,7 +56,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
     useEffect(() => {
         if (!loteSel) return;
         setEventosLoteFicha([]); setEventosAnimalesLote([]); setDatosGraficoLote([]); setLineasAnimalesLote([]); setAgregarAlLoteIds([]); setIsLoteEstimated(false);
-        setStatsGraficoLote({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setFiltroTiempo('TODOS'); setFechaDesde(null); setFechaHasta(null);
+        setStatsGraficoLote({ inicio: 0, actual: 0, totalInicio: 0, totalActual: 0, ganancia: 0, dias: 0, adpv: '0' }); setFiltroTiempo('TODOS'); setFechaDesde(null); setFechaHasta(null); setPuntoSeleccionado(null); setMostrarIndividuales(false);
 
         async function loadFicha() {
             // Fetch 1: eventos propios del lote (lotes_eventos)
@@ -428,6 +410,18 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         openBatchModal();
     }
 
+    const puntoMostrar = puntoSeleccionado
+        ?? (datosGraficoLote.length > 0
+            ? [...datosGraficoLote].reverse().find(p => p['Promedio Lote'] != null) ?? datosGraficoLote[datosGraficoLote.length - 1]
+            : null);
+    const pesoEnPunto = puntoMostrar?.['Promedio Lote'] ?? puntoMostrar?.['Promedio Estimado'] ?? null;
+    const gananciaEnPunto = pesoEnPunto != null && statsGraficoLote.inicio > 0
+        ? (pesoEnPunto - statsGraficoLote.inicio).toFixed(1)
+        : null;
+    const animalesEnPunto = puntoMostrar ? Object.keys(puntoMostrar).filter((k: string) => k !== 'fecha' && k !== 'timestamp' && k !== '_meta' && k !== 'Promedio Lote' && k !== 'Promedio Estimado' && puntoMostrar[k]).length : 0;
+    const fechaFormateada = puntoMostrar?.fecha ?? '—';
+    const esEstimado = !!(puntoMostrar?.['Promedio Estimado'] && !puntoMostrar?.['Promedio Lote']);
+
     return (
         <>
             <Group justify="space-between" mb="lg">
@@ -581,33 +575,126 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                             <Group align="flex-end">
                                 <Select label="Periodo a analizar" data={[{value: 'TODOS', label: 'Histórico Completo'}, {value: '30D', label: 'Últimos 30 Días'}, {value: '6M', label: 'Últimos 6 Meses'}, {value: 'PERSONALIZADO', label: 'Rango Personalizado'}]} value={filtroTiempo} onChange={(v: string | null) => cambiarFiltroTiempo(v || 'TODOS')} />
                                 {filtroTiempo === 'PERSONALIZADO' && (<><TextInput label="Desde" type="date" value={getLocalDateForInput(fechaDesde)} onChange={(e: any) => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; setFechaDesde(d); generarGraficoLote(loteSel.id, d, fechaHasta); }} /><TextInput label="Hasta" type="date" value={getLocalDateForInput(fechaHasta)} onChange={(e: any) => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; setFechaHasta(d); generarGraficoLote(loteSel.id, fechaDesde, d); }} /></>)}
+                                <Button
+                                    variant={mostrarIndividuales ? 'light' : 'subtle'}
+                                    color="teal" size="xs"
+                                    onClick={() => setMostrarIndividuales(m => !m)}>
+                                    {mostrarIndividuales ? 'Ocultar animales individuales' : 'Ver animales individuales'}
+                                </Button>
                             </Group>
                         </Paper>
                         <Group justify="flex-end" mb="md">
-                            <Tooltip label="Línea morada continua: Peso promedio corregido (ADPV). Línea morada punteada: Proyección según el ritmo de engorde. Líneas grises: Evolución individual de cada animal." multiline w={250} withArrow position="left" zIndex={3000}><Badge variant="light" color="gray" leftSection={<IconInfoCircle size={14}/>} style={{cursor: 'help'}}>¿Cómo leer este gráfico?</Badge></Tooltip>
+                            <Tooltip label="Línea teal continua: peso promedio del lote. Línea punteada: proyección basada en el ADPV histórico. Tocá cualquier punto para ver los datos de esa fecha." multiline w={250} withArrow position="left" zIndex={3000}><Badge variant="light" color="gray" leftSection={<IconInfoCircle size={14}/>} style={{cursor: 'help'}}>¿Cómo leer este gráfico?</Badge></Tooltip>
                         </Group>
                         {loadingGraficoLote ? (<Text ta="center" c="dimmed" my="xl">Calculando promedios y proyecciones...</Text>) : datosGraficoLote.length > 0 ? (
                             <>
-                                <div style={{ width: '100%', height: 400 }}>
+                                <div style={{ width: '100%', height: 260, outline: 'none', userSelect: 'none' }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={datosGraficoLote} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(tick) => { const d = new Date(tick); return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}`; }} />
-                                            <YAxis domain={['auto', 'auto']} />
-                                            <RechartsTooltip content={<CustomTooltipMulti />} />
-                                            {lineasAnimalesLote.map((caravana: string, idx: number) => (<Line key={idx} type="monotone" dataKey={caravana} stroke="#ced4da" strokeWidth={1.5} dot={{ r: 2, fill: '#ced4da' }} connectNulls={true} />))}
-                                            <Line type="monotone" dataKey="Promedio Lote" stroke="#be4bdb" strokeWidth={4} activeDot={{ r: 8 }} connectNulls={true} />
-                                            <Line type="monotone" dataKey="Promedio Estimado" stroke="#be4bdb" strokeWidth={4} strokeDasharray="5 5" activeDot={{ r: 8 }} connectNulls={true} />
-                                        </LineChart>
+                                        <ComposedChart
+                                            data={datosGraficoLote}
+                                            margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                                            tabIndex={-1}
+                                            onMouseMove={(data: any) => {
+                                                if (data?.activePayload?.length > 0) {
+                                                    const payload = data.activePayload[0]?.payload;
+                                                    if (payload) setPuntoSeleccionado(payload);
+                                                }
+                                            }}
+                                            onClick={(data: any) => {
+                                                if (data?.activePayload?.length > 0) {
+                                                    setPuntoSeleccionado(data.activePayload[0].payload);
+                                                }
+                                            }}
+                                        >
+                                            <defs>
+                                                <linearGradient id="gradTeal" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#1D9E75" stopOpacity={0.15}/>
+                                                    <stop offset="95%" stopColor="#1D9E75" stopOpacity={0}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis
+                                                dataKey="timestamp" type="number" scale="time"
+                                                domain={['dataMin', 'dataMax']}
+                                                tickFormatter={(tick) => {
+                                                    const d = new Date(tick);
+                                                    return `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear().toString().slice(-2)}`;
+                                                }}
+                                                tick={{ fontSize: 11, fill: '#868e96' }}
+                                                axisLine={false} tickLine={false}
+                                            />
+                                            <YAxis
+                                                domain={['auto', 'auto']}
+                                                tick={{ fontSize: 11, fill: '#868e96' }}
+                                                axisLine={false} tickLine={false}
+                                                tickFormatter={(v) => `${v}kg`}
+                                                width={45}
+                                            />
+                                            {mostrarIndividuales && lineasAnimalesLote.map((caravana: string, idx: number) => (
+                                                <Line key={idx}
+                                                    type="monotone" dataKey={caravana}
+                                                    stroke="#ced4da" strokeWidth={1.5}
+                                                    dot={false} connectNulls activeDot={false}
+                                                />
+                                            ))}
+                                            <Area
+                                                type="monotone" dataKey="Promedio Lote"
+                                                stroke="#1D9E75" strokeWidth={3}
+                                                fill="url(#gradTeal)"
+                                                connectNulls
+                                                dot={{ r: 5, fill: '#1D9E75', stroke: 'white', strokeWidth: 2 }}
+                                                activeDot={{ r: 8, fill: '#1D9E75', stroke: 'white', strokeWidth: 2.5, onClick: (_: any, payload: any) => { if (payload?.payload) setPuntoSeleccionado(payload.payload); } }}
+                                            />
+                                            <Line
+                                                type="monotone" dataKey="Promedio Estimado"
+                                                stroke="#1D9E75" strokeWidth={2.5}
+                                                strokeDasharray="6 4"
+                                                dot={false} connectNulls
+                                                activeDot={{ r: 6, fill: '#1D9E75', stroke: 'white', strokeWidth: 2 }}
+                                            />
+                                        </ComposedChart>
                                     </ResponsiveContainer>
                                 </div>
+                                <Paper withBorder p="sm" radius="md" mt="sm">
+                                    <Group justify="space-between" align="center" wrap="wrap" gap="md">
+                                        <Text size="xs" c="dimmed">{fechaFormateada}</Text>
+                                        {pesoEnPunto && (
+                                            <Group gap="xs" align="baseline">
+                                                <Text size="xs" c="dimmed">Promedio:</Text>
+                                                <Text fw={600} size="sm" c="teal">
+                                                    {pesoEnPunto} kg{esEstimado && <Text span size="xs" c="dimmed"> (est.)</Text>}
+                                                </Text>
+                                            </Group>
+                                        )}
+                                        {gananciaEnPunto && (
+                                            <Group gap="xs" align="baseline">
+                                                <Text size="xs" c="dimmed">Ganancia:</Text>
+                                                <Text fw={600} size="sm" c={Number(gananciaEnPunto) >= 0 ? 'teal' : 'red'}>
+                                                    {Number(gananciaEnPunto) >= 0 ? '+' : ''}{gananciaEnPunto} kg
+                                                </Text>
+                                            </Group>
+                                        )}
+                                        {puntoMostrar?._meta?.['Promedio Lote']?.adpv && (
+                                            <Group gap="xs" align="baseline">
+                                                <Text size="xs" c="dimmed">ADPV:</Text>
+                                                <Text fw={600} size="sm" c="blue">{puntoMostrar._meta['Promedio Lote'].adpv} kg/día</Text>
+                                            </Group>
+                                        )}
+                                        {animalesEnPunto > 0 && (
+                                            <Text size="xs" c="dimmed">{animalesEnPunto} animales pesados</Text>
+                                        )}
+                                        {!pesoEnPunto && (
+                                            <Text size="xs" c="dimmed">Tocá un punto para ver sus datos</Text>
+                                        )}
+                                    </Group>
+                                </Paper>
                                 <SimpleGrid cols={{ base: 2, sm: 4 }} mt="xl" mb="xl">
                                     <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Inicial</Text><Text fw={700} size="xl">{statsGraficoLote.inicio} kg</Text></Paper>
                                     <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Ganancia Promedio</Text><Text fw={700} size="xl" c={statsGraficoLote.ganancia > 0 ? 'teal' : 'red'}>{statsGraficoLote.ganancia > 0 ? '+' : ''}{statsGraficoLote.ganancia} kg</Text></Paper>
-                                    <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text><Text fw={700} size="xl" c="blue">{statsGraficoLote.adpv} kg/día</Text></Paper>
+                                    <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">ADPV Promedio</Text><Text fw={700} size="xl" c="teal">{statsGraficoLote.adpv} kg/día</Text></Paper>
                                     <Paper withBorder p="md" ta="center" radius="md">
-                                        <Group justify="center" gap={6}><Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Actual</Text>{isLoteEstimated && (<Tooltip label="El gráfico proyecta matemáticamente el peso (línea punteada) de los animales sin pesajes recientes basándose en su ritmo de engorde individual." multiline w={250} withArrow zIndex={3000}><ThemeIcon size="sm" variant="light" color="grape" style={{ cursor: 'help' }} radius="xl"><IconInfoCircle size={14} /></ThemeIcon></Tooltip>)}</Group>
-                                        <Text fw={700} size="xl" c="dark">{statsGraficoLote.actual} kg {isLoteEstimated && <Text span size="sm" c="grape" fw={500}>(Est.)</Text>}</Text>
+                                        <Group justify="center" gap={6}><Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Actual</Text>{isLoteEstimated && (<Tooltip label="El gráfico proyecta matemáticamente el peso (línea punteada) de los animales sin pesajes recientes basándose en su ritmo de engorde individual." multiline w={250} withArrow zIndex={3000}><ThemeIcon size="sm" variant="light" color="teal" style={{ cursor: 'help' }} radius="xl"><IconInfoCircle size={14} /></ThemeIcon></Tooltip>)}</Group>
+                                        <Text fw={700} size="xl" c="dark">{statsGraficoLote.actual} kg {isLoteEstimated && <Text span size="sm" c="teal" fw={500}>(Est.)</Text>}</Text>
                                     </Paper>
                                 </SimpleGrid>
                             </>

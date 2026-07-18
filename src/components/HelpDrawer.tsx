@@ -113,6 +113,17 @@ const AYUDA: Record<string, SeccionAyuda> = {
       'Útil para auditorías, inspecciones o revisiones de manejo.',
     ],
   },
+  sesiones_baston: {
+    titulo: 'Sesiones de Bastón',
+    descripcion: 'Escaneá animales con el bastón y guardalos en una lista para trabajarlos después.',
+    items: [
+      'Creá una sesión con un nombre descriptivo.',
+      'Activá el lector y empezá a escanear caravanas.',
+      'La lista se guarda automáticamente — podés cerrar la app y volver.',
+      'Cuando terminés, cargala en Masivos para hacer una operación grupal.',
+      'También podés exportar la lista a Excel.',
+    ],
+  },
 };
 
 const AYUDA_DEFAULT: SeccionAyuda = {
