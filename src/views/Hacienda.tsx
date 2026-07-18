@@ -102,6 +102,27 @@ export default function Hacienda({
         setReverseSortDirection(reversed); setSortBy(field); setOrdenEdad(null); setOrdenParto(false);
     };
 
+    const animalesParaModalBaston = useMemo(() => {
+        return animales.filter((animal: any) => {
+            if (['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(animal.estado)) return false;
+            if (filterCategoria && animal.categoria !== filterCategoria) return false;
+            if (filterLote && animal.lote_id !== filterLote) return false;
+            if (filterAtributos.length > 0) {
+                const tags: string[] = [];
+                if (animal.estado === 'PREÑADA Y LACTANDO') tags.push('PREÑADA', 'EN LACTANCIA'); else tags.push(animal.estado);
+                if (animal.condicion) tags.push(...animal.condicion.split(', '));
+                if (animal.sexo === 'M') tags.push('MACHO');
+                else if (animal.sexo === 'H') tags.push('HEMBRA');
+                else if (animal.sexo === 'I') tags.push('NO DEFINIDO');
+                if (animal.castrado) tags.push('CAPADO');
+                if (animal.destacado) tags.push('DESTACADO');
+                if (animal.en_transito) tags.push('EN TRÁNSITO');
+                if (!filterAtributos.every((f: string) => tags.includes(f))) return false;
+            }
+            return true;
+        });
+    }, [animales, filterCategoria, filterAtributos, filterLote]);
+
     const animalesFiltrados = useMemo(() => {
         return animales.filter((animal: any) => {
             const matchSeccion = activeSection === 'hacienda' 
@@ -463,6 +484,7 @@ export default function Hacienda({
                 caravanaElectronica={eidPendiente}
                 campoId={campoId}
                 animales={animales}
+                animalesParaVincular={animalesParaModalBaston}
                 datosSuscripcion={datosSuscripcion}
                 onSuccess={(animalId) => {
                     fetchAnimales();

@@ -10,12 +10,13 @@ interface Props {
     caravanaElectronica: string;
     campoId: string | null;
     animales: any[];
+    animalesParaVincular?: any[];
     datosSuscripcion: any;
     onSuccess: (animalId: string) => void;
 }
 
 export default function ModalAltaDesdeBaston({
-    opened, onClose, caravanaElectronica, campoId, animales, datosSuscripcion, onSuccess,
+    opened, onClose, caravanaElectronica, campoId, animales, animalesParaVincular, datosSuscripcion, onSuccess,
 }: Props) {
     const [modo, setModo] = useState<'nuevo' | 'existente'>('existente');
 
@@ -52,7 +53,9 @@ export default function ModalAltaDesdeBaston({
         a => !['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(a.estado)
     );
 
-    const opcionesAnimalesExistentes = animalesActivos.map((a: any) => ({
+    const animalesParaSelector = animalesParaVincular ?? animalesActivos;
+
+    const opcionesAnimalesExistentes = animalesParaSelector.map((a: any) => ({
         value: a.id,
         label: a.caravana_electronica
             ? `${a.caravana}  (EID: ${a.caravana_electronica})`
