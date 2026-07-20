@@ -843,6 +843,8 @@ export default function Masivos({
                 caravanaElectronica={eidPendiente}
                 campoId={campoId}
                 animales={animales}
+                lotes={lotes}
+                potreros={potreros}
                 datosSuscripcion={datosSuscripcion}
                 onSuccess={(newAnimalId) => {
                     setSelectedIds(prev => [...prev, newAnimalId]);

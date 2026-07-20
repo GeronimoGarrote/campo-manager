@@ -40,6 +40,9 @@ export function useLectorAllflex({
         }
 
         function handleKeyDown(e: KeyboardEvent) {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
+
             const now = Date.now();
             const elapsed = now - lastKeyTimeRef.current;
             lastKeyTimeRef.current = now;

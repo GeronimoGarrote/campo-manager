@@ -669,6 +669,7 @@ export default function App() {
                           setActiveSection('masivos');
                       }}
                       fetchAnimales={fetchAnimales}
+                      datosSuscripcion={datosSuscripcion}
                   />
               )}
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}

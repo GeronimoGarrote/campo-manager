@@ -176,6 +176,39 @@ animales_ids (UUID[]), created_at
 Vincula movimientos de caja con animales vendidos.
 El icono en Economia consulta esta tabla al clickear.
 
+### `sesiones_baston`
+```
+id, nombre, establecimiento_id,
+creado_por (UUID nullable, FK a auth.users),
+estado: 'ACTIVA' | 'LISTA' | 'PROCESADA',
+animales_ids (uuid[]),
+notas (text nullable),
+created_at, updated_at
+```
+ACTIVA = escaneo en curso. LISTA = escaneo terminado, listo para procesar en Masivos.
+PROCESADA = ya aplicada en Masivos o exportada.
+RLS basada en tiene_acceso_a_campo() sobre establecimiento_id.
+Deuda técnica conocida: cada escaneo hace UPDATE del array completo desde
+memoria. En la práctica no genera problemas (un bastón por sesión).
+Solución futura si se necesita: RPC con array_append atómico en Postgres.
+
+### `tags_pendientes`
+```
+id, establecimiento_id,
+eid (text — la cadena del EID escaneado),
+creado_por (UUID nullable, FK auth.users),
+asignado (boolean, default false),
+animal_id (UUID nullable, FK animales — se llena al asignar),
+grupo_nombre (text nullable),
+created_at
+```
+Workflow: PEON escanea tags con el bastón → se insertan con asignado=false.
+DUENO entra, ve la lista y asigna cada EID a un animal existente:
+UPDATE animales SET caravana_electronica = eid + UPDATE tags_pendientes SET asignado = true.
+Si el EID ya existe en animales.caravana_electronica al momento del escaneo,
+se acumula en estado local eidsYaRegistrados (no se persiste).
+RLS basada en tiene_acceso_a_campo() sobre establecimiento_id.
+
 ### RPCs disponibles
 - `buscar_campo_por_renspa({ buscar_renspa })` → `{ id, nombre }`
 - `obtener_caravanas_perdidas({ ids })` → `[{ id, caravana }]`

@@ -11,12 +11,15 @@ interface Props {
     campoId: string | null;
     animales: any[];
     animalesParaVincular?: any[];
+    lotes?: any[];
+    potreros?: any[];
+    soloVincular?: boolean;
     datosSuscripcion: any;
     onSuccess: (animalId: string) => void;
 }
 
 export default function ModalAltaDesdeBaston({
-    opened, onClose, caravanaElectronica, campoId, animales, animalesParaVincular, datosSuscripcion, onSuccess,
+    opened, onClose, caravanaElectronica, campoId, animales, animalesParaVincular, lotes, potreros, soloVincular, datosSuscripcion, onSuccess,
 }: Props) {
     const [modo, setModo] = useState<'nuevo' | 'existente'>('existente');
 
@@ -36,6 +39,11 @@ export default function ModalAltaDesdeBaston({
     // --- Estado: Asignar a existente ---
     const [animalExistenteId, setAnimalExistenteId] = useState<string | null>(null);
     const [reemplazarCaravanaVisual, setReemplazarCaravanaVisual] = useState(false);
+    const [filterCatVincular, setFilterCatVincular] = useState<string | null>(null);
+    const [filterSexoVincular, setFilterSexoVincular] = useState<string | null>(null);
+    const [filterLoteVincular, setFilterLoteVincular] = useState<string | null>(null);
+    const [filterPotreroVincular, setFilterPotreroVincular] = useState<string | null>(null);
+    const [incluirConEid, setIncluirConEid] = useState(false);
 
     const opcionesGestacion = [
         { value: '0.5', label: '15 días' }, { value: '1', label: '1 mes' },
@@ -55,12 +63,24 @@ export default function ModalAltaDesdeBaston({
 
     const animalesParaSelector = animalesParaVincular ?? animalesActivos;
 
-    const opcionesAnimalesExistentes = animalesParaSelector.map((a: any) => ({
+    const animalesFiltradosParaVincular = animalesParaSelector.filter((a: any) => {
+        if (!incluirConEid && a.caravana_electronica) return false;
+        if (filterCatVincular && a.categoria !== filterCatVincular) return false;
+        if (filterSexoVincular && a.sexo !== filterSexoVincular) return false;
+        if (filterLoteVincular && a.lote_id !== filterLoteVincular) return false;
+        if (filterPotreroVincular && a.potrero_id !== filterPotreroVincular) return false;
+        return true;
+    });
+
+    const opcionesAnimalesExistentes = animalesFiltradosParaVincular.map((a: any) => ({
         value: a.id,
-        label: a.caravana_electronica
-            ? `${a.caravana}  (EID: ${a.caravana_electronica})`
-            : a.caravana,
+        label: `${a.caravana} — ${a.categoria}${a.caravana_electronica ? ` (EID: ${a.caravana_electronica})` : ''}`,
     }));
+
+    useEffect(() => { setAnimalExistenteId(null); }, [filterCatVincular]);
+    useEffect(() => { setAnimalExistenteId(null); }, [filterSexoVincular]);
+    useEffect(() => { setAnimalExistenteId(null); }, [filterLoteVincular]);
+    useEffect(() => { setAnimalExistenteId(null); }, [filterPotreroVincular]);
 
     useEffect(() => {
         if (['Vaca', 'Vaquillona'].includes(categoria || '')) { setSexo('H'); setSexoBloqueado(true); }
@@ -75,6 +95,9 @@ export default function ModalAltaDesdeBaston({
             setPrecioCompra(''); setEstadoReproductivo('VACÍA'); setLactancia(false);
             setMesesGestacion(null); setEdadEstimada(null);
             setAnimalExistenteId(null); setReemplazarCaravanaVisual(false);
+            setFilterCatVincular(null); setFilterSexoVincular(null);
+            setFilterLoteVincular(null); setFilterPotreroVincular(null);
+            setIncluirConEid(false);
         }
     }, [opened]);
 
@@ -196,9 +219,18 @@ export default function ModalAltaDesdeBaston({
                     <Badge color="teal" size="lg" mt={4} ff="monospace">{caravanaElectronica}</Badge>
                 </Alert>
 
+                {!soloVincular && (
                 <SegmentedControl
                     value={modo}
-                    onChange={(v) => setModo(v as 'nuevo' | 'existente')}
+                    onChange={(v) => {
+                        setModo(v as 'nuevo' | 'existente');
+                        setAnimalExistenteId(null);
+                        setFilterCatVincular(null);
+                        setFilterSexoVincular(null);
+                        setFilterLoteVincular(null);
+                        setFilterPotreroVincular(null);
+                        setIncluirConEid(false);
+                    }}
                     data={[
                         { value: 'existente', label: <Group gap={6} justify="center"><IconLink size={15} /><Text size="sm">Vincular a caravana existente</Text></Group> },
                         { value: 'nuevo',     label: <Group gap={6} justify="center"><IconPlus size={15} /><Text size="sm">Registrar como nuevo</Text></Group> },
@@ -206,9 +238,10 @@ export default function ModalAltaDesdeBaston({
                     fullWidth
                     color="teal"
                 />
+                )}
 
                 {/* ─── FLUJO A: Nuevo animal ─── */}
-                {modo === 'nuevo' && (
+                {!soloVincular && modo === 'nuevo' && (
                     <>
                         <TextInput
                             label="Caravana Visual (caravana plástica)"
@@ -249,8 +282,86 @@ export default function ModalAltaDesdeBaston({
                 )}
 
                 {/* ─── FLUJO B: Asignar a existente ─── */}
-                {modo === 'existente' && (
+                {(soloVincular || modo === 'existente') && (
                     <>
+                        <Stack gap={6}>
+                            <Text size="xs" c="dimmed">Filtrar por categoría</Text>
+                            <Group gap={6} wrap="wrap">
+                                {['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro'].map(cat => (
+                                    <Badge
+                                        key={cat}
+                                        variant={filterCatVincular === cat ? 'filled' : 'outline'}
+                                        color="teal"
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => setFilterCatVincular(prev => prev === cat ? null : cat)}
+                                    >
+                                        {cat}
+                                    </Badge>
+                                ))}
+                            </Group>
+                            <Group gap={6} align="center">
+                                <Badge
+                                    variant={filterSexoVincular === 'M' ? 'filled' : 'outline'}
+                                    color="blue"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => setFilterSexoVincular(prev => prev === 'M' ? null : 'M')}
+                                >
+                                    Macho
+                                </Badge>
+                                <Badge
+                                    variant={filterSexoVincular === 'H' ? 'filled' : 'outline'}
+                                    color="pink"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => setFilterSexoVincular(prev => prev === 'H' ? null : 'H')}
+                                >
+                                    Hembra
+                                </Badge>
+                                {(filterCatVincular || filterSexoVincular) && (
+                                    <Button
+                                        size="xs"
+                                        variant="subtle"
+                                        color="gray"
+                                        onClick={() => { setFilterCatVincular(null); setFilterSexoVincular(null); }}
+                                    >
+                                        Limpiar
+                                    </Button>
+                                )}
+                            </Group>
+                            {(lotes && lotes.length > 0) && (
+                                <Select
+                                    placeholder="Filtrar por lote"
+                                    data={lotes.map((l: any) => ({ value: l.id, label: l.nombre }))}
+                                    value={filterLoteVincular}
+                                    onChange={setFilterLoteVincular}
+                                    clearable
+                                    size="xs"
+                                />
+                            )}
+                            {(potreros && potreros.length > 0) && (
+                                <Select
+                                    placeholder="Filtrar por potrero"
+                                    data={potreros.map((p: any) => ({ value: p.id, label: p.nombre }))}
+                                    value={filterPotreroVincular}
+                                    onChange={setFilterPotreroVincular}
+                                    clearable
+                                    size="xs"
+                                />
+                            )}
+                            <Text size="xs" c="dimmed">
+                                {animalesFiltradosParaVincular.length} animal{animalesFiltradosParaVincular.length !== 1 ? 'es' : ''}
+                            </Text>
+                            <Switch
+                                size="xs"
+                                label="Incluir animales que ya tienen EID"
+                                checked={incluirConEid}
+                                onChange={(e) => {
+                                    setIncluirConEid(e.currentTarget.checked);
+                                    setAnimalExistenteId(null);
+                                }}
+                                color="orange"
+                            />
+                        </Stack>
+
                         <Select
                             label="Caravana visual del animal"
                             placeholder="Escribí el número de caravana (ej: 1045)..."

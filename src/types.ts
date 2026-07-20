@@ -94,6 +94,9 @@ export type PlanSuscripcion = 'PRUEBA' | 'BASICO' | 'PRO' | 'PREMIUM';
 
 export type EstadoSuscripcion = 'ACTIVO' | 'VENCIDO' | 'SUSPENDIDO';
 
+export const esAnimalActivo = (a: { estado: string; en_transito?: boolean }) =>
+    !['VENDIDO', 'MUERTO', 'ELIMINADO'].includes(a.estado) && !a.en_transito;
+
 // ─── Entidades ─────────────────────────────────────────────────────────────────
 
 export interface Establecimiento {

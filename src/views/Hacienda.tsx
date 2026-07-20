@@ -72,21 +72,6 @@ export default function Hacienda({
     const [eidPendiente, setEidPendiente] = useState('');
     const [modalAltaBastonOpen, setModalAltaBastonOpen] = useState(false);
 
-    const manejarEscaneoHacienda = useCallback((eid: string) => {
-        const eidNorm = eid.trim().toLowerCase();
-        const animal = animales.find((a: any) =>
-            a.caravana_electronica?.trim().toLowerCase() === eidNorm ||
-            a.caravana?.trim().toLowerCase() === eidNorm
-        );
-        if (animal) {
-            abrirFichaVaca(animal);
-        } else {
-            setEidPendiente(eid);
-            setModalAltaBastonOpen(true);
-        }
-    }, [animales, abrirFichaVaca]);
-
-    useLectorAllflex({ isActive: lectorActivo, onScan: manejarEscaneoHacienda });
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
     const [filterAtributos, setFilterAtributos] = useState<string[]>([]);
     const [filterLote, setFilterLote] = useState<string | null>(null); 
@@ -174,6 +159,36 @@ export default function Hacienda({
             return 0;
         });
     }, [animales, busqueda, filterCategoria, filterAtributos, filterLote, ordenEdad, ordenParto, sortBy, reverseSortDirection, activeSection]);
+
+    const manejarEscaneoHacienda = useCallback((eid: string) => {
+        const eidNorm = eid.trim().toLowerCase();
+        const animal = animales.find((a: any) =>
+            a.caravana_electronica?.trim().toLowerCase() === eidNorm ||
+            a.caravana?.trim().toLowerCase() === eidNorm
+        );
+
+        if (animal) {
+            const hayFiltrosActivos = !!(filterCategoria || filterLote || filterAtributos.length > 0);
+            const estaEnVista = animalesFiltrados.some((a: any) => a.id === animal.id);
+
+            if (hayFiltrosActivos && !estaEnVista && activeSection === 'hacienda') {
+                notifications.show({
+                    title: `${animal.categoria} fuera de los filtros`,
+                    message: `${animal.caravana} no está entre los animales filtrados.`,
+                    color: 'orange',
+                    autoClose: 7000,
+                });
+                return;
+            }
+
+            abrirFichaVaca(animal);
+        } else {
+            setEidPendiente(eid);
+            setModalAltaBastonOpen(true);
+        }
+    }, [animales, animalesFiltrados, filterCategoria, filterLote, filterAtributos, activeSection, abrirFichaVaca]);
+
+    useLectorAllflex({ isActive: lectorActivo, onScan: manejarEscaneoHacienda });
 
     // AQUÍ ESTÁ EL CAMBIO A VIOLET PARA LASTIMADA
     const renderCondicionBadges = (condStr: string) => { 
@@ -485,6 +500,8 @@ export default function Hacienda({
                 campoId={campoId}
                 animales={animales}
                 animalesParaVincular={animalesParaModalBaston}
+                lotes={lotes}
+                potreros={potreros}
                 datosSuscripcion={datosSuscripcion}
                 onSuccess={(animalId) => {
                     fetchAnimales();
