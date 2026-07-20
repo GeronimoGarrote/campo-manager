@@ -489,9 +489,11 @@ export default function SesionesBaston({
                                                     p="sm"
                                                     radius="md"
                                                     onClick={() => {
-                                                        setSesionActiva(s);
-                                                        setLectorActivo(false);
-                                                        setUltimoEidLeido(null);
+                                                        if (sesionActiva?.id === s.id) {
+                                                            setSesionActiva(null);
+                                                        } else {
+                                                            setSesionActiva(s);
+                                                        }
                                                     }}
                                                     style={{
                                                         cursor: 'pointer',
@@ -520,11 +522,18 @@ export default function SesionesBaston({
                             {!sesionActiva ? (
                                 <Paper withBorder p="xl" radius="md">
                                     <Center h={300}>
-                                        <Stack align="center" gap="xs">
-                                            <ThemeIcon size={64} radius="xl" color="gray" variant="light">
-                                                <IconScan size={36} />
+                                        <Stack align="center" gap="md" maw={340}>
+                                            <ThemeIcon size={56} radius="xl" color="teal" variant="light">
+                                                <IconScan size={32} />
                                             </ThemeIcon>
-                                            <Text c="dimmed" fw={500}>Seleccioná una sesión para ver el detalle</Text>
+                                            <Stack gap={4} align="center">
+                                                <Text fw={600} ta="center">¿Cómo funcionan las sesiones?</Text>
+                                                <Text size="sm" c="dimmed" ta="center">
+                                                    Creá una sesión con un nombre, seleccionala y activá el lector.
+                                                    Escaneá los animales uno a uno — se guardan automáticamente en la sesión, no hace falta apretar ningún botón.
+                                                    Cuando terminés, cargalos en Eventos Masivos para aplicar un evento a todos a la vez.
+                                                </Text>
+                                            </Stack>
                                         </Stack>
                                     </Center>
                                 </Paper>
@@ -715,49 +724,68 @@ export default function SesionesBaston({
                         <Grid.Col span={{ base: 12, sm: 4 }}>
                             <Stack gap="md">
                                 <Paper withBorder p="md" radius="md">
-                                    <Group justify="space-between" mb="md">
+                                    <Group justify="space-between" mb="md" wrap="wrap" gap="xs">
                                         <Group gap="xs">
-                                            <Title order={4}>Grupos Caravana Electrónica</Title>
-                                            <Badge color="teal" variant="filled">{grupos.length}</Badge>
+                                            <Text fw={700} size="md">Grupos Caravana Electrónica</Text>
+                                            <Badge color="teal" variant="light">{grupos.length}</Badge>
                                         </Group>
-                                        <Popover
-                                            opened={popoverGrupoOpen}
-                                            onChange={setPopoverGrupoOpen}
-                                            position="bottom-end"
-                                            withArrow
-                                            shadow="md"
-                                            width={260}
-                                        >
-                                            <Popover.Target>
-                                                <Button size="xs" leftSection={<IconPlus size={14} />} color="teal" onClick={() => setPopoverGrupoOpen(o => !o)}>
-                                                    Nueva
-                                                </Button>
-                                            </Popover.Target>
-                                            <Popover.Dropdown>
-                                                <Stack gap="xs">
-                                                    <Text size="sm" fw={600}>Nombre del grupo</Text>
-                                                    <TextInput
-                                                        placeholder="Ej: Vacas campo norte"
-                                                        value={nombreNuevoGrupo}
-                                                        onChange={(e) => setNombreNuevoGrupo(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' && nombreNuevoGrupo.trim()) {
-                                                                crearGrupo();
-                                                            }
-                                                        }}
-                                                        autoFocus
-                                                    />
-                                                    <Button
-                                                        fullWidth
-                                                        color="teal"
-                                                        disabled={!nombreNuevoGrupo.trim()}
-                                                        onClick={crearGrupo}
-                                                    >
-                                                        Crear grupo
+                                        <Group gap="xs" wrap="wrap">
+                                            <Switch
+                                                size="sm"
+                                                checked={lectorTagsActivo}
+                                                onChange={e => {
+                                                    if (!grupoSeleccionado) return;
+                                                    setLectorTagsActivo(e.currentTarget.checked);
+                                                    setUltimoEidTag(null);
+                                                }}
+                                                disabled={!grupoSeleccionado}
+                                                color="teal"
+                                                label={lectorTagsActivo ? 'Lector ON' : 'Lector OFF'}
+                                                title={!grupoSeleccionado ? 'Seleccioná un grupo primero' : undefined}
+                                            />
+                                            {lectorTagsActivo && (
+                                                <Badge color="teal" variant="dot" size="sm">HID activo</Badge>
+                                            )}
+                                            <AllflexScanner onScan={activeTab === 'tags' ? manejarEscaneoTags : () => {}} />
+                                            <Popover
+                                                opened={popoverGrupoOpen}
+                                                onChange={setPopoverGrupoOpen}
+                                                position="bottom-end"
+                                                withArrow
+                                                shadow="md"
+                                                width={260}
+                                            >
+                                                <Popover.Target>
+                                                    <Button size="xs" leftSection={<IconPlus size={14} />} color="teal" onClick={() => setPopoverGrupoOpen(o => !o)}>
+                                                        Nueva
                                                     </Button>
-                                                </Stack>
-                                            </Popover.Dropdown>
-                                        </Popover>
+                                                </Popover.Target>
+                                                <Popover.Dropdown>
+                                                    <Stack gap="xs">
+                                                        <Text size="sm" fw={600}>Nombre del grupo</Text>
+                                                        <TextInput
+                                                            placeholder="Ej: Vacas campo norte"
+                                                            value={nombreNuevoGrupo}
+                                                            onChange={(e) => setNombreNuevoGrupo(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' && nombreNuevoGrupo.trim()) {
+                                                                    crearGrupo();
+                                                                }
+                                                            }}
+                                                            autoFocus
+                                                        />
+                                                        <Button
+                                                            fullWidth
+                                                            color="teal"
+                                                            disabled={!nombreNuevoGrupo.trim()}
+                                                            onClick={crearGrupo}
+                                                        >
+                                                            Crear grupo
+                                                        </Button>
+                                                    </Stack>
+                                                </Popover.Dropdown>
+                                            </Popover>
+                                        </Group>
                                     </Group>
 
                                     {loadingGrupos ? (
@@ -785,9 +813,16 @@ export default function SesionesBaston({
                                                             p="sm"
                                                             radius="md"
                                                             onClick={() => {
-                                                                setGrupoSeleccionado(grupo);
-                                                                grupoActualRef.current = grupo.nombre;
-                                                                setUltimoEidTag(null);
+                                                                if (grupoSeleccionado?.id === grupo.id) {
+                                                                    setGrupoSeleccionado(null);
+                                                                    grupoActualRef.current = '';
+                                                                    setLectorTagsActivo(false);
+                                                                    setUltimoEidTag(null);
+                                                                } else {
+                                                                    setGrupoSeleccionado(grupo);
+                                                                    grupoActualRef.current = grupo.nombre;
+                                                                    setUltimoEidTag(null);
+                                                                }
                                                             }}
                                                             style={{
                                                                 cursor: 'pointer',
@@ -846,11 +881,18 @@ export default function SesionesBaston({
                             {!grupoSeleccionado ? (
                                 <Paper withBorder p="xl" radius="md">
                                     <Center h={300}>
-                                        <Stack align="center" gap="xs">
-                                            <ThemeIcon size={64} radius="xl" color="gray" variant="light">
-                                                <IconTags size={36} />
+                                        <Stack align="center" gap="md" maw={340}>
+                                            <ThemeIcon size={56} radius="xl" color="teal" variant="light">
+                                                <IconTags size={32} />
                                             </ThemeIcon>
-                                            <Text c="dimmed" fw={500}>Seleccioná un grupo para ver y escanear C.E</Text>
+                                            <Stack gap={4} align="center">
+                                                <Text fw={600} ta="center">¿Cómo funciona C.E sin asignar?</Text>
+                                                <Text size="sm" c="dimmed" ta="center">
+                                                    Creá un grupo (ej: "Terneros flacos"), seleccionalo y activá el lector.
+                                                    Cada caravana electrónica que escanees se guarda automáticamente en ese grupo, no hace falta apretar ningún botón.
+                                                    Después podes entrar y asignar cada C.E al animal correspondiente.
+                                                </Text>
+                                            </Stack>
                                         </Stack>
                                     </Center>
                                 </Paper>
@@ -865,44 +907,6 @@ export default function SesionesBaston({
                                             </Group>
                                             <Text size="xs" c="dimmed">Creado el {new Date(grupoSeleccionado.created_at).toLocaleDateString('es-AR')}</Text>
                                         </Group>
-
-                                        {/* Panel escáner */}
-                                        <Paper
-                                            withBorder p="sm" radius="md" mb="md"
-                                            bg={lectorTagsActivo ? 'teal.0' : undefined}
-                                            style={{ borderColor: lectorTagsActivo ? 'var(--mantine-color-teal-4)' : undefined }}
-                                        >
-                                            <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-                                                <Group gap="md" align="center" wrap="nowrap">
-                                                    <Switch
-                                                        checked={lectorTagsActivo}
-                                                        onChange={e => { setLectorTagsActivo(e.currentTarget.checked); setUltimoEidTag(null); }}
-                                                        color="teal"
-                                                        size="md"
-                                                        label={lectorTagsActivo ? 'Lector ON' : 'Lector OFF'}
-                                                        thumbIcon={lectorTagsActivo
-                                                            ? <IconBluetooth size={12} color="white" />
-                                                            : <IconBluetoothOff size={12} />}
-                                                    />
-                                                    {lectorTagsActivo && (
-                                                        <>
-                                                            <Badge color="teal" variant="light" size="sm" leftSection={<IconBluetooth size={11} />}>
-                                                                HID activo
-                                                            </Badge>
-                                                            <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-teal-3)', paddingLeft: 12 }}>
-                                                                SPP:
-                                                            </Text>
-                                                            <AllflexScanner onScan={activeTab === 'tags' ? manejarEscaneoTags : () => {}} />
-                                                        </>
-                                                    )}
-                                                </Group>
-                                                {lectorTagsActivo && (
-                                                    <Text size="xs" c={ultimoEidTag ? 'teal.8' : 'dimmed'}>
-                                                        {ultimoEidTag ?? 'Apuntá el bastón y escaneá'}
-                                                    </Text>
-                                                )}
-                                            </Group>
-                                        </Paper>
 
                                         {/* Tabla C.E del grupo */}
                                         <ScrollArea h={isMobile ? undefined : 340}>

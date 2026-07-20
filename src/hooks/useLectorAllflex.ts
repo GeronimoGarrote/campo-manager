@@ -40,14 +40,30 @@ export function useLectorAllflex({
         }
 
         function handleKeyDown(e: KeyboardEvent) {
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
-
             const now = Date.now();
             const elapsed = now - lastKeyTimeRef.current;
+
+            const activeEl = document.activeElement as HTMLElement;
+            const inputFocused = activeEl &&
+                (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+
+            if (inputFocused) {
+                if (bufferRef.current.length > 0 && elapsed < speedThresholdMs) {
+                    // Ya tenemos buffer acumulado a velocidad de bastón:
+                    // robar el evento antes de que llegue al input
+                    e.preventDefault();
+                    activeEl.blur();
+                    // No retornar → seguir procesando la tecla abajo
+                } else {
+                    // Podría ser el usuario escribiendo → no interferir
+                    bufferRef.current = '';
+                    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+                    return;
+                }
+            }
+
             lastKeyTimeRef.current = now;
 
-            // Enter o retorno de carro → disparar inmediatamente
             if (e.key === 'Enter' || e.key === 'Tab') {
                 if (bufferRef.current.length >= minLength) {
                     e.preventDefault();
@@ -56,10 +72,8 @@ export function useLectorAllflex({
                 return;
             }
 
-            // Ignorar teclas no imprimibles (Shift, Ctrl, F1, etc.)
             if (e.key.length !== 1) return;
 
-            // Si pasó más del umbral → era el humano, limpiar y empezar de nuevo
             if (elapsed > speedThresholdMs) {
                 bufferRef.current = '';
                 if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -67,16 +81,15 @@ export function useLectorAllflex({
 
             bufferRef.current += e.key;
 
-            // Fallback: si no llega Enter en idleTimeoutMs, disparar igual
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
             if (bufferRef.current.length >= minLength) {
                 idleTimerRef.current = setTimeout(dispararScan, idleTimeoutMs);
             }
         }
 
-        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
         return () => {
-            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         };
     }, [isActive, minLength, speedThresholdMs, idleTimeoutMs]);
