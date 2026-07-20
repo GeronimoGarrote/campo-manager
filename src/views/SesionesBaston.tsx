@@ -7,7 +7,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
-    IconScan, IconBluetooth, IconBluetoothOff, IconPlus,
+    IconScan, IconPlus,
     IconTrash, IconMapPin, IconTag, IconDownload, IconX, IconPlaylistAdd,
     IconTags, IconCheck,
 } from '@tabler/icons-react';
@@ -426,46 +426,65 @@ export default function SesionesBaston({
                         {/* COLUMNA IZQUIERDA — lista de sesiones */}
                         <Grid.Col span={{ base: 12, sm: 4 }}>
                             <Paper withBorder p="md" radius="md">
-                                <Group justify="space-between" mb="md">
+                                <Group justify="space-between" mb="md" wrap="wrap" gap="xs">
                                     <Group gap="xs">
                                         <Title order={4}>Sesiones de Bastón</Title>
                                         <Badge color="teal" variant="filled">{sesiones.length}</Badge>
                                     </Group>
-                                    <Popover
-                                        opened={popoverOpen}
-                                        onChange={setPopoverOpen}
-                                        position="bottom-end"
-                                        withArrow
-                                        shadow="md"
-                                        width={260}
-                                    >
-                                        <Popover.Target>
-                                            <Button size="xs" leftSection={<IconPlus size={14} />} color="teal" onClick={() => setPopoverOpen(o => !o)}>
-                                                Nueva
-                                            </Button>
-                                        </Popover.Target>
-                                        <Popover.Dropdown>
-                                            <Stack gap="xs">
-                                                <Text size="sm" fw={600}>Nombre de la sesión</Text>
-                                                <TextInput
-                                                    placeholder="Ej: Vacunación lote Norte"
-                                                    value={nombreNuevaSesion}
-                                                    onChange={(e) => setNombreNuevaSesion(e.target.value)}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter') crearSesion(); }}
-                                                    autoFocus
-                                                />
-                                                <Button
-                                                    fullWidth
-                                                    color="teal"
-                                                    loading={creandoSesion}
-                                                    onClick={crearSesion}
-                                                    disabled={!nombreNuevaSesion.trim()}
-                                                >
-                                                    Crear sesión
+                                    <Group gap="xs" wrap="wrap">
+                                        <Switch
+                                            size="sm"
+                                            checked={lectorActivo}
+                                            onChange={e => {
+                                                if (!sesionActiva) return;
+                                                setLectorActivo(e.currentTarget.checked);
+                                                setUltimoEidLeido(null);
+                                            }}
+                                            disabled={!sesionActiva || sesionActiva.estado === 'PROCESADA'}
+                                            color="teal"
+                                            label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
+                                            title={!sesionActiva ? 'Seleccioná una sesión primero' : sesionActiva.estado === 'PROCESADA' ? 'Sesión ya procesada' : undefined}
+                                        />
+                                        {lectorActivo && (
+                                            <Badge color="teal" variant="dot" size="sm">HID activo</Badge>
+                                        )}
+                                        <AllflexScanner onScan={activeTab === 'sesiones' ? manejarEscaneo : () => {}} />
+                                        <Popover
+                                            opened={popoverOpen}
+                                            onChange={setPopoverOpen}
+                                            position="bottom-end"
+                                            withArrow
+                                            shadow="md"
+                                            width={260}
+                                        >
+                                            <Popover.Target>
+                                                <Button size="xs" leftSection={<IconPlus size={14} />} color="teal" onClick={() => setPopoverOpen(o => !o)}>
+                                                    Nueva
                                                 </Button>
-                                            </Stack>
-                                        </Popover.Dropdown>
-                                    </Popover>
+                                            </Popover.Target>
+                                            <Popover.Dropdown>
+                                                <Stack gap="xs">
+                                                    <Text size="sm" fw={600}>Nombre de la sesión</Text>
+                                                    <TextInput
+                                                        placeholder="Ej: Vacunación lote Norte"
+                                                        value={nombreNuevaSesion}
+                                                        onChange={(e) => setNombreNuevaSesion(e.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') crearSesion(); }}
+                                                        autoFocus
+                                                    />
+                                                    <Button
+                                                        fullWidth
+                                                        color="teal"
+                                                        loading={creandoSesion}
+                                                        onClick={crearSesion}
+                                                        disabled={!nombreNuevaSesion.trim()}
+                                                    >
+                                                        Crear sesión
+                                                    </Button>
+                                                </Stack>
+                                            </Popover.Dropdown>
+                                        </Popover>
+                                    </Group>
                                 </Group>
 
                                 {loadingSesiones ? (
@@ -550,50 +569,11 @@ export default function SesionesBaston({
                                         <Text size="xs" c="dimmed">Creada el {formatDate(sesionActiva.created_at)}</Text>
                                     </Group>
 
-                                    {/* Panel lector */}
-                                    <Paper
-                                        withBorder p="sm" radius="md" mb="md"
-                                        bg={lectorActivo ? 'teal.0' : undefined}
-                                        style={{ borderColor: lectorActivo ? 'var(--mantine-color-teal-4)' : undefined }}
-                                    >
-                                        <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-                                            <Group gap="md" align="center" wrap="nowrap">
-                                                <Switch
-                                                    checked={lectorActivo}
-                                                    onChange={(e) => { setLectorActivo(e.currentTarget.checked); setUltimoEidLeido(null); }}
-                                                    color="teal"
-                                                    size="md"
-                                                    label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
-                                                    thumbIcon={lectorActivo
-                                                        ? <IconBluetooth size={12} color="white" />
-                                                        : <IconBluetoothOff size={12} />}
-                                                    disabled={sesionActiva.estado === 'PROCESADA'}
-                                                />
-                                                {lectorActivo && (
-                                                    <>
-                                                        <Badge color="teal" variant="light" size="sm"
-                                                            leftSection={<IconBluetooth size={11} />}>
-                                                            HID activo
-                                                        </Badge>
-                                                        {eidsPendientes.length > 0 && (
-                                                            <Badge color="orange" variant="light" size="sm">
-                                                                {eidsPendientes.length} sin registrar
-                                                            </Badge>
-                                                        )}
-                                                        <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-teal-3)', paddingLeft: 12 }}>
-                                                            SPP:
-                                                        </Text>
-                                                        <AllflexScanner onScan={manejarEscaneo} />
-                                                    </>
-                                                )}
-                                            </Group>
-                                            {lectorActivo && (
-                                                <Text size="xs" c={ultimoEidLeido ? 'teal.8' : 'dimmed'}>
-                                                    {ultimoEidLeido ?? 'Apuntá el bastón y escaneá'}
-                                                </Text>
-                                            )}
-                                        </Group>
-                                    </Paper>
+                                    {lectorActivo && (
+                                        <Text size="xs" c="teal.7" mb="xs">
+                                            {ultimoEidLeido ?? 'Apuntá el bastón y escaneá'}
+                                        </Text>
+                                    )}
 
                                     {/* Tabla de animales */}
                                     <Paper withBorder radius="md" mb="md" style={{ overflow: 'hidden' }}>
