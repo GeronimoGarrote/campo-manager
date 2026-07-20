@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { notifications } from '@mantine/notifications';
 import {
     Title, Badge, Paper, Text, Button, Group, Stack, TextInput,
@@ -37,6 +37,14 @@ interface TagPendiente {
     asignado: boolean;
     animal_id: string | null;
     grupo_nombre: string | null;
+    created_at: string;
+}
+
+interface GrupoTag {
+    id: string;
+    establecimiento_id: string;
+    nombre: string;
+    creado_por: string | null;
     created_at: string;
 }
 
@@ -104,8 +112,10 @@ export default function SesionesBaston({
     const [lectorTagsActivo, setLectorTagsActivo] = useState(false);
     const [ultimoEidTag, setUltimoEidTag] = useState<string | null>(null);
     const [eidsYaRegistrados, setEidsYaRegistrados] = useState<string[]>([]);
-    const [grupoActual, setGrupoActual] = useState<string>('');
-    const [grupoSeleccionado, setGrupoSeleccionado] = useState<string | null>(null);
+    const [grupos, setGrupos] = useState<GrupoTag[]>([]);
+    const [loadingGrupos, setLoadingGrupos] = useState(false);
+    const [grupoSeleccionado, setGrupoSeleccionado] = useState<GrupoTag | null>(null);
+    const grupoActualRef = useRef<string>('');
     const [popoverGrupoOpen, setPopoverGrupoOpen] = useState(false);
     const [nombreNuevoGrupo, setNombreNuevoGrupo] = useState('');
     const [tagParaAsignarModal, setTagParaAsignarModal] = useState<TagPendiente | null>(null);
@@ -136,10 +146,66 @@ export default function SesionesBaston({
         setLoadingTags(false);
     }
 
+    async function fetchGrupos() {
+        setLoadingGrupos(true);
+        const { data, error } = await supabase
+            .from('grupos_tags')
+            .select('*')
+            .eq('establecimiento_id', campoId)
+            .order('created_at', { ascending: false });
+        if (error) console.error('[fetchGrupos]', error);
+        setGrupos(data || []);
+        setLoadingGrupos(false);
+    }
+
     useEffect(() => {
         fetchSesiones();
         fetchTags();
+        fetchGrupos();
     }, [campoId]);
+
+    async function crearGrupo() {
+        if (!nombreNuevoGrupo.trim()) return;
+        const { data, error } = await supabase
+            .from('grupos_tags')
+            .insert({
+                establecimiento_id: campoId,
+                nombre: nombreNuevoGrupo.trim(),
+                creado_por: session?.user?.id ?? null,
+            })
+            .select()
+            .single();
+        if (error) {
+            console.error('[crearGrupo]', error);
+            notifications.show({ title: 'Error', message: error.message, color: 'red' });
+            return;
+        }
+        setNombreNuevoGrupo('');
+        setPopoverGrupoOpen(false);
+        await fetchGrupos();
+        if (data) {
+            setGrupoSeleccionado(data);
+            grupoActualRef.current = data.nombre;
+        }
+    }
+
+    async function eliminarGrupo(grupo: GrupoTag) {
+        await supabase
+            .from('tags_pendientes')
+            .delete()
+            .eq('establecimiento_id', campoId)
+            .eq('grupo_nombre', grupo.nombre);
+        await supabase
+            .from('grupos_tags')
+            .delete()
+            .eq('id', grupo.id);
+        if (grupoSeleccionado?.id === grupo.id) {
+            setGrupoSeleccionado(null);
+            grupoActualRef.current = '';
+        }
+        fetchGrupos();
+        fetchTags();
+    }
 
     async function crearSesion() {
         if (!nombreNuevaSesion.trim()) return;
@@ -289,7 +355,7 @@ export default function SesionesBaston({
                 eid: eid.trim(),
                 creado_por: session?.user?.id ?? null,
                 asignado: false,
-                grupo_nombre: grupoActual.trim() || null,
+                grupo_nombre: grupoActualRef.current.trim() || null,
             });
 
         if (error) {
@@ -300,7 +366,7 @@ export default function SesionesBaston({
 
         notifications.show({ message: `Tag "${eid}" guardado`, color: 'teal', autoClose: 1500 });
         fetchTags();
-    }, [animales, tagsPendientes, campoId, session, grupoActual]);
+    }, [animales, tagsPendientes, campoId, session]);
 
     useLectorAllflex({ isActive: lectorActivo && !!sesionActiva && sesionActiva.estado !== 'PROCESADA', onScan: manejarEscaneo });
     useLectorAllflex({ isActive: lectorTagsActivo && activeTab === 'tags', onScan: manejarEscaneoTags });
@@ -652,12 +718,7 @@ export default function SesionesBaston({
                                     <Group justify="space-between" mb="md">
                                         <Group gap="xs">
                                             <Title order={4}>Grupos Caravana Electrónica</Title>
-                                            <Badge color="teal" variant="filled">
-                                                {(() => {
-                                                    const keys = new Set(tagsPendientes.map(t => t.grupo_nombre || 'Sin grupo'));
-                                                    return tagsPendientes.length > 0 ? keys.size : 0;
-                                                })()}
-                                            </Badge>
+                                            <Badge color="teal" variant="filled">{grupos.length}</Badge>
                                         </Group>
                                         <Popover
                                             opened={popoverGrupoOpen}
@@ -681,10 +742,7 @@ export default function SesionesBaston({
                                                         onChange={(e) => setNombreNuevoGrupo(e.target.value)}
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter' && nombreNuevoGrupo.trim()) {
-                                                                setGrupoActual(nombreNuevoGrupo.trim());
-                                                                setGrupoSeleccionado(nombreNuevoGrupo.trim());
-                                                                setNombreNuevoGrupo('');
-                                                                setPopoverGrupoOpen(false);
+                                                                crearGrupo();
                                                             }
                                                         }}
                                                         autoFocus
@@ -693,12 +751,7 @@ export default function SesionesBaston({
                                                         fullWidth
                                                         color="teal"
                                                         disabled={!nombreNuevoGrupo.trim()}
-                                                        onClick={() => {
-                                                            setGrupoActual(nombreNuevoGrupo.trim());
-                                                            setGrupoSeleccionado(nombreNuevoGrupo.trim());
-                                                            setNombreNuevoGrupo('');
-                                                            setPopoverGrupoOpen(false);
-                                                        }}
+                                                        onClick={crearGrupo}
                                                     >
                                                         Crear grupo
                                                     </Button>
@@ -707,9 +760,9 @@ export default function SesionesBaston({
                                         </Popover>
                                     </Group>
 
-                                    {loadingTags ? (
+                                    {loadingGrupos ? (
                                         <Center py="xl"><Loader size="sm" color="teal" /></Center>
-                                    ) : tagsPendientes.length === 0 ? (
+                                    ) : grupos.length === 0 ? (
                                         <Stack align="center" py="xl" gap="xs">
                                             <ThemeIcon size={48} radius="xl" color="teal" variant="light">
                                                 <IconTags size={28} />
@@ -721,37 +774,50 @@ export default function SesionesBaston({
                                     ) : (
                                         <ScrollArea h={isMobile ? undefined : 500}>
                                             <Stack gap="xs">
-                                                {(() => {
-                                                    const grupos: Record<string, TagPendiente[]> = {};
-                                                    tagsPendientes.forEach(tag => {
-                                                        const key = tag.grupo_nombre || 'Sin grupo';
-                                                        if (!grupos[key]) grupos[key] = [];
-                                                        grupos[key].push(tag);
-                                                    });
-                                                    return Object.entries(grupos).map(([nombre, tags]) => (
+                                                {grupos.map(grupo => {
+                                                    const countDelGrupo = tagsPendientes.filter(
+                                                        t => t.grupo_nombre === grupo.nombre
+                                                    ).length;
+                                                    return (
                                                         <Paper
-                                                            key={nombre}
+                                                            key={grupo.id}
                                                             withBorder
                                                             p="sm"
                                                             radius="md"
                                                             onClick={() => {
-                                                                setGrupoSeleccionado(nombre);
-                                                                setGrupoActual(nombre);
+                                                                setGrupoSeleccionado(grupo);
+                                                                grupoActualRef.current = grupo.nombre;
                                                                 setUltimoEidTag(null);
                                                             }}
                                                             style={{
                                                                 cursor: 'pointer',
-                                                                borderColor: grupoSeleccionado === nombre ? 'var(--mantine-color-teal-4)' : undefined,
-                                                                background: grupoSeleccionado === nombre ? 'var(--mantine-color-teal-0)' : undefined,
+                                                                borderColor: grupoSeleccionado?.id === grupo.id ? 'var(--mantine-color-teal-4)' : undefined,
+                                                                background: grupoSeleccionado?.id === grupo.id ? 'var(--mantine-color-teal-0)' : undefined,
                                                             }}
                                                         >
                                                             <Group justify="space-between" mb={4} wrap="nowrap">
-                                                                <Text fw={700} size="sm" lineClamp={1} style={{ flex: 1 }}>{nombre}</Text>
-                                                                <Badge color="orange" size="xs" variant="filled">{tags.length}</Badge>
+                                                                <Text fw={700} size="sm" lineClamp={1} style={{ flex: 1 }}>{grupo.nombre}</Text>
+                                                                <Group gap={4} wrap="nowrap">
+                                                                    <Badge color="orange" size="xs" variant="filled">{countDelGrupo}</Badge>
+                                                                    {rolActual === 'DUENO' && (
+                                                                        <ActionIcon
+                                                                            size="sm"
+                                                                            color="red"
+                                                                            variant="subtle"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                eliminarGrupo(grupo);
+                                                                            }}
+                                                                            title="Eliminar grupo"
+                                                                        >
+                                                                            <IconTrash size={14} />
+                                                                        </ActionIcon>
+                                                                    )}
+                                                                </Group>
                                                             </Group>
                                                         </Paper>
-                                                    ));
-                                                })()}
+                                                    );
+                                                })}
                                             </Stack>
                                         </ScrollArea>
                                     )}
@@ -789,15 +855,15 @@ export default function SesionesBaston({
                                     </Center>
                                 </Paper>
                             ) : (() => {
-                                const tagsDelGrupo = tagsPendientes.filter(t => (t.grupo_nombre || 'Sin grupo') === grupoSeleccionado);
+                                const tagsDelGrupo = tagsPendientes.filter(t => t.grupo_nombre === grupoSeleccionado?.nombre);
                                 return (
                                     <Paper withBorder p="md" radius="md">
                                         <Group justify="space-between" mb="md" wrap="wrap" gap="xs">
                                             <Group gap="xs">
-                                                <Title order={4}>{grupoSeleccionado}</Title>
+                                                <Title order={4}>{grupoSeleccionado.nombre}</Title>
                                                 <Badge color="orange" variant="filled">{tagsDelGrupo.length}</Badge>
                                             </Group>
-                                            <Text size="xs" c="dimmed">Creado el {tagsDelGrupo[0] ? new Date(tagsDelGrupo[tagsDelGrupo.length - 1].created_at).toLocaleDateString('es-AR') : '-'}</Text>
+                                            <Text size="xs" c="dimmed">Creado el {new Date(grupoSeleccionado.created_at).toLocaleDateString('es-AR')}</Text>
                                         </Group>
 
                                         {/* Panel escáner */}

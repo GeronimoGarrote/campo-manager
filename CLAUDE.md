@@ -209,6 +209,15 @@ Si el EID ya existe en animales.caravana_electronica al momento del escaneo,
 se acumula en estado local eidsYaRegistrados (no se persiste).
 RLS basada en tiene_acceso_a_campo() sobre establecimiento_id.
 
+### `grupos_tags`
+```
+id, establecimiento_id, nombre (text),
+creado_por (UUID nullable, FK auth.users), created_at
+```
+Grupos de C.E creados por el usuario. Persisten aunque no tengan tags escaneados.
+Se relacionan con tags_pendientes por nombre (texto, sin FK).
+RLS basada en tiene_acceso_a_campo() sobre establecimiento_id.
+
 ### RPCs disponibles
 - `buscar_campo_por_renspa({ buscar_renspa })` → `{ id, nombre }`
 - `obtener_caravanas_perdidas({ ids })` → `[{ id, caravana }]`
