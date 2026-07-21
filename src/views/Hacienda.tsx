@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal, Switch, Alert } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
+import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal, Switch, Alert, Indicator } from '@mantine/core';
+import { useMediaQuery, useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet, IconScan, IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
 import { useLectorAllflex } from '../hooks/useLectorAllflex';
@@ -66,6 +66,7 @@ export default function Hacienda({
     const [eidInputVal, setEidInputVal] = useState('');
     const [savingEid, setSavingEid] = useState(false);
     const eidInputRef = useRef<HTMLInputElement>(null);
+    const [filtrosDrawerOpen, { open: abrirFiltros, close: cerrarFiltros }] = useDisclosure(false);
 
     // ── Lector RFID ──────────────────────────────────────────────────────────
     const [lectorActivo, setLectorActivo] = useState(false);
@@ -86,6 +87,12 @@ export default function Hacienda({
         const reversed = field === sortBy ? !reverseSortDirection : false;
         setReverseSortDirection(reversed); setSortBy(field); setOrdenEdad(null); setOrdenParto(false);
     };
+
+    const cantFiltrosActivos = [
+        filterCategoria ? 1 : 0,
+        filterAtributos.length,
+        filterLote ? 1 : 0,
+    ].reduce((a, b) => a + b, 0);
 
     const animalesParaModalBaston = useMemo(() => {
         return animales.filter((animal: any) => {
@@ -310,8 +317,36 @@ export default function Hacienda({
             <Paper p="sm" radius="md" withBorder bg="gray.0">
                 <Group align="flex-start" wrap="nowrap">
                     <div style={{ flex: 1 }}>
-                        <SimpleGrid cols={{ base: 2, sm: 2, md: 4 }} spacing="xs" verticalSpacing="xs">
-                            <TextInput 
+
+                        {/* MOBILE — solo buscador + botón filtros */}
+                        <Group gap="xs" wrap="nowrap" hiddenFrom="sm">
+                            <TextInput
+                                placeholder="Buscar caravana..."
+                                leftSection={<IconSearch size={16}/>}
+                                value={busqueda}
+                                onChange={(e) => setBusqueda(e.target.value)}
+                                style={{ flex: 1 }}
+                            />
+                            <Indicator
+                                label={cantFiltrosActivos}
+                                size={16}
+                                disabled={cantFiltrosActivos === 0}
+                                color="teal"
+                            >
+                                <Button
+                                    variant={cantFiltrosActivos > 0 ? 'filled' : 'outline'}
+                                    color="teal"
+                                    size="sm"
+                                    leftSection={<IconFilter size={14} />}
+                                    onClick={abrirFiltros}
+                                >
+                                    Filtros
+                                </Button>
+                            </Indicator>
+                        </Group>
+
+                        <SimpleGrid cols={{ base: 2, sm: 2, md: 4 }} spacing="xs" verticalSpacing="xs" visibleFrom="sm">
+                            <TextInput
                                 label={isMobile ? undefined : "Buscar"} 
                                 placeholder={isMobile ? "Buscar..." : "Caravana o Detalle..."} 
                                 leftSection={<IconSearch size={16}/>} 
@@ -582,6 +617,61 @@ export default function Hacienda({
                     onImportComplete={fetchAnimales}
                 />
             )}
+
+            <Modal
+                opened={filtrosDrawerOpen}
+                onClose={cerrarFiltros}
+                title="Filtros"
+                size="sm"
+                centered
+                hiddenFrom="sm"
+            >
+                <Stack gap="md" pb="md">
+                    <Select
+                        label="Categoría"
+                        placeholder="Todas las categorías"
+                        data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']}
+                        value={filterCategoria}
+                        onChange={setFilterCategoria}
+                        clearable
+                    />
+                    <MultiSelect
+                        label="Estado / Atributos"
+                        placeholder="Seleccioná uno o más..."
+                        data={['MACHO', 'HEMBRA', 'NO DEFINIDO', 'CAPADO', 'PREÑADA', 'VACÍA', 'EN LACTANCIA', 'LACTANTE', 'ACTIVO', 'EN SERVICIO', 'APARTADO', 'ENFERMA', 'LASTIMADA', 'DESTACADO', 'EN TRÁNSITO']}
+                        value={filterAtributos}
+                        onChange={setFilterAtributos}
+                        leftSection={<IconFilter size={16}/>}
+                        clearable
+                    />
+                    <Select
+                        label="Lote"
+                        placeholder="Todos los lotes"
+                        data={lotes.map((l: any) => ({value: l.id, label: l.nombre}))}
+                        value={filterLote}
+                        onChange={setFilterLote}
+                        clearable
+                        leftSection={<IconTag size={16}/>}
+                    />
+                    {cantFiltrosActivos > 0 && (
+                        <Button
+                            variant="subtle"
+                            color="red"
+                            onClick={() => {
+                                setFilterCategoria(null);
+                                setFilterAtributos([]);
+                                setFilterLote(null);
+                                cerrarFiltros();
+                            }}
+                        >
+                            Limpiar filtros
+                        </Button>
+                    )}
+                    <Button color="teal" onClick={cerrarFiltros}>
+                        Ver resultados ({animalesFiltrados.length})
+                    </Button>
+                </Stack>
+            </Modal>
         </Stack>
     );
 }
