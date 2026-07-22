@@ -169,6 +169,15 @@ export default function App() {
     if (rolActual === 'DUENO') fetchEquipo();
   }, [activeSection, campoId, session]);
 
+  useEffect(() => {
+      const nombreCampo = establecimientos.find((e: any) => e.id === campoId)?.nombre;
+      if (nombreCampo) {
+          document.title = `RodeoControl | ${nombreCampo}`;
+      } else {
+          document.title = 'RodeoControl';
+      }
+  }, [campoId, establecimientos]);
+
   // --- FUNCIONES DE AUTH ---
   async function handleLogin(e?: React.FormEvent) { 
     if (e) e.preventDefault();
