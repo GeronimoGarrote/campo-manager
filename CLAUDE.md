@@ -137,6 +137,14 @@ actividad: 'FUMIGADA' | 'SIEMBRA' | 'COSECHA' | ...
 id, animal_id, establecimiento_id, fecha_programada, completado
 ```
 
+### `notas_campo`
+```
+id, establecimiento_id, contenido (text), created_at
+```
+Notas libres sin fecha ni estado de completado.
+Visibles y editables por todos los roles del campo.
+RLS basada en tiene_acceso_a_campo() sobre establecimiento_id.
+
 ### `transferencias`
 ```
 id, campo_origen_id, campo_destino_id,

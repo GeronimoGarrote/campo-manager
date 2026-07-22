@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Group, Title, Badge, TextInput, Button, Stack, Text, Card, Checkbox,
     ActionIcon, Modal, Textarea, ThemeIcon, Box, Paper, Collapse, Select,
-    SegmentedControl,
+    SegmentedControl, Tabs,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconSearch, IconPlus, IconTrash, IconClock, IconCheck, IconChevronDown, IconTag, IconTractor, IconPackage } from '@tabler/icons-react';
+import { IconSearch, IconPlus, IconTrash, IconClock, IconCheck, IconChevronDown, IconTag, IconTractor, IconPackage, IconNote, IconEdit } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const formatDate = (dateString: string) => {
@@ -36,6 +36,13 @@ const getOffsetDiasIso = (n: number) => {
 
 type FiltroActivo = 'todas' | 'vencidas' | 'hoy' | 'semana';
 
+interface NotaCampo {
+    id: string;
+    establecimiento_id: string;
+    contenido: string;
+    created_at: string;
+}
+
 export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFichaVaca, potreros, lotes, onAbrirPotrero, onAbrirLote }: any) {
     const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -53,6 +60,14 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
     const [vinculoTipo, setVinculoTipo] = useState<'ninguno' | 'animal' | 'potrero' | 'lote'>('ninguno');
     const [nuevaTareaPotreroId, setNuevaTareaPotreroId] = useState<string | null>(null);
     const [nuevaTareaLoteId, setNuevaTareaLoteId] = useState<string | null>(null);
+
+    const [activeTab, setActiveTab] = useState<string | null>('tareas');
+    const [notas, setNotas] = useState<NotaCampo[]>([]);
+    const [loadingNotas, setLoadingNotas] = useState(false);
+    const [nuevaNota, setNuevaNota] = useState('');
+    const [guardandoNota, setGuardandoNota] = useState(false);
+    const [editandoNotaId, setEditandoNotaId] = useState<string | null>(null);
+    const [editandoContenido, setEditandoContenido] = useState('');
 
     const hoyIso = getHoyIso();
     const enSieteDiasIso = getOffsetDiasIso(7);
@@ -141,6 +156,53 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
             notifications.show({ message: `Tarea postergada al ${formatDate(nuevaFecha)}`, color: 'teal' });
             fetchAgenda();
         }
+    }
+
+    async function fetchNotas() {
+        if (!campoId) return;
+        setLoadingNotas(true);
+        const { data, error } = await supabase
+            .from('notas_campo')
+            .select('*')
+            .eq('establecimiento_id', campoId)
+            .order('created_at', { ascending: false });
+        if (error) console.error('[fetchNotas]', error);
+        setNotas(data || []);
+        setLoadingNotas(false);
+    }
+
+    useEffect(() => { fetchNotas(); }, [campoId]);
+
+    async function guardarNota() {
+        if (!nuevaNota.trim() || !campoId) return;
+        setGuardandoNota(true);
+        const { error } = await supabase
+            .from('notas_campo')
+            .insert({ establecimiento_id: campoId, contenido: nuevaNota.trim() });
+        setGuardandoNota(false);
+        if (!error) { setNuevaNota(''); fetchNotas(); }
+    }
+
+    async function guardarEdicionNota() {
+        if (!editandoNotaId || !editandoContenido.trim()) return;
+        await supabase
+            .from('notas_campo')
+            .update({ contenido: editandoContenido.trim() })
+            .eq('id', editandoNotaId);
+        setEditandoNotaId(null);
+        setEditandoContenido('');
+        fetchNotas();
+    }
+
+    function borrarNota(id: string) {
+        setConfirmModal({
+            mensaje: '¿Borrar esta nota?',
+            color: 'red',
+            onConfirm: async () => {
+                await supabase.from('notas_campo').delete().eq('id', id);
+                fetchNotas();
+            },
+        });
     }
 
     function AnimalBadge({ animalId }: { animalId: string }) {
@@ -264,6 +326,17 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
 
     return (
         <>
+            <Tabs value={activeTab} onChange={setActiveTab} color="orange">
+                <Tabs.List mb="md" grow>
+                    <Tabs.Tab value="tareas" leftSection={<IconClock size={16} />}>
+                        Tareas
+                    </Tabs.Tab>
+                    <Tabs.Tab value="notas" leftSection={<IconNote size={16} />}>
+                        Notas
+                    </Tabs.Tab>
+                </Tabs.List>
+
+                <Tabs.Panel value="tareas">
             {/* Header */}
             {!!isMobile ? (
                 <Stack mb="lg" gap="sm">
@@ -404,6 +477,121 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
                     </Collapse>
                 </>
             )}
+                </Tabs.Panel>
+
+                <Tabs.Panel value="notas">
+                    <Stack gap="md" pt="sm">
+                        {/* Input nueva nota */}
+                        <Paper withBorder p="md" radius="md">
+                            <Stack gap="xs">
+                                <Textarea
+                                    placeholder="Escribí una nota... Ej: Dejé las llaves en el galpón"
+                                    value={nuevaNota}
+                                    onChange={(e) => setNuevaNota(e.target.value)}
+                                    minRows={2}
+                                    autosize
+                                    maxRows={6}
+                                />
+                                <Button
+                                    color="orange"
+                                    loading={guardandoNota}
+                                    disabled={!nuevaNota.trim()}
+                                    onClick={guardarNota}
+                                    leftSection={<IconPlus size={16} />}
+                                >
+                                    Guardar nota
+                                </Button>
+                            </Stack>
+                        </Paper>
+
+                        {/* Lista de notas */}
+                        {loadingNotas ? (
+                            <Stack align="center" py="xl">
+                                <Text size="sm" c="dimmed">Cargando...</Text>
+                            </Stack>
+                        ) : notas.length === 0 ? (
+                            <Stack align="center" py="xl">
+                                <ThemeIcon size={50} radius="xl" color="blue" variant="light">
+                                    <IconNote size={26} />
+                                </ThemeIcon>
+                                <Text fw={600}>Sin notas todavía</Text>
+                                <Text size="sm" c="dimmed" ta="center">
+                                    Dejá notas rápidas para vos o tu equipo.
+                                </Text>
+                            </Stack>
+                        ) : (
+                            <Stack gap="sm">
+                                {notas.map(nota => (
+                                    <Card key={nota.id} withBorder radius="md" p="md">
+                                        {editandoNotaId === nota.id ? (
+                                            <Stack gap="xs">
+                                                <Textarea
+                                                    value={editandoContenido}
+                                                    onChange={(e) => setEditandoContenido(e.target.value)}
+                                                    minRows={2}
+                                                    autosize
+                                                    maxRows={8}
+                                                    autoFocus
+                                                />
+                                                <Group gap="xs">
+                                                    <Button
+                                                        size="xs"
+                                                        color="teal"
+                                                        leftSection={<IconCheck size={14} />}
+                                                        onClick={guardarEdicionNota}
+                                                        disabled={!editandoContenido.trim()}
+                                                    >
+                                                        Guardar
+                                                    </Button>
+                                                    <Button
+                                                        size="xs"
+                                                        variant="subtle"
+                                                        color="gray"
+                                                        onClick={() => { setEditandoNotaId(null); setEditandoContenido(''); }}
+                                                    >
+                                                        Cancelar
+                                                    </Button>
+                                                </Group>
+                                            </Stack>
+                                        ) : (
+                                            <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+                                                <Text
+                                                    size="sm"
+                                                    style={{ flex: 1, whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                                                    onClick={() => { setEditandoNotaId(nota.id); setEditandoContenido(nota.contenido); }}
+                                                >
+                                                    {nota.contenido}
+                                                </Text>
+                                                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                                                        {formatDate(nota.created_at)}
+                                                    </Text>
+                                                    <ActionIcon
+                                                        size="sm"
+                                                        variant="subtle"
+                                                        color="blue"
+                                                        onClick={() => { setEditandoNotaId(nota.id); setEditandoContenido(nota.contenido); }}
+                                                    >
+                                                        <IconEdit size={14} />
+                                                    </ActionIcon>
+                                                    <ActionIcon
+                                                        size="sm"
+                                                        variant="subtle"
+                                                        color="red"
+                                                        onClick={() => borrarNota(nota.id)}
+                                                    >
+                                                        <IconTrash size={14} />
+                                                    </ActionIcon>
+                                                </Group>
+                                            </Group>
+                                        )}
+                                    </Card>
+                                ))}
+                            </Stack>
+                        )}
+                    </Stack>
+                </Tabs.Panel>
+            </Tabs>
 
             {/* Modal confirmación */}
             <Modal opened={!!confirmModal} onClose={() => setConfirmModal(null)} title={<Text fw={700}>Confirmar acción</Text>} centered size="sm">
