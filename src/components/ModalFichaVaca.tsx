@@ -628,7 +628,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                 </>
             )}
         </Group>
-        </Group>} size="lg" centered zIndex={2000}>
+        </Group>} size="lg" centered zIndex={2000} closeOnClickOutside={false} trapFocus={false}>
             <Tabs value={activeTabVaca} onChange={setActiveTabVaca} color="teal"><Tabs.List grow mb="md"><Tabs.Tab value="historia">Historia</Tabs.Tab><Tabs.Tab value="datos">Datos</Tabs.Tab></Tabs.List>
             <Tabs.Panel value="historia">
                {esActivo ? ( 
@@ -636,20 +636,20 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                        <Text size="sm" fw={700} mb="xs">Registrar Evento</Text>
                        <Group grow mb="sm">
                            <TextInput leftSection={<IconCalendar size={16}/>} placeholder="Fecha" type="date" value={getLocalDateForInput(fechaEvento)} onChange={(e) => setFechaEvento(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)} max={new Date().toISOString().split('T')[0]} style={{ flex: 1 }} />
-                           <Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ zIndex: 200005 }} />
+                           <Select data={opcionesDisponibles} placeholder="Tipo" value={tipoEventoInput} onChange={setTipoEventoInput} comboboxProps={{ withinPortal: false }} />
                        </Group>
                
                        {tipoEventoInput === 'TACTO' && ( 
                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="sm">
-                               <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ zIndex: 200005 }}/> 
+                               <Select label="Resultado del Tacto" data={['PREÑADA', 'VACÍA']} value={tactoResultado} onChange={setTactoResultado} comboboxProps={{ withinPortal: false }}/> 
                                {tactoResultado === 'PREÑADA' && ( 
-                                   <Select label="Gestación (Meses)" placeholder="Opcional" data={opcionesGestacion} value={mesesGestacion} onChange={setMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>} comboboxProps={{ zIndex: 200005 }}/> 
+                                   <Select label="Gestación (Meses)" placeholder="Opcional" data={opcionesGestacion} value={mesesGestacion} onChange={setMesesGestacion} clearable leftSection={<IconBabyCarriage size={16}/>} comboboxProps={{ withinPortal: false }}/> 
                                )} 
                            </SimpleGrid> 
                        )}
                
-                       {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ zIndex: 200005 }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ zIndex: 200005 }} /> )}</Group> )}
-                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Ej: 1045 — opcional" description="Vacío = SC-xxx automático" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} /><Select label="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}, {value: 'I', label: 'No definido por ahora'}]} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ zIndex: 200005 }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
+                       {tipoEventoInput === 'SERVICIO' && ( <Group grow mb="sm" align="flex-end"><Select label="Tipo de Servicio" data={['TORO', 'IA']} value={tipoServicio} onChange={setTipoServicio} comboboxProps={{ withinPortal: false }}/ >{tipoServicio === 'TORO' && ( <MultiSelect label="Seleccionar Toro/s" data={torosDisponibles.map(t => ({value: t.id, label: t.caravana}))} value={torosIdsInput} onChange={setTorosIdsInput} searchable comboboxProps={{ withinPortal: false }} /> )}</Group> )}
+                       {tipoEventoInput === 'PARTO' && ( <Paper withBorder p="xs" bg="teal.0" mb="sm"><Text size="sm" fw={700} c="teal">Datos del Nuevo Ternero</Text><Group grow><TextInput label="Caravana Ternero" placeholder="Ej: 1045 — opcional" description="Vacío = SC-xxx automático" value={nuevoTerneroCaravana} onChange={(e) => setNuevoTerneroCaravana(e.target.value)} /><Select label="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}, {value: 'I', label: 'No definido por ahora'}]} value={nuevoTerneroSexo} onChange={setNuevoTerneroSexo} comboboxProps={{ withinPortal: false }}/></Group><TextInput mt="sm" label="Peso al Nacer (kg)" placeholder="Opcional" type="number" value={pesoNacimiento} onChange={(e) => setPesoNacimiento(e.target.value)}/></Paper> )}
                        {!['TACTO', 'SERVICIO', 'PARTO', 'ENFERMEDAD', 'LESION', 'CURACION', 'CAPADO', 'RASPAJE', 'APARTADO', 'DESTETE'].includes(tipoEventoInput || '') && ( <Group grow mb="sm"><TextInput placeholder="Resultado (Ej: 350kg, Observación...)" value={resultadoInput} onChange={(e) => setResultadoInput(e.target.value)} /></Group> )}
                        <TextInput label="Costo ($)" placeholder="Opcional" type="number" value={costoEvento} onChange={(e) => setCostoEvento(e.target.value)} leftSection={<IconCurrencyDollar size={14}/>} mb="sm"/>
                        {adpvCalculado && <Alert color="green" icon={<IconTrendingUp size={16}/>} title="Rendimiento Detectado" mb="sm">{adpvCalculado}</Alert>}
@@ -671,19 +671,19 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                )}
                
                <Group grow mb="sm">
-                   <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} />
-                   {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Estado Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}
-                   {editCategoria === 'Ternero' && ( <Select label="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}]} value={editSexo} onChange={(v) => { setEditSexo(v); if (v === 'H') setEditCastrado(false); }} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} /> )}
+                   <Select label="Categoría" data={['Vaca', 'Vaquillona', 'Ternero', 'Novillo', 'Toro']} value={editCategoria} onChange={setEditCategoria} comboboxProps={{ withinPortal: false }} disabled={!esActivo} />
+                   {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Select label="Estado Reproductivo" data={['ACTIVO', 'PREÑADA', 'VACÍA']} value={editEstado} onChange={setEditEstado} comboboxProps={{ withinPortal: false }} disabled={!esActivo} /> )}
+                   {editCategoria === 'Ternero' && ( <Select label="Sexo" data={[{value: 'M', label: 'Macho'}, {value: 'H', label: 'Hembra'}]} value={editSexo} onChange={(v) => { setEditSexo(v); if (v === 'H') setEditCastrado(false); }} comboboxProps={{ withinPortal: false }} disabled={!esActivo} /> )}
                </Group>
 
                {['Vaca', 'Vaquillona'].includes(editCategoria || '') && ( <Switch mb="sm" size="md" onLabel="EN LACTANCIA" offLabel="SIN CRÍA" label="¿Está criando a un ternero?" checked={editLactancia} onChange={(e) => setEditLactancia(e.currentTarget.checked)} disabled={!esActivo} color="grape" /> )}
                
                <Group grow mb="sm">
-                   <Select label="Potrero (Ubicación)" placeholder="Sin asignar" data={potreros.map(p => ({value: p.id, label: p.nombre}))} value={editPotreroId} onChange={(val) => { setEditPotreroId(val); setEditParcelaId(null); }} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} />
-                   {editPotreroId && <Select label="Parcela" placeholder="General" data={parcelas.filter(p => p.potrero_id === editPotreroId).map(p => ({value: p.id, label: p.nombre}))} value={editParcelaId} onChange={setEditParcelaId} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} />}
+                   <Select label="Potrero (Ubicación)" placeholder="Sin asignar" data={potreros.map(p => ({value: p.id, label: p.nombre}))} value={editPotreroId} onChange={(val) => { setEditPotreroId(val); setEditParcelaId(null); }} comboboxProps={{ withinPortal: false }} clearable disabled={!esActivo} />
+                   {editPotreroId && <Select label="Parcela" placeholder="General" data={parcelas.filter(p => p.potrero_id === editPotreroId).map(p => ({value: p.id, label: p.nombre}))} value={editParcelaId} onChange={setEditParcelaId} comboboxProps={{ withinPortal: false }} clearable disabled={!esActivo} />}
                </Group>
-               <Select label="Lote (Grupo)" placeholder="Sin asignar" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={editLoteId} onChange={setEditLoteId} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} mb="sm" />
-               <Select label="Pelaje" placeholder="Sin especificar" data={['Negro', 'Colorado', 'Careta Negro', 'Careta Colorado', 'Blanco y Negro']} value={editPelaje} onChange={setEditPelaje} comboboxProps={{ zIndex: 200005 }} clearable disabled={!esActivo} mb="sm" />
+               <Select label="Lote (Grupo)" placeholder="Sin asignar" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={editLoteId} onChange={setEditLoteId} comboboxProps={{ withinPortal: false }} clearable disabled={!esActivo} mb="sm" />
+               <Select label="Pelaje" placeholder="Sin especificar" data={['Negro', 'Colorado', 'Careta Negro', 'Careta Colorado', 'Blanco y Negro']} value={editPelaje} onChange={setEditPelaje} comboboxProps={{ withinPortal: false }} clearable disabled={!esActivo} mb="sm" />
 
                {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
                {nombresTorosCartel && ( <Paper withBorder p="xs" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '4px solid #fa5252' }}><Group gap="xs"><ThemeIcon color="pink" variant="light" size="sm"><IconInfoCircle size={14}/></ThemeIcon><Text size="sm" c="pink.9">En servicio con Toro/s: <Text span fw={700}>{nombresTorosCartel}</Text></Text></Group></Paper> )}
@@ -704,7 +704,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                        ) : <Text size="xs" c="dimmed">Sin registros</Text>}
                    </Paper> 
                )}
-               <MultiSelect label="Condición Sanitaria" data={['ENFERMA', 'LASTIMADA']} value={editCondicion} onChange={setEditCondicion} comboboxProps={{ zIndex: 200005 }} disabled={!esActivo} leftSection={<IconHeartbeat size={16}/>} mb="sm" placeholder="SANA"/>
+               <MultiSelect label="Condición Sanitaria" data={['ENFERMA', 'LASTIMADA']} value={editCondicion} onChange={setEditCondicion} comboboxProps={{ withinPortal: false }} disabled={!esActivo} leftSection={<IconHeartbeat size={16}/>} mb="sm" placeholder="SANA"/>
                {editCategoria === 'Ternero' && editSexo === 'M' && ( <Group justify="space-between" mb="sm" p="xs" bg="gray.0" style={{borderRadius: 8}}><Group gap="xs"><IconScissors size={18}/> <Text size="sm" fw={500}>Condición Sexual</Text></Group><Switch size="lg" onLabel="CAPADO" offLabel="ENTERO" checked={editCastrado} onChange={(e) => setEditCastrado(e.currentTarget.checked)} disabled={!esActivo} /></Group> )}
                <Textarea label="Detalles / Anotaciones" placeholder="Información adicional..." value={editDetalles} onChange={(e) => setEditDetalles(e.target.value)} disabled={!esActivo} minRows={3} mb="sm" />
                <Group grow mb="xl"><TextInput label="Fecha Nacimiento" type="date" value={editFechaNac} onChange={(e) => setEditFechaNac(e.target.value)} disabled={!esActivo} /><TextInput label="Fecha Ingreso" type="date" value={editFechaIngreso} onChange={(e) => setEditFechaIngreso(e.target.value)} disabled={!esActivo} /></Group>
@@ -748,7 +748,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                        {esVentaRed && ( <TextInput label="RENSPA del Comprador" placeholder="Ej: 01.002.0.00000/00" required value={renspaDestino} onChange={(e) => setRenspaDestino(e.target.value)} /> )}
                                        
                                        <Group grow align="flex-start">
-                                           <Select label="Modalidad" data={[{value: 'TOTAL', label: 'Monto Total'}, {value: 'KILO', label: 'Al Peso (Por Kg)'}]} value={bajaModalidadVenta} onChange={(v) => setBajaModalidadVenta(v || 'TOTAL')} allowDeselect={false} comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
+                                           <Select label="Modalidad" data={[{value: 'TOTAL', label: 'Monto Total'}, {value: 'KILO', label: 'Al Peso (Por Kg)'}]} value={bajaModalidadVenta} onChange={(v) => setBajaModalidadVenta(v || 'TOTAL')} allowDeselect={false} comboboxProps={{ withinPortal: false }} />
                                            <TextInput label={bajaModalidadVenta === 'KILO' ? 'Precio por Kg ($)' : 'Monto Total ($)'} placeholder="Ej: 1500000" type="number" leftSection={<IconCurrencyDollar size={14}/>} value={bajaPrecio} onChange={(e) => setBajaPrecio(e.target.value)} />
                                        </Group>
                                        {bajaModalidadVenta === 'KILO' && <TextInput label="Kilos Totales" placeholder="Ej: 450" type="number" value={bajaKilosTotales} onChange={(e) => setBajaKilosTotales(e.target.value)} />}
@@ -763,7 +763,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                                {modoBaja === 'MUERTO' && ( <TextInput label="Causa" placeholder="Ej: Accidente" value={bajaMotivo} onChange={(e) => setBajaMotivo(e.target.value)} mb="sm"/> )}
                                {modoBaja === 'TRASLADO' && ( 
                                    <Stack gap="xs" mb="sm">
-                                       <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: true, zIndex: 999999 }} />
+                                       <Select label="Campo Destino" placeholder="Seleccionar establecimiento" data={establecimientos.filter(e => e.id !== campoId).map(e => ({ value: e.id, label: e.nombre }))} value={bajaMotivo} onChange={(v) => setBajaMotivo(v || '')} mb="sm" comboboxProps={{ withinPortal: false }} />
                                    </Stack> 
                                )}
                                <Button fullWidth color={modoBaja === 'VENDIDO' ? 'orange' : modoBaja === 'TRASLADO' ? 'blue' : 'red'} onClick={validarYAbrirConfirmBaja} loading={loading}>Confirmar Acción</Button>
