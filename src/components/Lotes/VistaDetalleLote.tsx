@@ -192,6 +192,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
         setFiltroTiempo(val); const hoy = new Date(); let desde = null; let hasta = null;
         if (val === '30D') { desde = new Date(hoy.getTime() - 30*24*60*60*1000); hasta = hoy; }
         if (val === '6M') { desde = new Date(hoy.getTime() - 180*24*60*60*1000); hasta = hoy; }
+        if (val === 'INICIO_LOTE') { desde = new Date(loteSel.created_at); hasta = null; }
         if (val !== 'PERSONALIZADO') { setFechaDesde(desde); setFechaHasta(hasta); generarGraficoLote(loteSel.id, desde, hasta); }
     };
 
@@ -573,7 +574,7 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                     <Tabs.Panel value="rendimiento">
                         <Paper withBorder p="sm" bg="gray.0" mb="md" radius="md">
                             <Group align="flex-end">
-                                <Select label="Periodo a analizar" data={[{value: 'TODOS', label: 'Histórico Completo'}, {value: '30D', label: 'Últimos 30 Días'}, {value: '6M', label: 'Últimos 6 Meses'}, {value: 'PERSONALIZADO', label: 'Rango Personalizado'}]} value={filtroTiempo} onChange={(v: string | null) => cambiarFiltroTiempo(v || 'TODOS')} />
+                                <Select label="Periodo a analizar" data={[{value: 'TODOS', label: 'Histórico Completo'}, {value: 'INICIO_LOTE', label: 'Desde Inicio del Lote'}, {value: '30D', label: 'Últimos 30 Días'}, {value: '6M', label: 'Últimos 6 Meses'}, {value: 'PERSONALIZADO', label: 'Rango Personalizado'}]} value={filtroTiempo} onChange={(v: string | null) => cambiarFiltroTiempo(v || 'TODOS')} />
                                 {filtroTiempo === 'PERSONALIZADO' && (<><TextInput label="Desde" type="date" value={getLocalDateForInput(fechaDesde)} onChange={(e: any) => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; setFechaDesde(d); generarGraficoLote(loteSel.id, d, fechaHasta); }} /><TextInput label="Hasta" type="date" value={getLocalDateForInput(fechaHasta)} onChange={(e: any) => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; setFechaHasta(d); generarGraficoLote(loteSel.id, fechaDesde, d); }} /></>)}
                                 <Button
                                     variant={mostrarIndividuales ? 'light' : 'subtle'}
@@ -642,51 +643,61 @@ export default function VistaDetalleLote({ loteSel, onVolver, onLoteModificado, 
                                                 stroke="#1D9E75" strokeWidth={3}
                                                 fill="url(#gradTeal)"
                                                 connectNulls
-                                                dot={{ r: 5, fill: '#1D9E75', stroke: 'white', strokeWidth: 2 }}
-                                                activeDot={{ r: 8, fill: '#1D9E75', stroke: 'white', strokeWidth: 2.5, onClick: (_: any, payload: any) => { if (payload?.payload) setPuntoSeleccionado(payload.payload); } }}
+                                                dot={{ r: 7, fill: '#1D9E75', stroke: 'white', strokeWidth: 2 }}
+                                                activeDot={{ r: 13, fill: '#1D9E75', stroke: 'white', strokeWidth: 3, onClick: (_: any, payload: any) => { if (payload?.payload) setPuntoSeleccionado(payload.payload); } }}
                                             />
                                             <Line
                                                 type="monotone" dataKey="Promedio Estimado"
                                                 stroke="#1D9E75" strokeWidth={2.5}
                                                 strokeDasharray="6 4"
                                                 dot={false} connectNulls
-                                                activeDot={{ r: 6, fill: '#1D9E75', stroke: 'white', strokeWidth: 2 }}
+                                                activeDot={{ r: 11, fill: '#1D9E75', stroke: 'white', strokeWidth: 3 }}
                                             />
                                         </ComposedChart>
                                     </ResponsiveContainer>
                                 </div>
-                                <Paper withBorder p="sm" radius="md" mt="sm">
-                                    <Group justify="space-between" align="center" wrap="wrap" gap="md">
-                                        <Text size="xs" c="dimmed">{fechaFormateada}</Text>
-                                        {pesoEnPunto && (
-                                            <Group gap="xs" align="baseline">
-                                                <Text size="xs" c="dimmed">Promedio:</Text>
-                                                <Text fw={600} size="sm" c="teal">
-                                                    {pesoEnPunto} kg{esEstimado && <Text span size="xs" c="dimmed"> (est.)</Text>}
-                                                </Text>
-                                            </Group>
-                                        )}
-                                        {gananciaEnPunto && (
-                                            <Group gap="xs" align="baseline">
-                                                <Text size="xs" c="dimmed">Ganancia:</Text>
-                                                <Text fw={600} size="sm" c={Number(gananciaEnPunto) >= 0 ? 'teal' : 'red'}>
-                                                    {Number(gananciaEnPunto) >= 0 ? '+' : ''}{gananciaEnPunto} kg
-                                                </Text>
-                                            </Group>
-                                        )}
-                                        {puntoMostrar?._meta?.['Promedio Lote']?.adpv && (
-                                            <Group gap="xs" align="baseline">
-                                                <Text size="xs" c="dimmed">ADPV:</Text>
-                                                <Text fw={600} size="sm" c="blue">{puntoMostrar._meta['Promedio Lote'].adpv} kg/día</Text>
-                                            </Group>
-                                        )}
-                                        {animalesEnPunto > 0 && (
-                                            <Text size="xs" c="dimmed">{animalesEnPunto} animales pesados</Text>
-                                        )}
-                                        {!pesoEnPunto && (
-                                            <Text size="xs" c="dimmed">Tocá un punto para ver sus datos</Text>
-                                        )}
-                                    </Group>
+                                <Paper
+                                    withBorder p="md" radius="md" mt="sm"
+                                    bg={pesoEnPunto ? 'teal.0' : 'gray.0'}
+                                    style={{ borderColor: pesoEnPunto ? 'var(--mantine-color-teal-4)' : undefined }}
+                                >
+                                    {pesoEnPunto ? (
+                                        <Group gap="xl" wrap="wrap" justify="space-between" align="center">
+                                            <div style={{ textAlign: 'center' }}>
+                                                <Group gap={6} justify="center" align="center">
+                                                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">Fecha</Text>
+                                                    {esEstimado && <Badge color="gray" variant="light" size="xs">Estimado</Badge>}
+                                                </Group>
+                                                <Text fw={700} size="xl" c="teal.9">{fechaFormateada}</Text>
+                                            </div>
+                                            <div style={{ textAlign: 'center' }}>
+                                                <Text size="xs" c="dimmed" fw={700} tt="uppercase">Promedio</Text>
+                                                <Text fw={700} size="xl" c="teal">{pesoEnPunto} kg</Text>
+                                            </div>
+                                            {gananciaEnPunto && (
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">Ganancia</Text>
+                                                    <Text fw={700} size="xl" c={Number(gananciaEnPunto) >= 0 ? 'teal' : 'red'}>
+                                                        {Number(gananciaEnPunto) >= 0 ? '+' : ''}{gananciaEnPunto} kg
+                                                    </Text>
+                                                </div>
+                                            )}
+                                            {puntoMostrar?._meta?.['Promedio Lote']?.adpv && (
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">ADPV</Text>
+                                                    <Text fw={700} size="xl" c="blue">{puntoMostrar._meta['Promedio Lote'].adpv} kg/día</Text>
+                                                </div>
+                                            )}
+                                            {animalesEnPunto > 0 && (
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">Animales pesados</Text>
+                                                    <Text fw={700} size="xl">{animalesEnPunto}</Text>
+                                                </div>
+                                            )}
+                                        </Group>
+                                    ) : (
+                                        <Text size="sm" c="dimmed" ta="center">Tocá un punto del gráfico para ver sus datos</Text>
+                                    )}
                                 </Paper>
                                 <SimpleGrid cols={{ base: 2, sm: 4 }} mt="xl" mb="xl">
                                     <Paper withBorder p="md" ta="center" radius="md"><Text size="sm" c="dimmed" fw={700} tt="uppercase">Promedio Inicial</Text><Text fw={700} size="xl">{statsGraficoLote.inicio} kg</Text></Paper>

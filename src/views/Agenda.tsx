@@ -341,7 +341,7 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
             {!!isMobile ? (
                 <Stack mb="lg" gap="sm">
                     <Group>
-                        <Title order={3}>Agenda y Tareas</Title>
+                        <Title order={3}>Tareas</Title>
                         <Badge size="xl" color="orange" circle>
                             {agenda.filter((t: any) => !t.completado).length}
                         </Badge>
@@ -372,7 +372,7 @@ export default function Agenda({ campoId, agenda, fetchAgenda, animales, abrirFi
             ) : (
                 <Group justify="space-between" mb="lg" align="center">
                     <Group>
-                        <Title order={3}>Agenda y Tareas</Title>
+                        <Title order={3}>Tareas</Title>
                         <Badge size="xl" color="orange" circle>
                             {agenda.filter((t: any) => !t.completado).length}
                         </Badge>
