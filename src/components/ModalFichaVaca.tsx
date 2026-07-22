@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack, SimpleGrid } from '@mantine/core'; 
+import { Modal, Tabs, Paper, Group, Text, TextInput, Select, Button, ActionIcon, ScrollArea, Table, Badge, Alert, Textarea, Switch, MultiSelect, ThemeIcon, UnstyledButton, Stack, SimpleGrid, NumberInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconArchive, IconCalendar, IconBabyCarriage, IconCurrencyDollar, IconTrendingUp, IconEdit, IconTrash, IconChartDots, IconInfoCircle, IconHeartbeat, IconScissors, IconCheck, IconTractor, IconSkull, IconArrowBackUp, IconScan } from '@tabler/icons-react';
@@ -72,6 +72,8 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
     const [editParcelaId, setEditParcelaId] = useState<string | null>(null);
     const [editLoteId, setEditLoteId] = useState<string | null>(null);
     const [editPelaje, setEditPelaje] = useState<string | null>(null);
+    const [editEstadoCorporal, setEditEstadoCorporal] = useState<number | string>('');
+    const [editDientes, setEditDientes] = useState<number | string>('');
 
     const [modoBaja, setModoBaja] = useState<string | null>(null);
     const [bajaMotivo, setBajaMotivo] = useState('');
@@ -154,6 +156,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
         setEditEstado(repro); setEditLactancia(animalSel.estado.includes('LACTANCIA'));
         setEditCondicion(animalSel.condicion && animalSel.condicion !== 'SANA' ? animalSel.condicion.split(', ') : []); setEditDetalles(animalSel.detalles || '');
         setEditPotreroId(animalSel.potrero_id || null); setEditParcelaId(animalSel.parcela_id || null); setEditLoteId(animalSel.lote_id || null); setEditPelaje(animalSel.pelaje || null); setEditFechaNac(animalSel.fecha_nacimiento || ''); setEditFechaIngreso(animalSel.fecha_ingreso || '');
+        setEditEstadoCorporal(animalSel.estado_corporal ?? ''); setEditDientes(animalSel.dientes ?? '');
         
         if (animalSel.madre_id) { 
             const m = animales.find(a => a.id === animalSel.madre_id); 
@@ -431,7 +434,7 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
             eventosAInsertar.push({ animal_id: animalSel.id, fecha_evento: fechaStr, tipo: 'CAMBIO_LOTE', resultado: 'CAMBIO DE LOTE', detalle: desc, datos_extra: { lote_origen: lAnterior, lote_destino: lNom, lote_id: editLoteId, lote_id_en_momento: animalSel.lote_id ?? null }, establecimiento_id: campoId });
         }
     
-        const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, pelaje: editPelaje || null, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null }).eq('id', animalSel.id);
+        const { error } = await supabase.from('animales').update({ caravana: editCaravana, categoria: editCategoria, sexo: editSexo, estado: finalEstado, condicion: condStr, castrado: editCastrado, detalles: editDetalles, potrero_id: editPotreroId, parcela_id: editParcelaId, lote_id: editLoteId, pelaje: editPelaje || null, fecha_nacimiento: editFechaNac || null, fecha_ingreso: editFechaIngreso || null, estado_corporal: editEstadoCorporal !== '' ? Number(editEstadoCorporal) : null, dientes: editDientes !== '' ? Number(editDientes) : null }).eq('id', animalSel.id);
         if (eventosAInsertar.length > 0) { await supabase.from('eventos').insert(eventosAInsertar); }
         if (!error) { notifications.show({ title: 'Datos actualizados', message: 'Los cambios fueron guardados.', color: 'teal' }); onUpdate(); }
     }
@@ -684,6 +687,36 @@ export default function ModalFichaVaca({ opened, onClose, animalSelId, campoId, 
                </Group>
                <Select label="Lote (Grupo)" placeholder="Sin asignar" data={lotes.map(l => ({value: l.id, label: l.nombre}))} value={editLoteId} onChange={setEditLoteId} comboboxProps={{ withinPortal: false }} clearable disabled={!esActivo} mb="sm" />
                <Select label="Pelaje" placeholder="Sin especificar" data={['Negro', 'Colorado', 'Careta Negro', 'Careta Colorado', 'Blanco y Negro']} value={editPelaje} onChange={setEditPelaje} comboboxProps={{ withinPortal: false }} clearable disabled={!esActivo} mb="sm" />
+               <Group grow mb="sm">
+                   <NumberInput
+                       label="Estado Corporal (EC)"
+                       placeholder="1 a 5"
+                       value={editEstadoCorporal}
+                       onChange={setEditEstadoCorporal}
+                       min={1}
+                       max={5}
+                       step={0.5}
+                       decimalScale={1}
+                       disabled={!esActivo}
+                       description="Escala 1–5 con medios"
+                       clampBehavior="strict"
+                       styles={{ label: { whiteSpace: 'nowrap' } }}
+                   />
+                   <NumberInput
+                       label="Dientes"
+                       placeholder="Ej: 4"
+                       value={editDientes}
+                       onChange={setEditDientes}
+                       min={0}
+                       max={32}
+                       step={1}
+                       allowDecimal={false}
+                       description="Máx. 32"
+                       clampBehavior="strict"
+                       styles={{ label: { whiteSpace: 'nowrap' } }}
+                       disabled={!esActivo}
+                   />
+               </Group>
 
                {['Ternero', 'Novillo'].includes(editCategoria || '') && ( <TextInput label="Caravana Madre" value={madreCaravana} readOnly mb="sm" rightSection={<IconBabyCarriage size={16}/>} /> )}
                {nombresTorosCartel && ( <Paper withBorder p="xs" bg="pink.0" radius="md" mb="sm" style={{ borderLeft: '4px solid #fa5252' }}><Group gap="xs"><ThemeIcon color="pink" variant="light" size="sm"><IconInfoCircle size={14}/></ThemeIcon><Text size="sm" c="pink.9">En servicio con Toro/s: <Text span fw={700}>{nombresTorosCartel}</Text></Text></Group></Paper> )}

@@ -78,7 +78,9 @@ detalle_baja, detalles, destacado,
 fecha_nacimiento, fecha_ingreso, fecha_servicio,
 madre_id, castrado, en_transito,
 establecimiento_id, potrero_id, parcela_id, lote_id,
-toros_servicio_ids: string[]
+toros_servicio_ids: string[],
+estado_corporal (numeric nullable, escala 1–5 con medios),
+dientes (integer nullable)
 ```
 
 ### `eventos`
