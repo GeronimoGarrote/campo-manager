@@ -189,6 +189,22 @@ export default function ModalAltaDesdeBaston({
     // ------------------------------------------------------------------ //
     async function vincularAExistente() {
         if (!animalExistenteId) { notifications.show({ title: 'Animal requerido', message: 'Seleccioná un animal de la lista.', color: 'orange' }); return; }
+
+        // No permitir asignar un EID que ya está en otro animal
+        const eidNorm = caravanaElectronica.trim().toLowerCase();
+        const duplicado = animales.find((a: any) =>
+            a.id !== animalExistenteId &&
+            a.caravana_electronica?.trim().toLowerCase() === eidNorm
+        );
+        if (duplicado) {
+            notifications.show({
+                title: 'EID ya asignado',
+                message: `Ya hay un animal con ese EID (caravana ${duplicado.caravana}). No se puede repetir.`,
+                color: 'red',
+            });
+            return;
+        }
+
         setLoading(true);
         const update: Record<string, string> = { caravana_electronica: caravanaElectronica.trim() };
         if (reemplazarCaravanaVisual) update.caravana = caravanaElectronica.trim();

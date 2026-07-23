@@ -4,9 +4,8 @@ import { notifications } from '@mantine/notifications';
 import { IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
 import { useLectorAllflex } from '../hooks/useLectorAllflex';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
-import AllflexScanner from '../components/AllflexScanner';
 import { Group, Title, Badge, Paper, Select, TextInput, Button, Table, Checkbox, Text, ScrollArea, MultiSelect, Switch, Alert, Modal, Stack } from '@mantine/core';
-import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle, IconFilter, IconWeight } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconMapPin, IconTag, IconBabyCarriage, IconSearch, IconInfoCircle, IconFilter, IconWeight, IconScan } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 
 const getLocalDateForInput = (date: Date | null) => { if (!date) return ''; const offset = date.getTimezoneOffset(); const localDate = new Date(date.getTime() - (offset * 60 * 1000)); return localDate.toISOString().split('T')[0]; };
@@ -34,12 +33,21 @@ export default function Masivos({
     onLotePreseleccionadoAplicado,
     idsPreseleccionados = null as string[] | null,
     onIdsPreseleccionadosAplicados,
+    registrarScanHandler, onLectorChange, isConectadoCOM, metodoBaston,
 }: any) {
     const [loading, setLoading] = useState(false);
     const [lectorActivo, setLectorActivo] = useState(false);
     const [eidPendiente, setEidPendiente] = useState('');
     const [modalAltaBastonOpen, setModalAltaBastonOpen] = useState(false);
     const [ultimoEidLeido, setUltimoEidLeido] = useState<string | null>(null);
+
+    // Al conectarse el bastón, encender el lector automáticamente (el usuario puede apagarlo después)
+    useEffect(() => {
+        if (isConectadoCOM) {
+            setLectorActivo(true);
+            onLectorChange(true);
+        }
+    }, [isConectadoCOM]);
 
     const manejarEscaneoBaston = useCallback((eid: string) => {
         const eidNorm = eid.trim().toLowerCase();
@@ -66,6 +74,12 @@ export default function Masivos({
     }, [animales]);
 
     useLectorAllflex({ isActive: lectorActivo, onScan: manejarEscaneoBaston });
+
+    // Registra el handler de escaneo COM global mientras esta vista está montada
+    useEffect(() => {
+        registrarScanHandler(manejarEscaneoBaston);
+        return () => registrarScanHandler(null);
+    }, [manejarEscaneoBaston]);
 
     const [busqueda, setBusqueda] = useState('');
     const [filterCategoria, setFilterCategoria] = useState<string | null>(null);
@@ -620,7 +634,11 @@ export default function Masivos({
                 </Group>
                 <Switch
                     checked={lectorActivo}
-                    onChange={(e) => { setLectorActivo(e.currentTarget.checked); setUltimoEidLeido(null); }}
+                    onChange={(e) => {
+                        setLectorActivo(e.currentTarget.checked);
+                        setUltimoEidLeido(null);
+                        onLectorChange(e.currentTarget.checked);
+                    }}
                     color="teal"
                     size="md"
                     label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
@@ -639,10 +657,15 @@ export default function Masivos({
                                 leftSection={<IconBluetooth size={11} />}>
                                 HID activo
                             </Badge>
-                            <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-teal-3)', paddingLeft: 12 }}>
-                                SPP:
-                            </Text>
-                            <AllflexScanner onScan={manejarEscaneoBaston} />
+                            {isConectadoCOM && (
+                                <Badge
+                                    color={metodoBaston === 'rodeocontrol' ? 'teal' : 'blue'}
+                                    variant="filled" size="sm"
+                                    leftSection={<IconScan size={11} />}
+                                >
+                                    {metodoBaston === 'rodeocontrol' ? 'RC: activo' : 'COM activo'}
+                                </Badge>
+                            )}
                         </Group>
                         <Text size="xs" c={ultimoEidLeido ? 'teal.8' : 'dimmed'}>
                             {ultimoEidLeido

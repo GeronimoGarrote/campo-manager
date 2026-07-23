@@ -13,7 +13,6 @@ import {
 } from '@tabler/icons-react';
 import { supabase } from '../supabase';
 import { useLectorAllflex } from '../hooks/useLectorAllflex';
-import AllflexScanner from '../components/AllflexScanner';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import { esAnimalActivo } from '../types';
 
@@ -58,6 +57,10 @@ interface SesionesBastonProps {
     onCargarEnMasivos: (ids: string[]) => void;
     fetchAnimales: () => void;
     datosSuscripcion: any;
+    registrarScanHandler: (handler: ((eid: string) => void) | null) => void;
+    onLectorChange: (active: boolean) => void;
+    isConectadoCOM: boolean;
+    metodoBaston: string;
 }
 
 const ESTADO_COLOR: Record<string, string> = {
@@ -87,6 +90,7 @@ const formatDate = (dateString: string) => {
 export default function SesionesBaston({
     animales, potreros, lotes, campoId, rolActual, session, onCargarEnMasivos,
     fetchAnimales, datosSuscripcion,
+    registrarScanHandler, onLectorChange, isConectadoCOM, metodoBaston,
 }: SesionesBastonProps) {
     const isMobile = useMediaQuery('(max-width: 48em)');
 
@@ -97,6 +101,14 @@ export default function SesionesBaston({
     const [sesionActiva, setSesionActiva] = useState<SesionBaston | null>(null);
     const [lectorActivo, setLectorActivo] = useState(false);
     const [ultimoEidLeido, setUltimoEidLeido] = useState<string | null>(null);
+
+    // Al conectarse el bastón, encender el lector automáticamente (el usuario puede apagarlo después)
+    useEffect(() => {
+        if (isConectadoCOM) {
+            setLectorActivo(true);
+            onLectorChange(true);
+        }
+    }, [isConectadoCOM]);
     const [loadingSesiones, setLoadingSesiones] = useState(false);
     const [nombreNuevaSesion, setNombreNuevaSesion] = useState('');
     const [creandoSesion, setCreandoSesion] = useState(false);
@@ -371,6 +383,17 @@ export default function SesionesBaston({
     useLectorAllflex({ isActive: lectorActivo && !!sesionActiva && sesionActiva.estado !== 'PROCESADA', onScan: manejarEscaneo });
     useLectorAllflex({ isActive: lectorTagsActivo && activeTab === 'tags', onScan: manejarEscaneoTags });
 
+    // Rutea el scan COM global según el tab activo
+    const handleScanGlobal = useCallback((eid: string) => {
+        if (activeTab === 'sesiones') manejarEscaneo(eid);
+        else if (activeTab === 'tags') manejarEscaneoTags(eid);
+    }, [activeTab, manejarEscaneo, manejarEscaneoTags]);
+
+    useEffect(() => {
+        registrarScanHandler(handleScanGlobal);
+        return () => registrarScanHandler(null);
+    }, [handleScanGlobal]);
+
     function exportarCSV() {
         if (!sesionActiva || sesionActiva.animales_ids.length === 0) return;
         const cabeceras = ['Sesión', 'Fecha', 'Caravana', 'Categoría', 'Sexo', 'Estado', 'Potrero', 'Lote'];
@@ -439,6 +462,7 @@ export default function SesionesBaston({
                                                 if (!sesionActiva) return;
                                                 setLectorActivo(e.currentTarget.checked);
                                                 setUltimoEidLeido(null);
+                                                onLectorChange(e.currentTarget.checked);
                                             }}
                                             disabled={!sesionActiva || sesionActiva.estado === 'PROCESADA'}
                                             color="teal"
@@ -448,7 +472,15 @@ export default function SesionesBaston({
                                         {lectorActivo && (
                                             <Badge color="teal" variant="dot" size="sm">HID activo</Badge>
                                         )}
-                                        <AllflexScanner onScan={activeTab === 'sesiones' ? manejarEscaneo : () => {}} />
+                                        {isConectadoCOM && (
+                                            <Badge
+                                                color={metodoBaston === 'rodeocontrol' ? 'teal' : 'blue'}
+                                                variant="filled" size="sm"
+                                                leftSection={<IconScan size={11} />}
+                                            >
+                                                {metodoBaston === 'rodeocontrol' ? 'RC: activo' : 'COM activo'}
+                                            </Badge>
+                                        )}
                                         <Popover
                                             opened={popoverOpen}
                                             onChange={setPopoverOpen}
@@ -717,6 +749,7 @@ export default function SesionesBaston({
                                                     if (!grupoSeleccionado) return;
                                                     setLectorTagsActivo(e.currentTarget.checked);
                                                     setUltimoEidTag(null);
+                                                    onLectorChange(e.currentTarget.checked);
                                                 }}
                                                 disabled={!grupoSeleccionado}
                                                 color="teal"
@@ -726,7 +759,15 @@ export default function SesionesBaston({
                                             {lectorTagsActivo && (
                                                 <Badge color="teal" variant="dot" size="sm">HID activo</Badge>
                                             )}
-                                            <AllflexScanner onScan={activeTab === 'tags' ? manejarEscaneoTags : () => {}} />
+                                            {isConectadoCOM && (
+                                                <Badge
+                                                    color={metodoBaston === 'rodeocontrol' ? 'teal' : 'blue'}
+                                                    variant="filled" size="sm"
+                                                    leftSection={<IconScan size={11} />}
+                                                >
+                                                    {metodoBaston === 'rodeocontrol' ? 'RC: activo' : 'COM activo'}
+                                                </Badge>
+                                            )}
                                             <Popover
                                                 opened={popoverGrupoOpen}
                                                 onChange={setPopoverGrupoOpen}

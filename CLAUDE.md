@@ -402,6 +402,16 @@ Todo el estado global vive en `App.tsx` y baja por props.
 Las vistas **no** fetchean datos propios (excepto datos locales como `labores` en `Agricultura`).
 El patrón es: `App.tsx` fetcha → pasa como props → la vista renderiza.
 
+### Arquitectura del bastón de escaneo
+La conexión COM (Web Serial API) es global y vive en `App.tsx` via `useWebSerialAllflex`.
+Cada vista recibe `registrarScanHandler(fn)` como prop y registra su handler en un useEffect.
+El `scanHandlerRef` en App.tsx rutea los scans COM a la vista activa.
+HID (useLectorAllflex) sigue siendo per-vista con su propio isActive.
+Modos disponibles: 'com' (Allflex) | 'rodeocontrol' (ESP32 con prefijo RC:).
+Prefijo RC:: el ESP32 manda RC:EID, la app stripea el prefijo. En modo 'rodeocontrol'
+los datos sin prefijo se descartan. El Switch del lector manda START/STOP al ESP32
+via enviarComando() cuando modo === 'rodeocontrol'.
+
 ---
 
 ## Lo que NO tocar sin análisis previo

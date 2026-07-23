@@ -1,4 +1,4 @@
-import { useEffect, useState} from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover, Divider, Paper, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus, IconDownload, IconScan } from '@tabler/icons-react';
@@ -33,6 +33,8 @@ import { useInstallPrompt } from './hooks/useInstallPrompt';
 import ModalFichaVaca from './components/ModalFichaVaca';
 import ModalTransferencia from './components/ModalTransferencia';
 import ModalGraficoPeso from './components/ModalGraficoPeso';
+import BastonModal from './components/BastonModal';
+import { useWebSerialAllflex, type ModoBaston } from './hooks/useWebSerialAllflex';
 
 interface Establecimiento { id: string; nombre: string; renspa?: string; user_id: string; }
 interface Animal { id: string; caravana: string; caravana_electronica?: string; categoria: string; sexo: string; estado: string; condicion: string; origen: string; detalle_baja?: string; detalles?: string; destacado?: boolean; fecha_nacimiento?: string; fecha_ingreso?: string; madre_id?: string; castrado?: boolean; establecimiento_id: string; potrero_id?: string; parcela_id?: string; lote_id?: string; toros_servicio_ids?: string[]; en_transito?: boolean; }
@@ -103,6 +105,44 @@ export default function App() {
 
   // Estado de la suscripción agregado
   const [datosSuscripcion, setDatosSuscripcion] = useState<SuscripcionData | null>(null);
+
+  // --- BASTÓN DE ESCANEO (conexión COM global) ---
+  const [metodoBaston, setMetodoBaston] = useState<ModoBaston>('com');
+  const [bastonModalOpen, { open: openBastonModal, close: closeBastonModal }] = useDisclosure(false);
+  const scanHandlerRef = useRef<((eid: string) => void) | null>(null);
+
+  const {
+    isConectado: isConectadoCOM,
+    error: errorCOM,
+    conectarPuerto,
+    desconectar: desconectarCOM,
+    enviarComando,
+  } = useWebSerialAllflex({
+    onScan: (eid) => scanHandlerRef.current?.(eid),
+    modo: metodoBaston,
+  });
+
+  // La vista activa registra su handler; el ref rutea los scans COM a esa vista
+  function registrarScanHandler(handler: ((eid: string) => void) | null) {
+    scanHandlerRef.current = handler;
+  }
+
+  // Al activar/desactivar el lector, avisar al ESP32 en modo RodeoControl
+  function handleLectorChange(active: boolean) {
+    if (metodoBaston === 'rodeocontrol' && isConectadoCOM) {
+      enviarComando(active ? 'START' : 'STOP');
+    }
+  }
+
+  function conectarRC() {
+    setMetodoBaston('rodeocontrol');
+    conectarPuerto();
+  }
+
+  function conectarAllflex() {
+    setMetodoBaston('com');
+    conectarPuerto();
+  }
 
   // Token de invitación (leído una sola vez desde la URL)
   const [invToken, setInvToken] = useState<string | null>(() =>
@@ -579,6 +619,19 @@ export default function App() {
                         </ActionIcon>
                       </Tooltip>
                     )}
+                    <ActionIcon
+                        variant={isConectadoCOM ? 'filled' : 'light'}
+                        color={
+                            !isConectadoCOM ? 'gray' :
+                            metodoBaston === 'rodeocontrol' ? 'teal' : 'blue'
+                        }
+                        size="lg"
+                        radius="xl"
+                        onClick={openBastonModal}
+                        title="Gestionar bastón"
+                    >
+                        <IconScan size={18} />
+                    </ActionIcon>
                     <ActionIcon variant="light" color="blue" size="lg" radius="xl" onClick={openHelp} title="Ayuda">
                       <IconQuestionMark size={22} />
                     </ActionIcon>
@@ -661,8 +714,8 @@ export default function App() {
               {activeSection === 'inicio' && <Inicio animales={animales} agenda={agenda} eventosGlobales={eventosGlobales} setActiveSection={setActiveSection} />}
               {activeSection === 'agenda' && <Agenda campoId={campoId} agenda={agenda} fetchAgenda={fetchAgenda} animales={animales} abrirFichaVaca={abrirFichaVaca} potreros={potreros} lotes={lotes} onAbrirPotrero={abrirPotreroDesdeAgenda} onAbrirLote={abrirLoteDesdeAgenda} />}
               {(activeSection === 'lotes' || activeSection === 'lote_detalle') && <Lotes campoId={campoId} lotes={lotes} animales={animales} potreros={potreros} parcelas={parcelas} establecimientos={establecimientos} eventosLotesGlobal={eventosLotesGlobal} fetchLotes={fetchLotes} fetchAnimales={fetchEventosLotesGlobal} fetchActividadGlobal={fetchActividadGlobal} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} loteIdAAbrir={loteIdAAbrir} onLoteAbierto={() => setLoteIdAAbrir(null)} onIrAMasivosConLote={irAMasivosConLote}/>}
-              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} lotePreseleccionado={lotePreseleccionadoMasivos} onLotePreseleccionadoAplicado={() => setLotePreseleccionadoMasivos(null)} idsPreseleccionados={idsPreseleccionadosMasivos} onIdsPreseleccionadosAplicados={() => setIdsPreseleccionadosMasivos(null)} />}
-              {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} />}
+              {activeSection === 'masivos' && <Masivos campoId={campoId} animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} establecimientos={establecimientos} datosSuscripcion={datosSuscripcion} fetchAnimales={fetchAnimales} fetchActividadGlobal={fetchActividadGlobal} setActiveSection={setActiveSection} rolActual={rolActual} lotePreseleccionado={lotePreseleccionadoMasivos} onLotePreseleccionadoAplicado={() => setLotePreseleccionadoMasivos(null)} idsPreseleccionados={idsPreseleccionadosMasivos} onIdsPreseleccionadosAplicados={() => setIdsPreseleccionadosMasivos(null)} registrarScanHandler={registrarScanHandler} onLectorChange={handleLectorChange} isConectadoCOM={isConectadoCOM} metodoBaston={metodoBaston} />}
+              {(activeSection === 'hacienda' || activeSection === 'bajas') && <Hacienda animales={animales} potreros={potreros} parcelas={parcelas} lotes={lotes} activeSection={activeSection} abrirFichaVaca={abrirFichaVaca} openModalAlta={openModalAlta} setAnimales={setAnimales} datosSuscripcion={datosSuscripcion} campoId={campoId} fetchAnimales={fetchAnimales} rolActual={rolActual} registrarScanHandler={registrarScanHandler} onLectorChange={handleLectorChange} isConectadoCOM={isConectadoCOM} metodoBaston={metodoBaston} />}
               {activeSection === 'economia' && campoId && <Economia campoId={campoId} establecimientos={establecimientos} rolActual={rolActual} lotes={lotes} potreros={potreros} animales={animales} />}
               {(activeSection === 'agricultura' || activeSection === 'potrero_detalle') && <Agricultura campoId={campoId} potreros={potreros} parcelas={parcelas} animales={animales} fetchPotreros={fetchPotreros} fetchParcelas={fetchParcelas} abrirFichaVaca={abrirFichaVaca} rolActual={rolActual} potreroIdAAbrir={potreroIdAAbrir} onPotreroAbierto={() => setPotreroIdAAbrir(null)} />}
               {activeSection === 'sesiones_baston' && campoId && (
@@ -679,6 +732,10 @@ export default function App() {
                       }}
                       fetchAnimales={fetchAnimales}
                       datosSuscripcion={datosSuscripcion}
+                      registrarScanHandler={registrarScanHandler}
+                      onLectorChange={handleLectorChange}
+                      isConectadoCOM={isConectadoCOM}
+                      metodoBaston={metodoBaston}
                   />
               )}
               {activeSection === 'actividad' && <Actividad eventosGlobales={eventosGlobales} />}
@@ -697,6 +754,17 @@ export default function App() {
         )}
 
       {/* --- MODALES EXTERNOS REFACTORIZADOS --- */}
+      <BastonModal
+          opened={bastonModalOpen}
+          onClose={closeBastonModal}
+          isConectadoCOM={isConectadoCOM}
+          metodoBaston={metodoBaston}
+          error={errorCOM}
+          onConectarRC={conectarRC}
+          onConectarCOM={conectarAllflex}
+          onDesconectar={desconectarCOM}
+      />
+
       <ModalAltaAnimal
           opened={modalAltaOpen}
           onClose={closeModalAlta}

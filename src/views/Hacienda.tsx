@@ -1,10 +1,9 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
-import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal, Switch, Alert, Indicator } from '@mantine/core';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { Group, Title, Badge, Button, Paper, TextInput, Select, MultiSelect, Menu, Tooltip, ActionIcon, Table, Text, UnstyledButton, Center, rem, SimpleGrid, Stack, Modal, Switch, Indicator } from '@mantine/core';
 import { useMediaQuery, useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconPlus, IconSearch, IconFilter, IconTag, IconSortAscending, IconSortDescending, IconTrash, IconStarFilled, IconStar, IconChevronUp, IconChevronDown, IconSelector, IconMapPin, IconBabyCarriage, IconFileSpreadsheet, IconScan, IconBluetooth, IconBluetoothOff } from '@tabler/icons-react';
 import { useLectorAllflex } from '../hooks/useLectorAllflex';
-import AllflexScanner from '../components/AllflexScanner';
 import ModalAltaDesdeBaston from '../components/ModalAltaDesdeBaston';
 import { supabase } from '../supabase';
 import ModalImportarExcel from '../components/Hacienda/ModalImportarExcel';
@@ -59,6 +58,7 @@ export default function Hacienda({
     abrirFichaVaca, openModalAlta, setAnimales,
     datosSuscripcion, campoId, fetchAnimales,
     rolActual = 'DUENO' as 'DUENO' | 'PEON' | 'VETERINARIO',
+    registrarScanHandler, onLectorChange, isConectadoCOM, metodoBaston,
 }: any) {
     const [busqueda, setBusqueda] = useState('');
     const [importarExcelAbierto, setImportarExcelAbierto] = useState(false);
@@ -70,6 +70,14 @@ export default function Hacienda({
 
     // ── Lector RFID ──────────────────────────────────────────────────────────
     const [lectorActivo, setLectorActivo] = useState(false);
+
+    // Al conectarse el bastón, encender el lector automáticamente (el usuario puede apagarlo después)
+    useEffect(() => {
+        if (isConectadoCOM) {
+            setLectorActivo(true);
+            onLectorChange(true);
+        }
+    }, [isConectadoCOM]);
     const [eidPendiente, setEidPendiente] = useState('');
     const [modalAltaBastonOpen, setModalAltaBastonOpen] = useState(false);
 
@@ -197,6 +205,14 @@ export default function Hacienda({
 
     useLectorAllflex({ isActive: lectorActivo, onScan: manejarEscaneoHacienda });
 
+    // Registra el handler de escaneo COM global mientras esta vista está activa
+    useEffect(() => {
+        if (activeSection === 'hacienda' || activeSection === 'bajas') {
+            registrarScanHandler(manejarEscaneoHacienda);
+        }
+        return () => registrarScanHandler(null);
+    }, [activeSection, manejarEscaneoHacienda]);
+
     // AQUÍ ESTÁ EL CAMBIO A VIOLET PARA LASTIMADA
     const renderCondicionBadges = (condStr: string) => { 
         if (!condStr || condStr === 'SANA') return null; 
@@ -231,9 +247,28 @@ export default function Hacienda({
 
     async function guardarEid() {
         if (!animalParaEid) return;
+        const eidLimpio = eidInputVal.trim();
+
+        // No permitir vincular un EID que ya está asignado a otro animal
+        if (eidLimpio) {
+            const eidNorm = eidLimpio.toLowerCase();
+            const duplicado = animales.find((a: any) =>
+                a.id !== animalParaEid.id &&
+                a.caravana_electronica?.trim().toLowerCase() === eidNorm
+            );
+            if (duplicado) {
+                notifications.show({
+                    title: 'EID ya asignado',
+                    message: `Ya hay un animal con ese EID (caravana ${duplicado.caravana}). No se puede repetir.`,
+                    color: 'red',
+                });
+                return;
+            }
+        }
+
         setSavingEid(true);
         const { error } = await supabase.from('animales')
-            .update({ caravana_electronica: eidInputVal.trim() || null })
+            .update({ caravana_electronica: eidLimpio || null })
             .eq('id', animalParaEid.id);
         setSavingEid(false);
         if (error) { notifications.show({ title: 'Error', message: error.message, color: 'red' }); return; }
@@ -264,7 +299,10 @@ export default function Hacienda({
                     {activeSection === 'hacienda' && (
                         <Switch
                             checked={lectorActivo}
-                            onChange={(e) => setLectorActivo(e.currentTarget.checked)}
+                            onChange={(e) => {
+                                setLectorActivo(e.currentTarget.checked);
+                                onLectorChange(e.currentTarget.checked);
+                            }}
                             color="teal"
                             size="md"
                             label={lectorActivo ? 'Lector ON' : 'Lector OFF'}
@@ -298,18 +336,19 @@ export default function Hacienda({
                                 leftSection={<IconBluetooth size={11} />}>
                                 HID activo
                             </Badge>
-                            <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-teal-3)', paddingLeft: 12 }}>
-                                SPP:
-                            </Text>
-                            <AllflexScanner onScan={manejarEscaneoHacienda} />
+                            {isConectadoCOM && (
+                                <Badge
+                                    color={metodoBaston === 'rodeocontrol' ? 'teal' : 'blue'}
+                                    variant="filled" size="sm"
+                                    leftSection={<IconScan size={11} />}
+                                >
+                                    {metodoBaston === 'rodeocontrol' ? 'RC: activo' : 'COM activo'}
+                                </Badge>
+                            )}
                         </Group>
-                        <Alert color="teal" variant="light" p="xs" icon={<IconScan size={14} />}
-                            visibleFrom="sm"
-                            style={{ maxWidth: 320, flexShrink: 0 }}>
-                            <Text size="xs">
-                                Escaneá una caravana para <b>abrir su ficha</b> o <b>registrar un animal nuevo</b>.
-                            </Text>
-                        </Alert>
+                        <Text size="xs" c="dimmed" visibleFrom="sm">
+                            Escaneá una caravana para abrir su ficha
+                        </Text>
                     </Group>
                 </Paper>
             )}
