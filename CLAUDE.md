@@ -426,6 +426,7 @@ via enviarComando() cuando modo === 'rodeocontrol'.
 | RPC `buscar_campo_por_renspa` | Función de Supabase, no replicar en cliente |
 | RPC `aceptar_invitacion` | Lógica de membresía en server-side, no mover al cliente |
 | RPC `obtener_miembros_campo` | Retorna `email` vía `auth.users`; el rol autenticado no puede leer esa tabla directo |
+| `EventoConAnimal` en `App.tsx` | Tipo local que extiende `Evento` de types.ts con `animales?: { caravana: string }`. Viene del JOIN `.select('*, animales(caravana)')` en `fetchActividadGlobal`. No agregar `animales` a la interfaz base `Evento` en types.ts — rompería la representación de la tabla. |
 
 ---
 
@@ -436,7 +437,7 @@ via enviarComando() cuando modo === 'rodeocontrol'.
 | 1 | ✅ Completo | Este archivo CLAUDE.md |
 | 2 | ✅ Completo | Crear `src/types.ts` con todas las interfaces |
 | 3 | ✅ Completo | Manejo de errores en fetches de App.tsx |
-| 4 | ⏸ Pausado | Extraer hooks: `useAnimales`, `useSuscripcion`, `useAuth` — esperar necesidad concreta |
+| 4 | ⏸ Pausado | Extraer hooks: `useAnimales`, `useSuscripcion`, `useAuth` — evaluado y descartado por ahora. `session` se usa en 16 lugares y `animales` en 24, entrelazados con efectos críticos de timing (loadCampos, registrarPresencia, fetches keyed por campoId/session). Extraer requeriría pasar callbacks hacia adentro/afuera del hook con riesgo real de alterar ese timing. Retomar solo si aparece una necesidad concreta (bug o feature bloqueada). |
 
 ---
 

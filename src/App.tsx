@@ -1,13 +1,18 @@
 import { useEffect, useState, useRef } from 'react';
 import {MantineProvider, AppShell, Burger, Group, Title, NavLink, Text, TextInput, Select, Button, Badge, ActionIcon, ScrollArea, Modal, Alert, Stack, Indicator, Popover, Divider, Paper, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus, IconDownload, IconScan } from '@tabler/icons-react';
+import { IconArchive, IconActivity, IconTrash, IconTractor, IconCurrencyDollar, IconBuilding, IconHome, IconSettings, IconEdit, IconPlus, IconPlaylistAdd, IconLogout, IconTag, IconCalendarEvent, IconBell, IconCreditCard, IconQuestionMark, IconUsers, IconLink, IconCopy, IconUserMinus, IconDownload, IconScan, IconBluetooth } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { Notifications, notifications } from '@mantine/notifications';
 import { supabase } from './supabase';
 import { type Session } from '@supabase/supabase-js';
-import { type Suscripcion as SuscripcionData } from './types';
+import {
+  type Suscripcion as SuscripcionData,
+  type Establecimiento,
+  type Animal,
+  type Evento,
+} from './types';
 import logoRodeo from './assets/loggo_header.png';
 
 // Vistas
@@ -36,9 +41,8 @@ import ModalGraficoPeso from './components/ModalGraficoPeso';
 import BastonModal from './components/BastonModal';
 import { useWebSerialAllflex, type ModoBaston } from './hooks/useWebSerialAllflex';
 
-interface Establecimiento { id: string; nombre: string; renspa?: string; user_id: string; }
-interface Animal { id: string; caravana: string; caravana_electronica?: string; categoria: string; sexo: string; estado: string; condicion: string; origen: string; detalle_baja?: string; detalles?: string; destacado?: boolean; fecha_nacimiento?: string; fecha_ingreso?: string; madre_id?: string; castrado?: boolean; establecimiento_id: string; potrero_id?: string; parcela_id?: string; lote_id?: string; toros_servicio_ids?: string[]; en_transito?: boolean; }
-interface Evento { id: string; created_at: string; fecha_evento: string; tipo: string; resultado: string; detalle: string; animal_id: string; costo?: number; datos_extra?: any; animales?: { caravana: string } }
+// Evento con el JOIN de animales(caravana) usado por fetchActividadGlobal
+interface EventoConAnimal extends Evento { animales?: { caravana: string } }
 
 const getHoyIso = () => { const d = new Date(); const offset = d.getTimezoneOffset(); return new Date(d.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0]; };
 
@@ -64,7 +68,7 @@ export default function App() {
   const [potreros, setPotreros] = useState<any[]>([]);
   const [parcelas, setParcelas] = useState<any[]>([]); 
   const [lotes, setLotes] = useState<any[]>([]);
-  const [eventosGlobales, setEventosGlobales] = useState<Evento[]>([]);
+  const [eventosGlobales, setEventosGlobales] = useState<EventoConAnimal[]>([]);
   const [eventosLotesGlobal, setEventosLotesGlobal] = useState<any[]>([]);
   const [agenda, setAgenda] = useState<any[]>([]);
   const [transferencias, setTransferencias] = useState<any[]>([]);
@@ -630,7 +634,7 @@ export default function App() {
                         onClick={openBastonModal}
                         title="Gestionar bastón"
                     >
-                        <IconScan size={18} />
+                        <IconBluetooth size={18} />
                     </ActionIcon>
                     <ActionIcon variant="light" color="blue" size="lg" radius="xl" onClick={openHelp} title="Ayuda">
                       <IconQuestionMark size={22} />

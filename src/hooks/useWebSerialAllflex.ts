@@ -59,15 +59,27 @@ export function useWebSerialAllflex({ onScan, baudRate = 9600, modo = 'com' }: O
             const puertosConocidos = await navigator.serial.getPorts();
             if (puertosConocidos.length === 1) {
                 port = puertosConocidos[0];
+                try {
+                    await port.open({ baudRate });
+                } catch {
+                    // El puerto conocido pudo quedar trabado (Bluetooth desconectado, sesión previa
+                    // no cerrada, etc.) → forzar el selector nativo para un handshake nuevo
+                    port = await navigator.serial.requestPort();
+                    await port.open({ baudRate });
+                }
             } else {
                 port = await navigator.serial.requestPort();
+                await port.open({ baudRate });
             }
-            await port.open({ baudRate });
         } catch (err: unknown) {
             const domErr = err as DOMException;
             // NotFoundError = usuario cerró el selector sin elegir puerto → no es un error
             if (domErr?.name !== 'NotFoundError') {
-                setError('No se pudo abrir el puerto: ' + (domErr?.message ?? 'error desconocido'));
+                setError(
+                    'No se pudo abrir el puerto: ' + (domErr?.message ?? 'error desconocido') +
+                    '. Verificá que el bastón esté encendido y conectado por Bluetooth, ' +
+                    'y que no esté abierto en otra pestaña o programa.'
+                );
             }
             return;
         }
